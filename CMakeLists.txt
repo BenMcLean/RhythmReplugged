@@ -17,6 +17,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(RR_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+add_subdirectory(external/midifile)
+
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
@@ -35,6 +37,8 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/app/AppTypes.h
 	${RR_SRC_DIR}/core/audio/PrototypePlayer.cpp
 	${RR_SRC_DIR}/core/audio/PrototypePlayer.h
+	${RR_SRC_DIR}/core/chart/MidiChart.cpp
+	${RR_SRC_DIR}/core/chart/MidiChart.h
 	${RR_SRC_DIR}/core/menu/SongBrowser.cpp
 	${RR_SRC_DIR}/core/menu/SongBrowser.h
 	${RR_SRC_DIR}/core/play/AudioMixer.cpp
@@ -52,11 +56,13 @@ add_library(rr_core
 
 target_include_directories(rr_core PUBLIC
 	${RR_SRC_DIR}
+	${CMAKE_CURRENT_SOURCE_DIR}/external/midifile/include
 )
 
 target_link_libraries(rr_core PUBLIC
 	rr_libretro_contract
 PRIVATE
+	midifile
 	Vorbis::vorbisfile
 	unofficial::inih::libinih
 )

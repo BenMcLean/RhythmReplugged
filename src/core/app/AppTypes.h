@@ -37,11 +37,24 @@ namespace rhythmreplugged
 
 	struct PrototypePlayerView
 	{
+		struct ChartNoteView
+		{
+			int lane = 0;
+			float start_offset_seconds = 0.0f;
+			float length_seconds = 0.0f;
+		};
+
 		std::string song_title;
 		std::string song_artist;
 		std::string status_message;
 		bool has_guitar = false;
 		bool guitar_muted = false;
 		size_t loaded_stem_count = 0;
+		bool has_chart = false;
+		std::string chart_track_name;
+		std::string chart_difficulty_name;
+		double song_time_seconds = 0.0;
+		double chart_beats_per_minute = 120.0;
+		std::vector<ChartNoteView> visible_chart_notes;
 	};
 }

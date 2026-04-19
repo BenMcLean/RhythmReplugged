@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/chart/MidiChart.h"
 #include "core/audio/PrototypePlayer.h"
 #include "core/app/AppTypes.h"
 #include "core/play/AudioMixer.h"
@@ -33,9 +34,14 @@ namespace rhythmreplugged
 		double song_time_beats(double beats_per_minute) const;
 
 	private:
+		static constexpr double kChartLookbehindSeconds = 0.35;
+		static constexpr double kChartLookaheadSeconds = 3.0;
+
 		PrototypePlayer prototype_player_;
+		MidiChart midi_chart_;
 		Transport transport_;
 		AudioMixer audio_mixer_;
+		std::string chart_status_message_;
 		std::atomic<bool> loaded_{false};
 	};
 }
