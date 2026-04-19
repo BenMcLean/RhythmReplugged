@@ -20,7 +20,6 @@ namespace
 	constexpr int kWindowWidth = 1280;
 	constexpr int kWindowHeight = 720;
 	constexpr Uint64 kRetroFrameDurationNs = 1000000000ull / kRetroFramesPerSecond;
-	constexpr size_t kAudioPrefillFrames = 256;
 
 	std::string find_songs_root(const char *argv0)
 	{
@@ -160,7 +159,6 @@ int main(int argc, char *argv[])
 	bool running = true;
 	Uint64 previous_counter = SDL_GetTicksNS();
 	Uint64 retro_time_accumulator = 0;
-	size_t observed_mute_change_count = 0;
 	while (running)
 	{
 		const Uint64 current_counter = SDL_GetTicksNS();
@@ -203,41 +201,17 @@ int main(int argc, char *argv[])
 			app.retro_run(held_input);
 			retro_time_accumulator -= kRetroFrameDurationNs;
 			++retro_steps;
-
-			const RetroAudioBatch &audio_batch = app.audio_batch();
-			if (audio_batch.sample_rate > 0)
-			{
-				audio_output.initialize(audio_batch.sample_rate);
-				if (observed_mute_change_count != app.player_mute_change_count())
-				{
-					audio_output.clear_queued_audio();
-					observed_mute_change_count = app.player_mute_change_count();
-				}
-				audio_output.submit(audio_batch);
-			}
 		}
 
 		if (app.mode() == AppMode::PrototypePlayer)
 		{
-			while (audio_output.queued_frames() < kAudioPrefillFrames)
-			{
-				app.retro_run(held_input);
-				const RetroAudioBatch &audio_batch = app.audio_batch();
-				if (audio_batch.sample_rate <= 0)
-					break;
-
-				audio_output.initialize(audio_batch.sample_rate);
-				if (observed_mute_change_count != app.player_mute_change_count())
-				{
-					audio_output.clear_queued_audio();
-					observed_mute_change_count = app.player_mute_change_count();
-				}
-				audio_output.submit(audio_batch);
-			}
+			audio_output.set_stream(&app);
+			audio_output.initialize(&app);
 		}
 		else
 		{
-			observed_mute_change_count = 0;
+			audio_output.shutdown();
+			app.finalize_audio_stop();
 		}
 
 		ImGui_ImplSDLRenderer3_NewFrame();

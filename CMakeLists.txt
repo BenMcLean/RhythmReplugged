@@ -80,3 +80,15 @@ target_link_libraries(RhythmReplugged PRIVATE
 	SDL3::SDL3
 	SDL3_image::SDL3_image
 )
+
+add_executable(rr_transport_harness
+	${RR_SRC_DIR}/core/play/TransportParityHarness.cpp
+)
+
+target_include_directories(rr_transport_harness PRIVATE
+	${RR_SRC_DIR}
+)
+
+target_link_libraries(rr_transport_harness PRIVATE
+	rr_core
+)

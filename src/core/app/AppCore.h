@@ -6,11 +6,12 @@
 #include "libretro_contract/RetroInput.h"
 #include "libretro_contract/RetroTypes.h"
 
+#include <atomic>
 #include <string>
 
 namespace rhythmreplugged
 {
-	class AppCore
+	class AppCore : public IRetroAudioStream
 	{
 	public:
 		explicit AppCore(IRetroFileSystem &file_system);
@@ -22,7 +23,9 @@ namespace rhythmreplugged
 		bool activate_browser_selection();
 		void return_to_browser();
 		void toggle_player_guitar_mute();
-		size_t player_mute_change_count() const;
+		void finalize_audio_stop();
+		int sample_rate() const override;
+		void render_interleaved_s16(std::int16_t *output, size_t frame_count) override;
 
 		AppMode mode() const;
 		const SongBrowserView &song_browser_view() const;
@@ -30,6 +33,9 @@ namespace rhythmreplugged
 		const RetroAudioBatch &audio_batch() const;
 
 	private:
+		bool activate_browser_selection_unlocked();
+		void return_to_browser_unlocked();
+		void toggle_player_guitar_mute_unlocked();
 		bool pressed(bool current, bool previous) const;
 		void run_song_browser(const RetroInputState &input_state);
 		void run_prototype_player(const RetroInputState &input_state);
@@ -37,9 +43,10 @@ namespace rhythmreplugged
 		IRetroFileSystem &file_system_;
 		SongBrowser song_browser_;
 		SongSession song_session_;
-		AppMode mode_ = AppMode::SongBrowser;
+		std::atomic<AppMode> mode_{AppMode::SongBrowser};
 		RetroInputState previous_input_{};
 		RetroAudioBatch audio_batch_{};
 		std::string player_status_message_;
+		bool session_unload_pending_ = false;
 	};
 }

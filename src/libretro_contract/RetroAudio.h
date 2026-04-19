@@ -5,6 +5,20 @@
 
 namespace rhythmreplugged
 {
+	enum class StemId
+	{
+		Backing,
+		Guitar,
+	};
+
+	class IRetroAudioStream
+	{
+	public:
+		virtual ~IRetroAudioStream() = default;
+		virtual int sample_rate() const = 0;
+		virtual void render_interleaved_s16(std::int16_t *output, size_t frame_count) = 0;
+	};
+
 	struct RetroAudioBatch
 	{
 		int sample_rate = 0;

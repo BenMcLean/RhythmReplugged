@@ -12,6 +12,7 @@ namespace rhythmreplugged
 	public:
 		void reset();
 		void set_prototype_player(PrototypePlayer *player);
+		void render_interleaved_s16(std::int16_t *output, size_t frame_count) const;
 		RetroAudioBatch render(size_t frame_count) const;
 
 	private:

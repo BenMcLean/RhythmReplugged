@@ -6,6 +6,7 @@
 #include "libretro_contract/RetroAudio.h"
 #include "libretro_contract/RetroTypes.h"
 
+#include <atomic>
 #include <string>
 
 namespace rhythmreplugged
@@ -19,15 +20,20 @@ namespace rhythmreplugged
 		void unload();
 		bool is_loaded() const;
 		void toggle_guitar_mute();
-		size_t mute_change_count() const;
+		void set_stem_target_gain(StemId stem_id, float gain);
+		float stem_target_gain(StemId stem_id) const;
+		int sample_rate() const;
+		size_t emitted_frames() const;
 		PrototypePlayerView view(const std::string &status_message) const;
-		RetroAudioBatch render_audio_tick(int ticks_per_second);
+		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
+		RetroAudioBatch render_fixed_tick_audio(int ticks_per_second);
 		double song_time_seconds() const;
+		double song_time_beats(double beats_per_minute) const;
 
 	private:
 		PrototypePlayer prototype_player_;
 		Transport transport_;
 		AudioMixer audio_mixer_;
-		size_t mute_change_count_ = 0;
+		std::atomic<bool> loaded_{false};
 	};
 }

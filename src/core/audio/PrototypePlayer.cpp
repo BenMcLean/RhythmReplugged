@@ -10,6 +10,8 @@ namespace rhythmreplugged
 {
 	namespace
 	{
+		constexpr float kStemFadeDurationSeconds = 0.012f;
+
 		std::string folder_name_from_path(const std::string &path)
 		{
 			const size_t slash = path.find_last_of("/\\");
@@ -70,6 +72,14 @@ namespace rhythmreplugged
 			memory_seek,
 			nullptr,
 			memory_tell};
+
+		float step_towards(float current, float target, float max_step)
+		{
+			if (current < target)
+				return std::min(current + max_step, target);
+
+			return std::max(current - max_step, target);
+		}
 	}
 
 	bool PrototypePlayer::load(IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
@@ -120,7 +130,10 @@ namespace rhythmreplugged
 		}
 
 		frame_index_ = 0;
-		guitar_muted_ = false;
+		backing_current_gain_ = 1.0f;
+		backing_target_gain_.store(1.0f);
+		guitar_current_gain_ = 1.0f;
+		guitar_target_gain_.store(1.0f);
 		return true;
 	}
 
@@ -129,7 +142,10 @@ namespace rhythmreplugged
 		backing_track_ = {};
 		guitar_track_ = {};
 		frame_index_ = 0;
-		guitar_muted_ = false;
+		backing_current_gain_ = 1.0f;
+		backing_target_gain_.store(1.0f);
+		guitar_current_gain_ = 1.0f;
+		guitar_target_gain_.store(1.0f);
 		metadata_ = {};
 	}
 
@@ -140,12 +156,40 @@ namespace rhythmreplugged
 
 	void PrototypePlayer::toggle_guitar_mute()
 	{
-		guitar_muted_ = !guitar_muted_;
+		const float target_gain = guitar_target_gain_.load();
+		guitar_target_gain_.store(target_gain > 0.5f ? 0.0f : 1.0f);
 	}
 
 	bool PrototypePlayer::guitar_muted() const
 	{
-		return guitar_muted_;
+		return guitar_target_gain_.load() < 0.5f;
+	}
+
+	void PrototypePlayer::set_stem_target_gain(StemId stem_id, float gain)
+	{
+		const float clamped_gain = std::clamp(gain, 0.0f, 1.0f);
+		switch (stem_id)
+		{
+		case StemId::Backing:
+			backing_target_gain_.store(clamped_gain);
+			break;
+		case StemId::Guitar:
+			guitar_target_gain_.store(clamped_gain);
+			break;
+		}
+	}
+
+	float PrototypePlayer::stem_target_gain(StemId stem_id) const
+	{
+		switch (stem_id)
+		{
+		case StemId::Backing:
+			return backing_target_gain_.load();
+		case StemId::Guitar:
+			return guitar_target_gain_.load();
+		}
+
+		return 0.0f;
 	}
 
 	int PrototypePlayer::sample_rate() const
@@ -158,30 +202,41 @@ namespace rhythmreplugged
 		return metadata_;
 	}
 
+	void PrototypePlayer::render_interleaved_s16(std::int16_t *output, size_t frame_count)
+	{
+		if (output == nullptr || frame_count == 0)
+			return;
+
+		const float fade_step = sample_rate() > 0
+			? 1.0f / (static_cast<float>(sample_rate()) * kStemFadeDurationSeconds)
+			: 1.0f;
+
+		for (size_t frame = 0; frame < frame_count; ++frame)
+		{
+			backing_current_gain_ = step_towards(backing_current_gain_, backing_target_gain_.load(), fade_step);
+			guitar_current_gain_ = step_towards(guitar_current_gain_, guitar_target_gain_.load(), fade_step);
+
+			for (int channel = 0; channel < 2; ++channel)
+			{
+				const size_t output_index = frame * 2 + static_cast<size_t>(channel);
+				float mixed = sample_track_channel(backing_track_, frame_index_, channel) * backing_current_gain_;
+				mixed += sample_track_channel(guitar_track_, frame_index_, channel) * guitar_current_gain_;
+				mixed = std::clamp(mixed, -1.0f, 1.0f);
+				output[output_index] = static_cast<std::int16_t>(std::lrintf(mixed * 32767.0f));
+			}
+
+			if (frame_index_ < std::max(backing_track_.frame_count, guitar_track_.frame_count))
+				++frame_index_;
+		}
+	}
+
 	RetroAudioBatch PrototypePlayer::generate_audio_batch(size_t frame_count)
 	{
 		RetroAudioBatch batch;
 		batch.sample_rate = backing_track_.sample_rate;
 		batch.channels = 2;
 		batch.samples.resize(frame_count * 2);
-
-		for (size_t frame = 0; frame < frame_count; ++frame)
-		{
-			for (int channel = 0; channel < 2; ++channel)
-			{
-				float mixed = sample_track_channel(backing_track_, frame_index_, channel);
-				if (!guitar_muted_)
-					mixed += sample_track_channel(guitar_track_, frame_index_, channel);
-
-				mixed = std::clamp(mixed, -1.0f, 1.0f);
-				batch.samples[frame * 2 + static_cast<size_t>(channel)] =
-					static_cast<std::int16_t>(std::lrintf(mixed * 32767.0f));
-			}
-
-			if (frame_index_ < std::max(backing_track_.frame_count, guitar_track_.frame_count))
-				++frame_index_;
-		}
-
+		render_interleaved_s16(batch.samples.data(), frame_count);
 		return batch;
 	}
 

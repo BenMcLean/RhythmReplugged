@@ -1,6 +1,8 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "platform_sdl3/Sdl3AudioOutput.h"
 
+#include <algorithm>
+
 namespace rhythmreplugged
 {
 	Sdl3AudioOutput::~Sdl3AudioOutput()
@@ -8,10 +10,17 @@ namespace rhythmreplugged
 		shutdown();
 	}
 
-	bool Sdl3AudioOutput::initialize(int sample_rate)
+	bool Sdl3AudioOutput::initialize(IRetroAudioStream *stream)
 	{
+		const int sample_rate = stream != nullptr ? stream->sample_rate() : 0;
+		if (sample_rate <= 0)
+			return false;
+
 		if (initialized_ && sample_rate_ == sample_rate)
+		{
+			stream_.store(stream);
 			return true;
+		}
 
 		shutdown();
 
@@ -34,6 +43,7 @@ namespace rhythmreplugged
 
 		initialized_ = true;
 		sample_rate_ = sample_rate;
+		stream_.store(stream);
 		return true;
 	}
 
@@ -45,30 +55,12 @@ namespace rhythmreplugged
 		ma_device_uninit(&device_);
 		initialized_ = false;
 		sample_rate_ = 0;
-
-		std::scoped_lock lock(mutex_);
-		queued_samples_.clear();
+		stream_.store(nullptr);
 	}
 
-	void Sdl3AudioOutput::submit(const RetroAudioBatch &batch)
+	void Sdl3AudioOutput::set_stream(IRetroAudioStream *stream)
 	{
-		if (!initialized_ || batch.samples.empty())
-			return;
-
-		std::scoped_lock lock(mutex_);
-		queued_samples_.insert(queued_samples_.end(), batch.samples.begin(), batch.samples.end());
-	}
-
-	void Sdl3AudioOutput::clear_queued_audio()
-	{
-		std::scoped_lock lock(mutex_);
-		queued_samples_.clear();
-	}
-
-	size_t Sdl3AudioOutput::queued_frames() const
-	{
-		std::scoped_lock lock(mutex_);
-		return queued_samples_.size() / 2;
+		stream_.store(stream);
 	}
 
 	void Sdl3AudioOutput::data_callback(ma_device *device, void *output, const void *input, ma_uint32 frame_count)
@@ -83,22 +75,13 @@ namespace rhythmreplugged
 
 	void Sdl3AudioOutput::mix(std::int16_t *output, ma_uint32 frame_count)
 	{
-		std::scoped_lock lock(mutex_);
-		for (ma_uint32 frame = 0; frame < frame_count; ++frame)
+		IRetroAudioStream *stream = stream_.load();
+		if (stream == nullptr)
 		{
-			for (int channel = 0; channel < 2; ++channel)
-			{
-				const size_t output_index = static_cast<size_t>(frame) * 2 + static_cast<size_t>(channel);
-				if (queued_samples_.empty())
-				{
-					output[output_index] = 0;
-				}
-				else
-				{
-					output[output_index] = queued_samples_.front();
-					queued_samples_.pop_front();
-				}
-			}
+			std::fill(output, output + static_cast<size_t>(frame_count) * 2, static_cast<std::int16_t>(0));
+			return;
 		}
+
+		stream->render_interleaved_s16(output, frame_count);
 	}
 }

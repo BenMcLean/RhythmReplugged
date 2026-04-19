@@ -1,5 +1,7 @@
 #include "core/app/AppCore.h"
 
+#include <algorithm>
+
 namespace rhythmreplugged
 {
 	AppCore::AppCore(IRetroFileSystem &file_system)
@@ -12,6 +14,7 @@ namespace rhythmreplugged
 	{
 		mode_ = AppMode::SongBrowser;
 		song_session_.unload();
+		session_unload_pending_ = false;
 		audio_batch_.clear();
 		audio_batch_.sample_rate = 0;
 		player_status_message_.clear();
@@ -37,7 +40,9 @@ namespace rhythmreplugged
 
 	void AppCore::retro_deinit()
 	{
+		mode_ = AppMode::SongBrowser;
 		song_session_.unload();
+		session_unload_pending_ = false;
 		audio_batch_.clear();
 		audio_batch_.sample_rate = 0;
 		player_status_message_.clear();
@@ -53,6 +58,11 @@ namespace rhythmreplugged
 
 	bool AppCore::activate_browser_selection()
 	{
+		return activate_browser_selection_unlocked();
+	}
+
+	bool AppCore::activate_browser_selection_unlocked()
+	{
 		if (mode_ != AppMode::SongBrowser)
 			return false;
 
@@ -63,6 +73,7 @@ namespace rhythmreplugged
 			if (song_session_.load(file_system_, selected_song_path, error_message))
 			{
 				mode_ = AppMode::PrototypePlayer;
+				session_unload_pending_ = false;
 				player_status_message_.clear();
 				return true;
 			}
@@ -79,20 +90,39 @@ namespace rhythmreplugged
 
 	void AppCore::return_to_browser()
 	{
+		return_to_browser_unlocked();
+	}
+
+	void AppCore::return_to_browser_unlocked()
+	{
 		mode_ = AppMode::SongBrowser;
-		song_session_.unload();
+		session_unload_pending_ = true;
 		player_status_message_.clear();
 	}
 
 	void AppCore::toggle_player_guitar_mute()
 	{
+		toggle_player_guitar_mute_unlocked();
+	}
+
+	void AppCore::toggle_player_guitar_mute_unlocked()
+	{
 		if (mode_ == AppMode::PrototypePlayer)
 			song_session_.toggle_guitar_mute();
 	}
 
-	size_t AppCore::player_mute_change_count() const
+	void AppCore::finalize_audio_stop()
 	{
-		return song_session_.mute_change_count();
+		if (!session_unload_pending_)
+			return;
+
+		song_session_.unload();
+		session_unload_pending_ = false;
+	}
+
+	int AppCore::sample_rate() const
+	{
+		return mode_ == AppMode::PrototypePlayer ? song_session_.sample_rate() : 0;
 	}
 
 	AppMode AppCore::mode() const
@@ -115,6 +145,20 @@ namespace rhythmreplugged
 		return audio_batch_;
 	}
 
+	void AppCore::render_interleaved_s16(std::int16_t *output, size_t frame_count)
+	{
+		if (output == nullptr)
+			return;
+
+		if (mode_ != AppMode::PrototypePlayer)
+		{
+			std::fill(output, output + frame_count * 2, static_cast<std::int16_t>(0));
+			return;
+		}
+
+		song_session_.render_interleaved_s16(output, frame_count);
+	}
+
 	bool AppCore::pressed(bool current, bool previous) const
 	{
 		return current && !previous;
@@ -129,23 +173,18 @@ namespace rhythmreplugged
 			song_browser_.move_selection(1);
 
 		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.start, previous_input_.start))
-			activate_browser_selection();
+			activate_browser_selection_unlocked();
 	}
 
 	void AppCore::run_prototype_player(const RetroInputState &input_state)
 	{
 		if (pressed(input_state.b, previous_input_.b))
 		{
-			return_to_browser();
+			return_to_browser_unlocked();
 			return;
 		}
 
 		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.x, previous_input_.x))
-			toggle_player_guitar_mute();
-
-		if (!song_session_.is_loaded())
-			return;
-
-		audio_batch_ = song_session_.render_audio_tick(kRetroFramesPerSecond);
+			toggle_player_guitar_mute_unlocked();
 	}
 }
