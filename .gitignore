@@ -224,6 +224,7 @@ vcpkg_installed/
 
 ### VisualStudioCode ###
 .vscode/*
+!.vscode/launch.json
 
 # Local History for Visual Studio Code
 .history/
