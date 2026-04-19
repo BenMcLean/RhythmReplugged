@@ -7,7 +7,9 @@
 #include "core/play/Transport.h"
 #include "libretro_contract/AudioTypes.h"
 
+#include <array>
 #include <atomic>
+#include <cstdint>
 #include <string>
 
 namespace rhythmreplugged
@@ -21,6 +23,7 @@ namespace rhythmreplugged
 		void unload();
 		bool is_loaded() const;
 		void toggle_guitar_mute();
+		void update_gameplay_input(const std::array<bool, 5> &lane_held, const std::array<bool, 5> &lane_pressed);
 		bool has_stem(std::string_view stem_name) const;
 		size_t loaded_stem_count() const;
 		void set_stem_target_gain(std::string_view stem_name, float gain);
@@ -36,12 +39,20 @@ namespace rhythmreplugged
 	private:
 		static constexpr double kChartLookbehindSeconds = 0.35;
 		static constexpr double kChartLookaheadSeconds = 3.0;
+		static constexpr double kNoteHitWindowSeconds = 0.125;
+
+		static std::uint8_t lane_mask_from_state(const std::array<bool, 5> &lanes);
+		size_t note_group_end_index(size_t start_index) const;
+		std::uint8_t note_group_lane_mask(size_t start_index, size_t end_index) const;
+		void consume_missed_note_groups(double song_time_seconds);
 
 		PrototypePlayer prototype_player_;
 		MidiChart midi_chart_;
 		Transport transport_;
 		AudioMixer audio_mixer_;
 		std::string chart_status_message_;
+		std::array<bool, 5> lane_held_{};
+		size_t next_note_index_ = 0;
 		std::atomic<bool> loaded_{false};
 	};
 }

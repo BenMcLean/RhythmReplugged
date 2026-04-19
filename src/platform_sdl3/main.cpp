@@ -118,19 +118,26 @@ namespace
 
 	void draw_chart_highway(const PrototypePlayerView &player, float width, float height)
 	{
-		ImGui::BeginChild("chart_highway_panel", ImVec2(width, height), true);
-		ImGui::TextUnformatted("Chart Preview");
-		ImGui::Separator();
+		ImGui::BeginChild("chart_highway_panel", ImVec2(width, height), false,
+			ImGuiWindowFlags_NoBackground);
 
 		if (!player.has_chart)
 		{
-			ImGui::TextDisabled("No supported 5-fret chart loaded.");
+			const ImVec2 canvas_size = ImGui::GetContentRegionAvail();
+			const ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+			ImDrawList *draw_list = ImGui::GetWindowDrawList();
+			draw_list->AddRectFilled(canvas_pos,
+				ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+				IM_COL32(11, 14, 19, 255),
+				8.0f);
+			draw_list->AddText(
+				ImVec2(canvas_pos.x + 24.0f, canvas_pos.y + 24.0f),
+				IM_COL32(215, 220, 230, 255),
+				"No supported 5-fret chart loaded.");
+			ImGui::Dummy(canvas_size);
 			ImGui::EndChild();
 			return;
 		}
-
-		ImGui::Text("%s - %s", player.chart_track_name.c_str(), player.chart_difficulty_name.c_str());
-		ImGui::Text("Time %.2fs   BPM %.2f", player.song_time_seconds, player.chart_beats_per_minute);
 
 		const ImVec2 canvas_size = ImGui::GetContentRegionAvail();
 		const ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
@@ -160,10 +167,21 @@ namespace
 		{
 			const float lane_left = canvas_pos.x + lane_padding + lane_width * static_cast<float>(lane);
 			const float lane_right = lane_left + lane_width;
+			const bool is_held = player.lane_held[static_cast<size_t>(lane)];
 			draw_list->AddRectFilled(ImVec2(lane_left, lane_top), ImVec2(lane_right, lane_bottom),
-				IM_COL32(22, 27, 35, 255));
+				is_held ? IM_COL32(34, 41, 54, 255) : IM_COL32(22, 27, 35, 255));
 			draw_list->AddLine(ImVec2(lane_right, lane_top), ImVec2(lane_right, lane_bottom),
 				IM_COL32(48, 58, 74, 255), 1.0f);
+			draw_list->AddCircleFilled(
+				ImVec2((lane_left + lane_right) * 0.5f, hit_line_y),
+				(std::min)(lane_width * 0.29f, 20.0f),
+				is_held ? lane_colors[lane] : IM_COL32(36, 44, 58, 255));
+			draw_list->AddCircle(
+				ImVec2((lane_left + lane_right) * 0.5f, hit_line_y),
+				(std::min)(lane_width * 0.29f, 20.0f),
+				player.guitar_muted ? IM_COL32(230, 92, 92, 220) : IM_COL32(245, 245, 245, 220),
+				0,
+				2.5f);
 		}
 
 		draw_list->AddLine(ImVec2(canvas_pos.x + lane_padding, hit_line_y),
@@ -213,6 +231,14 @@ namespace
 				IM_COL32(245, 245, 245, 220),
 				0,
 				2.0f);
+		}
+
+		if (player.guitar_muted)
+		{
+			draw_list->AddRectFilled(canvas_pos,
+				ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+				IM_COL32(120, 18, 18, 40),
+				8.0f);
 		}
 
 		ImGui::Dummy(canvas_size);
@@ -359,6 +385,18 @@ int main(int argc, char *argv[])
 					held_input.b = is_down;
 				else if (scancode == SDL_SCANCODE_X)
 					held_input.x = is_down;
+				else if (scancode == SDL_SCANCODE_Y)
+					held_input.y = is_down;
+				else if (scancode == SDL_SCANCODE_1)
+					held_input.left = is_down;
+				else if (scancode == SDL_SCANCODE_2)
+					held_input.up = is_down;
+				else if (scancode == SDL_SCANCODE_3)
+					held_input.y = is_down;
+				else if (scancode == SDL_SCANCODE_4)
+					held_input.x = is_down;
+				else if (scancode == SDL_SCANCODE_5)
+					held_input.a = is_down;
 			}
 		}
 
@@ -511,43 +549,17 @@ int main(int argc, char *argv[])
 			const PrototypePlayerView player = app.prototype_player_view();
 			ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)), ImGuiCond_Always);
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 			ImGui::Begin("Multitrack Prototype", nullptr,
 				ImGuiWindowFlags_NoResize |
 				ImGuiWindowFlags_NoMove |
-				ImGuiWindowFlags_NoCollapse);
+				ImGuiWindowFlags_NoCollapse |
+				ImGuiWindowFlags_NoTitleBar);
 
-			ImGui::TextUnformatted("Multitrack Prototype");
-			ImGui::Separator();
-			ImGui::TextWrapped("%s", player.song_title.c_str());
-			if (!player.song_artist.empty())
-				ImGui::TextDisabled("%s", player.song_artist.c_str());
-
-			ImGui::Spacing();
-			if (player.has_guitar &&
-				ImGui::Button(player.guitar_muted ? "Unmute guitar.ogg" : "Mute guitar.ogg", ImVec2(280.0f * kUiScale, 0.0f)))
-				app.toggle_player_guitar_mute();
-
-			if (player.has_guitar)
-				ImGui::SameLine();
-			if (ImGui::Button("Back to browser", ImVec2(240.0f * kUiScale, 0.0f)))
-				app.return_to_browser();
-
-			ImGui::Spacing();
-			ImGui::Text("Loaded stems: %d", static_cast<int>(player.loaded_stem_count));
-			if (player.has_guitar)
-				ImGui::TextUnformatted(player.guitar_muted ? "guitar.ogg: OFF" : "guitar.ogg: ON");
-			ImGui::Text("Playback time: %.2fs", player.song_time_seconds);
-
-			if (!player.status_message.empty())
-			{
-				ImGui::Spacing();
-				ImGui::TextWrapped("%s", player.status_message.c_str());
-			}
-
-			ImGui::Spacing();
-			draw_chart_highway(player, ImGui::GetContentRegionAvail().x, 420.0f * kUiScale);
+			draw_chart_highway(player, ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
 
 			ImGui::End();
+			ImGui::PopStyleVar();
 		}
 
 		ImGui::Render();

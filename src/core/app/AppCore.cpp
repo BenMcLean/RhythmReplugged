@@ -184,7 +184,20 @@ namespace rhythmreplugged
 			return;
 		}
 
-		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.x, previous_input_.x))
-			toggle_player_guitar_mute_unlocked();
+		const std::array<bool, 5> lane_held = {
+			input_state.left,
+			input_state.up,
+			input_state.y,
+			input_state.x,
+			input_state.a,
+		};
+		const std::array<bool, 5> lane_pressed = {
+			pressed(input_state.left, previous_input_.left),
+			pressed(input_state.up, previous_input_.up),
+			pressed(input_state.y, previous_input_.y),
+			pressed(input_state.x, previous_input_.x),
+			pressed(input_state.a, previous_input_.a),
+		};
+		song_session_.update_gameplay_input(lane_held, lane_pressed);
 	}
 }
