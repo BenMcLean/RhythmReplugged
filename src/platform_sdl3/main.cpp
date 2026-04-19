@@ -168,20 +168,21 @@ namespace
 			const float lane_left = canvas_pos.x + lane_padding + lane_width * static_cast<float>(lane);
 			const float lane_right = lane_left + lane_width;
 			const bool is_held = player.lane_held[static_cast<size_t>(lane)];
+			const bool is_sustaining = player.lane_sustaining[static_cast<size_t>(lane)];
 			draw_list->AddRectFilled(ImVec2(lane_left, lane_top), ImVec2(lane_right, lane_bottom),
-				is_held ? IM_COL32(34, 41, 54, 255) : IM_COL32(22, 27, 35, 255));
+				is_held ? IM_COL32(34, 41, 54, 255) : (is_sustaining ? IM_COL32(28, 34, 45, 255) : IM_COL32(22, 27, 35, 255)));
 			draw_list->AddLine(ImVec2(lane_right, lane_top), ImVec2(lane_right, lane_bottom),
 				IM_COL32(48, 58, 74, 255), 1.0f);
 			draw_list->AddCircleFilled(
 				ImVec2((lane_left + lane_right) * 0.5f, hit_line_y),
 				(std::min)(lane_width * 0.29f, 20.0f),
-				is_held ? lane_colors[lane] : IM_COL32(36, 44, 58, 255));
+				is_held || is_sustaining ? lane_colors[lane] : IM_COL32(36, 44, 58, 255));
 			draw_list->AddCircle(
 				ImVec2((lane_left + lane_right) * 0.5f, hit_line_y),
 				(std::min)(lane_width * 0.29f, 20.0f),
-				player.guitar_muted ? IM_COL32(230, 92, 92, 220) : IM_COL32(245, 245, 245, 220),
+				player.guitar_muted ? IM_COL32(230, 92, 92, 220) : (is_sustaining ? IM_COL32(255, 250, 210, 240) : IM_COL32(245, 245, 245, 220)),
 				0,
-				2.5f);
+				is_sustaining ? 3.5f : 2.5f);
 		}
 
 		draw_list->AddLine(ImVec2(canvas_pos.x + lane_padding, hit_line_y),

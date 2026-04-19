@@ -58,6 +58,7 @@ namespace rhythmreplugged
 		bool has_guitar = false;
 		bool guitar_muted = false;
 		std::array<bool, 5> lane_held{};
+		std::array<bool, 5> lane_sustaining{};
 		size_t loaded_stem_count = 0;
 		bool has_chart = false;
 		std::string chart_track_name;

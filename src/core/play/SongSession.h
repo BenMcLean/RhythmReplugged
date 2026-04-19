@@ -40,10 +40,13 @@ namespace rhythmreplugged
 		static constexpr double kChartLookbehindSeconds = 0.35;
 		static constexpr double kChartLookaheadSeconds = 3.0;
 		static constexpr double kNoteHitWindowSeconds = 0.125;
+		static constexpr double kSustainMinimumSeconds = 0.08;
 
 		static std::uint8_t lane_mask_from_state(const std::array<bool, 5> &lanes);
 		size_t note_group_end_index(size_t start_index) const;
 		std::uint8_t note_group_lane_mask(size_t start_index, size_t end_index) const;
+		std::uint8_t active_sustain_lane_mask(double song_time_seconds) const;
+		void start_sustains_for_note_group(size_t start_index, size_t end_index);
 		void consume_missed_note_groups(double song_time_seconds);
 
 		PrototypePlayer prototype_player_;
@@ -52,6 +55,7 @@ namespace rhythmreplugged
 		AudioMixer audio_mixer_;
 		std::string chart_status_message_;
 		std::array<bool, 5> lane_held_{};
+		std::array<double, 5> lane_sustain_end_times_{};
 		size_t next_note_index_ = 0;
 		std::atomic<bool> loaded_{false};
 	};

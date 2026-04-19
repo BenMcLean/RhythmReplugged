@@ -19,6 +19,7 @@ namespace rhythmreplugged
 		transport_.configure(prototype_player_.sample_rate());
 		audio_mixer_.set_prototype_player(&prototype_player_);
 		lane_held_.fill(false);
+		lane_sustain_end_times_.fill(0.0);
 		next_note_index_ = 0;
 		prototype_player_.set_stem_target_gain("guitar", 1.0f);
 		loaded_.store(true);
@@ -32,6 +33,7 @@ namespace rhythmreplugged
 		midi_chart_.clear();
 		chart_status_message_.clear();
 		lane_held_.fill(false);
+		lane_sustain_end_times_.fill(0.0);
 		next_note_index_ = 0;
 		prototype_player_.unload();
 		loaded_.store(false);
@@ -56,33 +58,43 @@ namespace rhythmreplugged
 
 		const double current_time_seconds = song_time_seconds();
 		consume_missed_note_groups(current_time_seconds);
+		const std::uint8_t held_mask = lane_mask_from_state(lane_held_);
 
 		const std::uint8_t pressed_mask = lane_mask_from_state(lane_pressed);
-		if (pressed_mask == 0)
-			return;
-
-		if (next_note_index_ >= midi_chart_.notes().size())
+		bool resolved_note_hit = false;
+		if (pressed_mask != 0 && next_note_index_ < midi_chart_.notes().size())
 		{
-			prototype_player_.set_stem_target_gain("guitar", 1.0f);
+			const std::vector<MidiChartNote> &notes = midi_chart_.notes();
+			const size_t group_end_index = note_group_end_index(next_note_index_);
+			const double note_time_seconds = notes[next_note_index_].start_seconds;
+			if (std::fabs(note_time_seconds - current_time_seconds) <= kNoteHitWindowSeconds)
+			{
+				const std::uint8_t expected_mask = note_group_lane_mask(next_note_index_, group_end_index);
+				if (held_mask == expected_mask)
+				{
+					start_sustains_for_note_group(next_note_index_, group_end_index);
+					next_note_index_ = group_end_index;
+					resolved_note_hit = true;
+				}
+				else
+				{
+					prototype_player_.set_stem_target_gain("guitar", 0.0f);
+				}
+			}
+		}
+
+		const std::uint8_t sustain_mask = active_sustain_lane_mask(current_time_seconds);
+		if (sustain_mask != 0)
+		{
+			if (held_mask == sustain_mask)
+				prototype_player_.set_stem_target_gain("guitar", 1.0f);
+			else
+				prototype_player_.set_stem_target_gain("guitar", 0.0f);
 			return;
 		}
 
-		const std::vector<MidiChartNote> &notes = midi_chart_.notes();
-		const size_t group_end_index = note_group_end_index(next_note_index_);
-		const double note_time_seconds = notes[next_note_index_].start_seconds;
-		if (std::fabs(note_time_seconds - current_time_seconds) > kNoteHitWindowSeconds)
-			return;
-
-		const std::uint8_t held_mask = lane_mask_from_state(lane_held_);
-		const std::uint8_t expected_mask = note_group_lane_mask(next_note_index_, group_end_index);
-		if (held_mask == expected_mask)
-		{
-			next_note_index_ = group_end_index;
+		if (resolved_note_hit || next_note_index_ >= midi_chart_.notes().size())
 			prototype_player_.set_stem_target_gain("guitar", 1.0f);
-			return;
-		}
-
-		prototype_player_.set_stem_target_gain("guitar", 0.0f);
 	}
 
 	bool SongSession::has_stem(std::string_view stem_name) const
@@ -129,6 +141,9 @@ namespace rhythmreplugged
 		player_view.lane_held = lane_held_;
 		player_view.loaded_stem_count = prototype_player_.loaded_stem_count();
 		player_view.song_time_seconds = song_time_seconds();
+		const std::uint8_t sustain_mask = active_sustain_lane_mask(player_view.song_time_seconds);
+		for (size_t lane = 0; lane < player_view.lane_sustaining.size(); ++lane)
+			player_view.lane_sustaining[lane] = (sustain_mask & static_cast<std::uint8_t>(1u << lane)) != 0;
 		player_view.has_chart = midi_chart_.is_loaded();
 		player_view.chart_track_name = std::string(midi_chart_.track_name());
 		player_view.chart_difficulty_name = std::string(midi_chart_.difficulty_name());
@@ -228,6 +243,36 @@ namespace rhythmreplugged
 		}
 
 		return mask;
+	}
+
+	std::uint8_t SongSession::active_sustain_lane_mask(double song_time_seconds) const
+	{
+		std::uint8_t mask = 0;
+		for (size_t lane = 0; lane < lane_sustain_end_times_.size(); ++lane)
+		{
+			if (lane_sustain_end_times_[lane] - song_time_seconds > 0.0)
+				mask |= static_cast<std::uint8_t>(1u << lane);
+		}
+
+		return mask;
+	}
+
+	void SongSession::start_sustains_for_note_group(size_t start_index, size_t end_index)
+	{
+		const std::vector<MidiChartNote> &notes = midi_chart_.notes();
+		for (size_t index = start_index; index < end_index && index < notes.size(); ++index)
+		{
+			const MidiChartNote &note = notes[index];
+			if (note.lane < 0 || note.lane >= 5)
+				continue;
+
+			const double sustain_duration_seconds = note.end_seconds - note.start_seconds;
+			if (sustain_duration_seconds < kSustainMinimumSeconds)
+				continue;
+
+			const size_t lane = static_cast<size_t>(note.lane);
+			lane_sustain_end_times_[lane] = (std::max)(lane_sustain_end_times_[lane], note.end_seconds);
+		}
 	}
 
 	void SongSession::consume_missed_note_groups(double song_time_seconds)
