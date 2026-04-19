@@ -170,6 +170,21 @@ namespace
 			ImVec2(canvas_pos.x + canvas_size.x - lane_padding, hit_line_y),
 			IM_COL32(245, 245, 245, 255), 3.0f);
 
+		for (const PrototypePlayerView::ChartMeasureLineView &measure_line : player.visible_measure_lines)
+		{
+			const float line_y = hit_line_y - measure_line.offset_seconds * pixels_per_second;
+			if (line_y < lane_top || line_y > lane_bottom)
+				continue;
+
+			draw_list->AddLine(
+				ImVec2(canvas_pos.x + lane_padding, line_y),
+				ImVec2(canvas_pos.x + canvas_size.x - lane_padding, line_y),
+				measure_line.is_measure
+					? IM_COL32(235, 240, 250, 220)
+					: (measure_line.is_strong ? IM_COL32(170, 185, 205, 170) : IM_COL32(100, 112, 128, 110)),
+				measure_line.is_measure ? 3.0f : (measure_line.is_strong ? 2.0f : 1.0f));
+		}
+
 		for (const PrototypePlayerView::ChartNoteView &note : player.visible_chart_notes)
 		{
 			if (note.lane < 0 || note.lane >= 5)

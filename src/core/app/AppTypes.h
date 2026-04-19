@@ -44,6 +44,13 @@ namespace rhythmreplugged
 			float length_seconds = 0.0f;
 		};
 
+		struct ChartMeasureLineView
+		{
+			float offset_seconds = 0.0f;
+			bool is_measure = false;
+			bool is_strong = false;
+		};
+
 		std::string song_title;
 		std::string song_artist;
 		std::string status_message;
@@ -56,5 +63,6 @@ namespace rhythmreplugged
 		double song_time_seconds = 0.0;
 		double chart_beats_per_minute = 120.0;
 		std::vector<ChartNoteView> visible_chart_notes;
+		std::vector<ChartMeasureLineView> visible_measure_lines;
 	};
 }

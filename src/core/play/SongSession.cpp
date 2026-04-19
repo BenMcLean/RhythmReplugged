@@ -102,6 +102,22 @@ namespace rhythmreplugged
 			note_view.length_seconds = static_cast<float>((std::max)(note.end_seconds - note.start_seconds, 0.0));
 			player_view.visible_chart_notes.push_back(note_view);
 		}
+
+		const std::vector<MidiChartMeasureLine> visible_measure_lines = midi_chart_.collect_visible_measure_lines(
+			player_view.song_time_seconds,
+			kChartLookbehindSeconds,
+			kChartLookaheadSeconds);
+		player_view.visible_measure_lines.reserve(visible_measure_lines.size());
+		for (const MidiChartMeasureLine &measure_line : visible_measure_lines)
+		{
+			PrototypePlayerView::ChartMeasureLineView measure_line_view;
+			measure_line_view.offset_seconds = static_cast<float>(measure_line.time_seconds - player_view.song_time_seconds);
+			measure_line_view.is_measure = measure_line.kind == MidiChartMeasureLine::Kind::Measure;
+			measure_line_view.is_strong =
+				measure_line.kind == MidiChartMeasureLine::Kind::Measure ||
+				measure_line.kind == MidiChartMeasureLine::Kind::Strong;
+			player_view.visible_measure_lines.push_back(measure_line_view);
+		}
 		return player_view;
 	}
 
