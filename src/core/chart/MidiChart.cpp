@@ -80,6 +80,25 @@ namespace rhythmreplugged
 			{MidiChartDifficulty::Expert, 74, 10},
 		};
 
+		struct EliteDrumPadOffset
+		{
+			int pad;
+			int offset;
+		};
+
+		constexpr EliteDrumPadOffset kEliteDrumPadOffsets[] = {
+			{0, -2},
+			{1, 0},
+			{2, 1},
+			{3, 2},
+			{4, 3},
+			{5, 4},
+			{6, 5},
+			{7, 6},
+			{8, 7},
+			{9, 8},
+		};
+
 		constexpr DifficultyNoteRange kProGuitarNoteRanges[] = {
 			{MidiChartDifficulty::Easy, 24, 24},
 			{MidiChartDifficulty::Medium, 48, 24},
@@ -305,6 +324,33 @@ namespace rhythmreplugged
 			return false;
 		}
 
+		bool match_elite_drums_note(int midi_note, MidiChartDifficulty &difficulty, int &pad, bool &double_kick)
+		{
+			for (const DifficultyNoteRange &range : kEliteDrumsNoteRanges)
+			{
+				for (const EliteDrumPadOffset &pad_offset : kEliteDrumPadOffsets)
+				{
+					if (midi_note == range.start_note + pad_offset.offset)
+					{
+						difficulty = range.difficulty;
+						pad = pad_offset.pad;
+						double_kick = false;
+						return true;
+					}
+				}
+
+				if (midi_note == range.start_note - 1)
+				{
+					difficulty = range.difficulty;
+					pad = 1;
+					double_kick = true;
+					return true;
+				}
+			}
+
+			return false;
+		}
+
 		MidiChartTextEventType classify_text_event_type(const smf::MidiEvent &event, std::string_view text)
 		{
 			const std::string lowered = to_lower_copy(text);
@@ -479,6 +525,12 @@ namespace rhythmreplugged
 			if (parse_common_phrase(event, track, star_power_note_override, 103, true, true))
 				return true;
 
+			if (event.getKeyNumber() == 104)
+			{
+				push_phrase(track, MidiChartPhraseType::TapModifier, MidiChartDifficulty::All, event);
+				return true;
+			}
+
 			MidiChartDifficulty difficulty = MidiChartDifficulty::None;
 			int raw_value = -1;
 			if (match_note_range(event.getKeyNumber(), kFiveFretNoteRanges, std::size(kFiveFretNoteRanges), difficulty, raw_value))
@@ -497,6 +549,20 @@ namespace rhythmreplugged
 				note.channel = event.getChannelNibble();
 				push_parsed_note(track, note);
 				return true;
+			}
+
+			for (const DifficultyNoteRange &range : kFiveFretNoteRanges)
+			{
+				if (event.getKeyNumber() == range.start_note + 5)
+				{
+					push_phrase(track, MidiChartPhraseType::ForcedHopoModifier, range.difficulty, event);
+					return true;
+				}
+				if (event.getKeyNumber() == range.start_note + 6)
+				{
+					push_phrase(track, MidiChartPhraseType::ForcedStrumModifier, range.difficulty, event);
+					return true;
+				}
 			}
 
 			if (track.uses_enhanced_opens)
@@ -537,12 +603,6 @@ namespace rhythmreplugged
 				return true;
 			}
 
-			if (event.getKeyNumber() == 104)
-			{
-				push_phrase(track, MidiChartPhraseType::Unknown, MidiChartDifficulty::All, event);
-				return true;
-			}
-
 			return false;
 		}
 
@@ -550,6 +610,26 @@ namespace rhythmreplugged
 		{
 			if (parse_common_phrase(event, track, star_power_note_override, 103, false, false))
 				return true;
+
+			if (event.getKeyNumber() == 104)
+			{
+				push_phrase(track, MidiChartPhraseType::TapModifier, MidiChartDifficulty::All, event);
+				return true;
+			}
+
+			for (const DifficultyNoteRange &range : kSixFretNoteRanges)
+			{
+				if (event.getKeyNumber() == range.start_note + 7)
+				{
+					push_phrase(track, MidiChartPhraseType::ForcedHopoModifier, range.difficulty, event);
+					return true;
+				}
+				if (event.getKeyNumber() == range.start_note + 8)
+				{
+					push_phrase(track, MidiChartPhraseType::ForcedStrumModifier, range.difficulty, event);
+					return true;
+				}
+			}
 
 			MidiChartDifficulty difficulty = MidiChartDifficulty::None;
 			int raw_value = -1;
@@ -600,7 +680,12 @@ namespace rhythmreplugged
 
 			if (note_number >= 110 && note_number <= 112)
 			{
-				push_phrase(track, MidiChartPhraseType::Unknown, MidiChartDifficulty::All, event);
+				if (note_number == 110)
+					push_phrase(track, MidiChartPhraseType::DrumsCymbalYellowModifier, MidiChartDifficulty::All, event);
+				else if (note_number == 111)
+					push_phrase(track, MidiChartPhraseType::DrumsCymbalBlueModifier, MidiChartDifficulty::All, event);
+				else
+					push_phrase(track, MidiChartPhraseType::DrumsCymbalOrangeModifier, MidiChartDifficulty::All, event);
 				return true;
 			}
 
@@ -836,18 +921,19 @@ namespace rhythmreplugged
 
 			MidiChartDifficulty difficulty = MidiChartDifficulty::None;
 			int raw_value = -1;
-			if (!match_note_range(note_number, kEliteDrumsNoteRanges, std::size(kEliteDrumsNoteRanges), difficulty, raw_value))
+			bool double_kick = false;
+			if (!match_elite_drums_note(note_number, difficulty, raw_value, double_kick))
 			{
 				for (const DifficultyNoteRange &range : kEliteDrumsNoteRanges)
 				{
 					if (note_number == range.start_note + 13)
 					{
-						push_phrase(track, MidiChartPhraseType::Unknown, range.difficulty, event);
+						push_phrase(track, MidiChartPhraseType::EliteDrumsFlamModifier, range.difficulty, event);
 						return true;
 					}
 					if (note_number == range.start_note + 14)
 					{
-						push_phrase(track, MidiChartPhraseType::Unknown, range.difficulty, event);
+						push_phrase(track, MidiChartPhraseType::EliteDrumsForcedIndifferentModifier, range.difficulty, event);
 						return true;
 					}
 					if (note_number == range.start_note + 16)
@@ -904,6 +990,10 @@ namespace rhythmreplugged
 			default:
 				break;
 			}
+			if (raw_value == 0)
+				push_phrase(track, MidiChartPhraseType::EliteDrumsForcedClosedModifier, difficulty, event);
+			if (double_kick)
+				note.flags |= MidiChartNoteFlagInstrumentPlus;
 			push_parsed_note(track, note);
 			return true;
 		}
@@ -934,9 +1024,6 @@ namespace rhythmreplugged
 					break;
 				}
 
-				if (flag == MidiChartNoteFlagNone)
-					continue;
-
 				for (MidiChartParsedNote &note : track.parsed_notes)
 				{
 					if (phrase.difficulty != MidiChartDifficulty::All &&
@@ -946,8 +1033,59 @@ namespace rhythmreplugged
 						continue;
 					}
 
-					if (note.tick >= phrase.tick && note.tick < phrase.end_tick)
+					if (note.tick < phrase.tick || note.tick >= phrase.end_tick)
+						continue;
+
+					if (flag != MidiChartNoteFlagNone)
 						note.flags |= flag;
+
+					switch (phrase.type)
+					{
+					case MidiChartPhraseType::TapModifier:
+						note.flags |= MidiChartNoteFlagTap;
+						note.flags &= ~(MidiChartNoteFlagForced | MidiChartNoteFlagForcedHopo | MidiChartNoteFlagForcedStrum);
+						break;
+					case MidiChartPhraseType::ForcedHopoModifier:
+						if ((note.flags & MidiChartNoteFlagTap) == 0)
+						{
+							note.flags |= MidiChartNoteFlagForced | MidiChartNoteFlagForcedHopo;
+							note.flags &= ~MidiChartNoteFlagForcedStrum;
+						}
+						break;
+					case MidiChartPhraseType::ForcedStrumModifier:
+						if ((note.flags & MidiChartNoteFlagTap) == 0)
+						{
+							note.flags |= MidiChartNoteFlagForced | MidiChartNoteFlagForcedStrum;
+							note.flags &= ~MidiChartNoteFlagForcedHopo;
+						}
+						break;
+					case MidiChartPhraseType::DrumsCymbalYellowModifier:
+						if (note.category == MidiChartNoteCategory::Drums && note.raw_value == 2)
+							note.flags |= MidiChartNoteFlagProDrumsCymbal;
+						break;
+					case MidiChartPhraseType::DrumsCymbalBlueModifier:
+						if (note.category == MidiChartNoteCategory::Drums && note.raw_value == 3)
+							note.flags |= MidiChartNoteFlagProDrumsCymbal;
+						break;
+					case MidiChartPhraseType::DrumsCymbalOrangeModifier:
+						if (note.category == MidiChartNoteCategory::Drums && note.raw_value == 4)
+							note.flags |= MidiChartNoteFlagProDrumsCymbal;
+						break;
+					case MidiChartPhraseType::EliteDrumsForcedClosedModifier:
+						if (note.category == MidiChartNoteCategory::EliteDrums && note.raw_value == 3)
+							note.flags ^= MidiChartNoteFlagEliteDrumsForcedClosed;
+						break;
+					case MidiChartPhraseType::EliteDrumsForcedIndifferentModifier:
+						if (note.category == MidiChartNoteCategory::EliteDrums && note.raw_value == 3)
+							note.flags ^= MidiChartNoteFlagEliteDrumsForcedIndifferent;
+						break;
+					case MidiChartPhraseType::EliteDrumsFlamModifier:
+						if (note.category == MidiChartNoteCategory::EliteDrums && note.raw_value != 0 && note.raw_value != 1)
+							note.flags ^= MidiChartNoteFlagEliteDrumsFlam;
+						break;
+					default:
+						break;
+					}
 				}
 			}
 		}
@@ -1114,6 +1252,517 @@ namespace rhythmreplugged
 				sysex_event.data.push_back(static_cast<std::uint8_t>(value));
 			return sysex_event;
 		}
+
+		bool difficulty_matches(MidiChartDifficulty note_difficulty, MidiChartDifficulty target_difficulty)
+		{
+			return target_difficulty == MidiChartDifficulty::All ||
+				target_difficulty == MidiChartDifficulty::None ||
+				note_difficulty == target_difficulty;
+		}
+
+		bool is_legacy_starpower_fixup_track(MidiChartTrackType type)
+		{
+			switch (type)
+			{
+			case MidiChartTrackType::FiveFretGuitar:
+			case MidiChartTrackType::FiveFretCoop:
+			case MidiChartTrackType::FiveFretBass:
+			case MidiChartTrackType::FiveFretRhythm:
+				return true;
+			default:
+				return false;
+			}
+		}
+
+		void sort_track_content(MidiChartTrack &track)
+		{
+			std::sort(track.parsed_notes.begin(), track.parsed_notes.end(),
+				[](const MidiChartParsedNote &left, const MidiChartParsedNote &right)
+				{
+					if (left.tick != right.tick)
+						return left.tick < right.tick;
+					if (left.difficulty != right.difficulty)
+						return static_cast<int>(left.difficulty) < static_cast<int>(right.difficulty);
+					return left.raw_value < right.raw_value;
+				});
+
+			std::sort(track.phrases.begin(), track.phrases.end(),
+				[](const MidiChartPhrase &left, const MidiChartPhrase &right)
+				{
+					if (left.tick != right.tick)
+						return left.tick < right.tick;
+					if (left.difficulty != right.difficulty)
+						return static_cast<int>(left.difficulty) < static_cast<int>(right.difficulty);
+					return static_cast<int>(left.type) < static_cast<int>(right.type);
+				});
+		}
+
+		void clear_phrase_note_flags(MidiChartTrack &track)
+		{
+			constexpr std::uint32_t kPhraseFlags =
+				MidiChartNoteFlagForced |
+				MidiChartNoteFlagForcedHopo |
+				MidiChartNoteFlagForcedStrum |
+				MidiChartNoteFlagStarPower |
+				MidiChartNoteFlagSolo |
+				MidiChartNoteFlagTremolo |
+				MidiChartNoteFlagTrill |
+				MidiChartNoteFlagBigRockEnding |
+				MidiChartNoteFlagTap |
+				MidiChartNoteFlagProDrumsCymbal |
+				MidiChartNoteFlagEliteDrumsForcedIndifferent |
+				MidiChartNoteFlagEliteDrumsForcedClosed |
+				MidiChartNoteFlagEliteDrumsFlam;
+
+			for (MidiChartParsedNote &note : track.parsed_notes)
+				note.flags &= ~kPhraseFlags;
+		}
+
+		std::vector<std::pair<int, int>> get_coda_ranges(const std::vector<MidiChartTextEvent> &global_events)
+		{
+			std::vector<std::pair<int, int>> ranges;
+			for (const MidiChartTextEvent &event : global_events)
+			{
+				const std::string lowered = to_lower_copy(event.text);
+				if (lowered == "coda")
+				{
+					if (!ranges.empty() && ranges.back().second == (std::numeric_limits<int>::max)())
+						return ranges;
+
+					ranges.emplace_back(event.tick, (std::numeric_limits<int>::max)());
+				}
+				else if (lowered == "coda_end")
+				{
+					if (ranges.empty() || ranges.back().second != (std::numeric_limits<int>::max)())
+						return ranges;
+
+					ranges.back().second = event.tick;
+				}
+			}
+
+			return ranges;
+		}
+
+		void apply_sysex_open_modifier(MidiChartTrack &track, int start_tick, int end_tick, MidiChartDifficulty difficulty)
+		{
+			for (MidiChartParsedNote &note : track.parsed_notes)
+			{
+				if ((note.category != MidiChartNoteCategory::FiveFret && note.category != MidiChartNoteCategory::SixFret) ||
+					!difficulty_matches(note.difficulty, difficulty) ||
+					note.tick < start_tick || note.tick > end_tick)
+				{
+					continue;
+				}
+
+				note.raw_value = 0;
+				note.lane = 0;
+			}
+		}
+
+		void apply_sysex_tap_modifier(MidiChartTrack &track, int start_tick, int end_tick, MidiChartDifficulty difficulty)
+		{
+			for (MidiChartParsedNote &note : track.parsed_notes)
+			{
+				if ((note.category != MidiChartNoteCategory::FiveFret && note.category != MidiChartNoteCategory::SixFret) ||
+					!difficulty_matches(note.difficulty, difficulty) ||
+					note.tick < start_tick || note.tick > end_tick)
+				{
+					continue;
+				}
+
+				note.flags |= MidiChartNoteFlagTap;
+			}
+		}
+
+		void apply_sysex_postprocessing(MidiChartTrack &track)
+		{
+			struct ActiveSysEx
+			{
+				MidiChartSysExEvent event;
+			};
+
+			std::vector<ActiveSysEx> active_events;
+			for (const MidiChartSysExEvent &sysex_event : track.sysex_events)
+			{
+				if (sysex_event.type != MidiChartSysExType::PhaseShiftPhrase)
+					continue;
+
+				if (sysex_event.phrase_value == 1)
+				{
+					active_events.push_back({sysex_event});
+					continue;
+				}
+
+				if (sysex_event.phrase_value != 0)
+					continue;
+
+				for (size_t index = 0; index < active_events.size(); ++index)
+				{
+					const ActiveSysEx &active = active_events[index];
+					if (active.event.phrase_code != sysex_event.phrase_code ||
+						active.event.difficulty != sysex_event.difficulty)
+					{
+						continue;
+					}
+
+					if (sysex_event.phrase_code == 0x01)
+					{
+						int end_tick = sysex_event.tick;
+						if (end_tick > active.event.tick)
+							--end_tick;
+						apply_sysex_open_modifier(track, active.event.tick, end_tick, active.event.difficulty);
+					}
+					else if (sysex_event.phrase_code == 0x04)
+					{
+						apply_sysex_tap_modifier(track, active.event.tick, sysex_event.tick, active.event.difficulty);
+					}
+
+					active_events.erase(active_events.begin() + static_cast<std::ptrdiff_t>(index));
+					break;
+				}
+			}
+		}
+
+		void fixup_starpower_if_needed(MidiChartTrack &track, bool has_starpower_override)
+		{
+			if (has_starpower_override || !is_legacy_starpower_fixup_track(track.type))
+				return;
+
+			bool has_starpower = false;
+			bool has_solo = false;
+			for (const MidiChartPhrase &phrase : track.phrases)
+			{
+				if (phrase.difficulty != MidiChartDifficulty::All && phrase.difficulty != MidiChartDifficulty::Expert)
+					continue;
+				if (phrase.type == MidiChartPhraseType::StarPower)
+					has_starpower = true;
+				if (phrase.type == MidiChartPhraseType::Solo)
+					has_solo = true;
+			}
+
+			if (has_starpower || !has_solo)
+				return;
+
+			for (MidiChartPhrase &phrase : track.phrases)
+			{
+				if (phrase.type == MidiChartPhraseType::Solo)
+					phrase.type = MidiChartPhraseType::StarPower;
+			}
+		}
+
+		void replace_drum_fill_during_coda(MidiChartTrack &track, const std::vector<std::pair<int, int>> &coda_ranges)
+		{
+			if (track.type != MidiChartTrackType::Drums || coda_ranges.empty())
+				return;
+
+			bool has_bre = false;
+			bool has_drum_fill = false;
+			for (const MidiChartPhrase &phrase : track.phrases)
+			{
+				has_bre |= phrase.type == MidiChartPhraseType::BigRockEnding;
+				has_drum_fill |= phrase.type == MidiChartPhraseType::DrumFill;
+			}
+
+			if (has_bre || !has_drum_fill)
+				return;
+
+			for (MidiChartPhrase &phrase : track.phrases)
+			{
+				if (phrase.type != MidiChartPhraseType::DrumFill)
+					continue;
+
+				for (const auto &[start_tick, end_tick] : coda_ranges)
+				{
+					if (phrase.tick >= start_tick && phrase.tick <= end_tick)
+					{
+						phrase.type = MidiChartPhraseType::BigRockEnding;
+						break;
+					}
+				}
+			}
+		}
+
+		void set_coda_flags(MidiChartTrack &track, const std::vector<std::pair<int, int>> &coda_ranges)
+		{
+			if (coda_ranges.empty() || track.parsed_notes.empty())
+				return;
+
+			std::vector<MidiChartDifficulty> difficulties;
+			for (const MidiChartParsedNote &note : track.parsed_notes)
+			{
+				if (std::find(difficulties.begin(), difficulties.end(), note.difficulty) == difficulties.end())
+					difficulties.push_back(note.difficulty);
+			}
+
+			for (MidiChartDifficulty difficulty : difficulties)
+			{
+				size_t coda_index = 0;
+				bool coda_started = false;
+				int last_matching_note_index = -1;
+				int previous_matching_note_index = -1;
+				for (size_t i = 0; i < track.parsed_notes.size(); ++i)
+				{
+					if (track.parsed_notes[i].difficulty == difficulty)
+						last_matching_note_index = static_cast<int>(i);
+				}
+
+				if (last_matching_note_index < 0)
+					continue;
+
+				for (size_t i = 0; i < track.parsed_notes.size() && coda_index < coda_ranges.size(); ++i)
+				{
+					MidiChartParsedNote &note = track.parsed_notes[i];
+					if (note.difficulty != difficulty)
+						continue;
+
+					if (note.tick < coda_ranges[coda_index].first)
+						continue;
+
+					if (!coda_started)
+						coda_started = true;
+
+					if (note.tick >= coda_ranges[coda_index].second && coda_started)
+					{
+						const int end_index = previous_matching_note_index >= 0
+							? previous_matching_note_index
+							: static_cast<int>(i);
+						track.parsed_notes[static_cast<size_t>(end_index)].flags |= MidiChartNoteFlagCodaEnd;
+						coda_started = false;
+						++coda_index;
+						continue;
+					}
+
+					if (static_cast<int>(i) == last_matching_note_index && coda_started)
+					{
+						note.flags |= MidiChartNoteFlagCodaEnd;
+						break;
+					}
+
+					previous_matching_note_index = static_cast<int>(i);
+				}
+			}
+		}
+
+		void copy_down_bre_phrases(std::vector<MidiChartTrack> &tracks)
+		{
+			MidiChartTrack *expert_track = nullptr;
+			for (MidiChartTrack &track : tracks)
+			{
+				if (track.type == MidiChartTrackType::ProKeysExpert)
+				{
+					expert_track = &track;
+					break;
+				}
+			}
+
+			if (expert_track == nullptr)
+				return;
+
+			std::vector<MidiChartPhrase> bre_phrases;
+			for (const MidiChartPhrase &phrase : expert_track->phrases)
+			{
+				if (phrase.type == MidiChartPhraseType::BigRockEnding)
+					bre_phrases.push_back(phrase);
+			}
+
+			for (MidiChartTrack &track : tracks)
+			{
+				if (!is_pro_keys_track(track.type) || track.type == MidiChartTrackType::ProKeysExpert)
+					continue;
+
+				const MidiChartDifficulty target_difficulty = pro_keys_track_difficulty(track.type);
+				for (const MidiChartPhrase &phrase : bre_phrases)
+				{
+					MidiChartPhrase copied = phrase;
+					copied.difficulty = target_difficulty;
+					track.phrases.push_back(std::move(copied));
+				}
+			}
+		}
+
+		void copy_down_vocals_phrases(std::vector<MidiChartTrack> &tracks)
+		{
+			MidiChartTrack *harm1 = nullptr;
+			MidiChartTrack *harm2 = nullptr;
+			MidiChartTrack *harm3 = nullptr;
+			for (MidiChartTrack &track : tracks)
+			{
+				if (track.type == MidiChartTrackType::Harmony1)
+					harm1 = &track;
+				else if (track.type == MidiChartTrackType::Harmony2)
+					harm2 = &track;
+				else if (track.type == MidiChartTrackType::Harmony3)
+					harm3 = &track;
+			}
+
+			if (harm1 == nullptr)
+				return;
+
+			if (harm2 != nullptr)
+			{
+				std::vector<MidiChartPhrase> new_phrases;
+				for (const MidiChartPhrase &phrase : harm2->phrases)
+				{
+					if (phrase.type == MidiChartPhraseType::VocalsStaticPhrase)
+						new_phrases.push_back(phrase);
+				}
+				harm2->phrases = std::move(new_phrases);
+				for (const MidiChartPhrase &phrase : harm1->phrases)
+				{
+					if (phrase.type == MidiChartPhraseType::VocalsScoringPhrase ||
+						phrase.type == MidiChartPhraseType::StarPower)
+					{
+						harm2->phrases.push_back(phrase);
+					}
+				}
+			}
+
+			if (harm3 != nullptr)
+			{
+				std::vector<MidiChartPhrase> new_phrases;
+				if (harm2 != nullptr)
+				{
+					for (const MidiChartPhrase &phrase : harm2->phrases)
+					{
+						if (phrase.type == MidiChartPhraseType::VocalsStaticPhrase)
+							new_phrases.push_back(phrase);
+					}
+				}
+				harm3->phrases = std::move(new_phrases);
+				for (const MidiChartPhrase &phrase : harm1->phrases)
+				{
+					if (phrase.type == MidiChartPhraseType::VocalsScoringPhrase ||
+						phrase.type == MidiChartPhraseType::StarPower)
+					{
+						harm3->phrases.push_back(phrase);
+					}
+				}
+			}
+		}
+
+		void suppress_non_strict_stomps_and_splashes(MidiChartTrack &track)
+		{
+			if (track.type != MidiChartTrackType::EliteDrums)
+				return;
+
+			for (size_t i = 0; i < track.parsed_notes.size(); ++i)
+			{
+				MidiChartParsedNote &pedal = track.parsed_notes[i];
+				if (pedal.category != MidiChartNoteCategory::EliteDrums ||
+					pedal.raw_value != 0 ||
+					(pedal.flags & MidiChartNoteFlagEliteDrumsStrictHatState) != 0)
+				{
+					continue;
+				}
+
+				for (size_t j = 0; j < track.parsed_notes.size(); ++j)
+				{
+					const MidiChartParsedNote &hat = track.parsed_notes[j];
+					if (hat.category != MidiChartNoteCategory::EliteDrums ||
+						hat.difficulty != pedal.difficulty ||
+						hat.tick != pedal.tick ||
+						hat.raw_value != 3 ||
+						(hat.flags & MidiChartNoteFlagEliteDrumsForcedIndifferent) != 0)
+					{
+						continue;
+					}
+
+					pedal.flags |= MidiChartNoteFlagEliteDrumsInvisibleTerminator;
+					break;
+				}
+			}
+		}
+
+		void create_kick_flams(MidiChartTrack &track)
+		{
+			if (track.type != MidiChartTrackType::EliteDrums)
+				return;
+
+			for (MidiChartParsedNote &kick : track.parsed_notes)
+			{
+				if (kick.category != MidiChartNoteCategory::EliteDrums ||
+					kick.raw_value != 1 ||
+					(kick.flags & MidiChartNoteFlagInstrumentPlus) == 0)
+				{
+					continue;
+				}
+
+				for (const MidiChartParsedNote &other : track.parsed_notes)
+				{
+					if (&other == &kick)
+						continue;
+					if (other.category == MidiChartNoteCategory::EliteDrums &&
+						other.difficulty == kick.difficulty &&
+						other.tick == kick.tick &&
+						other.raw_value == 1 &&
+						(other.flags & MidiChartNoteFlagInstrumentPlus) == 0)
+					{
+						kick.flags |= MidiChartNoteFlagEliteDrumsFlam;
+						break;
+					}
+				}
+			}
+		}
+
+		MidiChartDrumsType detect_drums_type(const std::vector<MidiChartTrack> &tracks)
+		{
+			for (const MidiChartTrack &track : tracks)
+			{
+				if (track.type != MidiChartTrackType::Drums)
+					continue;
+
+				for (const MidiChartParsedNote &note : track.parsed_notes)
+				{
+					if (note.category != MidiChartNoteCategory::Drums)
+						continue;
+					if (note.raw_value == 5)
+						return MidiChartDrumsType::FiveLane;
+					if (note.raw_value != 0 && note.raw_value != 1 &&
+						(note.flags & MidiChartNoteFlagProDrumsCymbal) == 0)
+					{
+						return MidiChartDrumsType::FourLane;
+					}
+				}
+			}
+
+			for (const MidiChartTrack &track : tracks)
+			{
+				if (track.type == MidiChartTrackType::Drums)
+					return MidiChartDrumsType::FourLane;
+			}
+
+			return MidiChartDrumsType::Unknown;
+		}
+
+		void apply_postprocessing(std::vector<MidiChartTrack> &tracks,
+			const std::vector<MidiChartTextEvent> &global_events,
+			bool has_starpower_override,
+			MidiChartDrumsType &detected_drums_type)
+		{
+			const std::vector<std::pair<int, int>> coda_ranges = get_coda_ranges(global_events);
+
+			for (MidiChartTrack &track : tracks)
+			{
+				apply_sysex_postprocessing(track);
+				fixup_starpower_if_needed(track, has_starpower_override);
+				replace_drum_fill_during_coda(track, coda_ranges);
+			}
+
+			copy_down_bre_phrases(tracks);
+			copy_down_vocals_phrases(tracks);
+
+			for (MidiChartTrack &track : tracks)
+			{
+				set_coda_flags(track, coda_ranges);
+				clear_phrase_note_flags(track);
+				apply_phrase_note_flags(track);
+				suppress_non_strict_stomps_and_splashes(track);
+				create_kick_flams(track);
+				sort_track_content(track);
+			}
+
+			detected_drums_type = detect_drums_type(tracks);
+		}
 	}
 
 	bool MidiChart::load(const IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
@@ -1236,9 +1885,11 @@ namespace rhythmreplugged
 				;
 			}
 
-			apply_phrase_note_flags(track);
+			sort_track_content(track);
 			tracks_.push_back(std::move(track));
 		}
+
+		apply_postprocessing(tracks_, global_events_, star_power_note_override_ >= 0, detected_drums_type_);
 
 		std::sort(time_signatures_.begin(), time_signatures_.end(),
 			[](const MidiChartTimeSignature &left, const MidiChartTimeSignature &right)
@@ -1268,6 +1919,7 @@ namespace rhythmreplugged
 	{
 		ticks_per_quarter_note_ = 480;
 		star_power_note_override_ = -1;
+		detected_drums_type_ = MidiChartDrumsType::Unknown;
 		track_name_.clear();
 		difficulty_name_.clear();
 		notes_.clear();
@@ -1344,6 +1996,11 @@ namespace rhythmreplugged
 	int MidiChart::star_power_note_override() const
 	{
 		return star_power_note_override_;
+	}
+
+	MidiChartDrumsType MidiChart::detected_drums_type() const
+	{
+		return detected_drums_type_;
 	}
 
 	double MidiChart::duration_seconds() const

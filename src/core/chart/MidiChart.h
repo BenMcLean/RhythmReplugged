@@ -68,6 +68,9 @@ namespace rhythmreplugged
 	enum class MidiChartPhraseType
 	{
 		Unknown,
+		TapModifier,
+		ForcedHopoModifier,
+		ForcedStrumModifier,
 		StarPower,
 		Solo,
 		VersusPlayer1,
@@ -89,6 +92,12 @@ namespace rhythmreplugged
 		ProKeysRangeShift5,
 		ProKeysGlissando,
 		EliteDrumsDiscoFlip,
+		DrumsCymbalYellowModifier,
+		DrumsCymbalBlueModifier,
+		DrumsCymbalOrangeModifier,
+		EliteDrumsForcedClosedModifier,
+		EliteDrumsForcedIndifferentModifier,
+		EliteDrumsFlamModifier,
 		EliteDrumsHatPedalLane,
 		EliteDrumsKickLane,
 		EliteDrumsSnareLane,
@@ -150,6 +159,14 @@ namespace rhythmreplugged
 		MidiChartNoteFlagEliteDrumsChannelYellow = 1u << 22,
 		MidiChartNoteFlagEliteDrumsChannelBlue = 1u << 23,
 		MidiChartNoteFlagEliteDrumsChannelGreen = 1u << 24,
+		MidiChartNoteFlagCodaEnd = 1u << 25,
+	};
+
+	enum class MidiChartDrumsType
+	{
+		Unknown,
+		FourLane,
+		FiveLane,
 	};
 
 	struct MidiChartNote
@@ -282,6 +299,7 @@ namespace rhythmreplugged
 		const std::vector<MidiChartTrack> &tracks() const;
 		int ticks_per_quarter_note() const;
 		int star_power_note_override() const;
+		MidiChartDrumsType detected_drums_type() const;
 		double duration_seconds() const;
 		double bpm_at_time(double song_time_seconds) const;
 		std::vector<MidiChartNote> collect_visible_notes(double song_time_seconds,
@@ -300,6 +318,7 @@ namespace rhythmreplugged
 
 		int ticks_per_quarter_note_ = 480;
 		int star_power_note_override_ = -1;
+		MidiChartDrumsType detected_drums_type_ = MidiChartDrumsType::Unknown;
 		std::string track_name_;
 		std::string difficulty_name_;
 		std::vector<MidiChartNote> notes_;
