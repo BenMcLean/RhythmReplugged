@@ -82,6 +82,32 @@ namespace rhythmreplugged
 		}
 	}
 
+	PrototypePlayer::StemTrack::StemTrack(StemTrack &&other) noexcept
+		: stem_name(std::move(other.stem_name)),
+		  samples(std::move(other.samples)),
+		  channels(other.channels),
+		  sample_rate(other.sample_rate),
+		  frame_count(other.frame_count),
+		  current_gain(other.current_gain),
+		  target_gain(other.target_gain.load())
+	{
+	}
+
+	PrototypePlayer::StemTrack &PrototypePlayer::StemTrack::operator=(StemTrack &&other) noexcept
+	{
+		if (this == &other)
+			return *this;
+
+		stem_name = std::move(other.stem_name);
+		samples = std::move(other.samples);
+		channels = other.channels;
+		sample_rate = other.sample_rate;
+		frame_count = other.frame_count;
+		current_gain = other.current_gain;
+		target_gain.store(other.target_gain.load());
+		return *this;
+	}
+
 	bool PrototypePlayer::load(IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
 	{
 		unload();
@@ -95,106 +121,103 @@ namespace rhythmreplugged
 
 		metadata_ = make_song_metadata_view(parse_result.metadata, folder_name_from_path(song_directory));
 
-		const auto backing_bytes = file_system.read_binary_file(song_directory + "/song.ogg");
-		if (!backing_bytes.has_value())
+		stems_.clear();
+		stems_.reserve(kKnownStemNames.size());
+
+		int session_sample_rate = 0;
+		for (std::string_view stem_name : kKnownStemNames)
 		{
-			error_message = "Could not read song.ogg.";
-			return false;
+			const std::string stem_path = song_directory + "/" + std::string(stem_name) + ".ogg";
+			const auto stem_bytes = file_system.read_binary_file(stem_path);
+			if (!stem_bytes.has_value())
+				continue;
+
+			StemTrack track;
+			track.stem_name = stem_name;
+			if (!decode_vorbis(*stem_bytes, track, error_message))
+			{
+				error_message = "Failed to decode " + std::string(stem_name) + ".ogg: " + error_message;
+				unload();
+				return false;
+			}
+
+			if (track.channels != 1 && track.channels != 2)
+			{
+				error_message = std::string(stem_name) + ".ogg must be mono or stereo.";
+				unload();
+				return false;
+			}
+
+			if (session_sample_rate == 0)
+				session_sample_rate = track.sample_rate;
+			else if (track.sample_rate != session_sample_rate)
+			{
+				error_message = "All loaded OGG stems must share the same sample rate.";
+				unload();
+				return false;
+			}
+
+			stems_.push_back(std::move(track));
 		}
 
-		const auto guitar_bytes = file_system.read_binary_file(song_directory + "/guitar.ogg");
-		if (!guitar_bytes.has_value())
+		if (stems_.empty())
 		{
-			error_message = "Could not read guitar.ogg.";
-			return false;
-		}
-
-		if (!decode_vorbis(*backing_bytes, backing_track_, error_message))
-			return false;
-
-		if (!decode_vorbis(*guitar_bytes, guitar_track_, error_message))
-			return false;
-
-		if (backing_track_.channels != 2 || guitar_track_.channels != 2)
-		{
-			error_message = "Prototype playback currently requires stereo song.ogg and guitar.ogg.";
-			unload();
-			return false;
-		}
-
-		if (backing_track_.sample_rate != guitar_track_.sample_rate)
-		{
-			error_message = "song.ogg and guitar.ogg do not share the same sample rate.";
-			unload();
+			error_message = "Could not find any supported .ogg stems.";
 			return false;
 		}
 
 		frame_index_ = 0;
-		backing_current_gain_ = 1.0f;
-		backing_target_gain_.store(1.0f);
-		guitar_current_gain_ = 1.0f;
-		guitar_target_gain_.store(1.0f);
 		return true;
 	}
 
 	void PrototypePlayer::unload()
 	{
-		backing_track_ = {};
-		guitar_track_ = {};
+		stems_.clear();
 		frame_index_ = 0;
-		backing_current_gain_ = 1.0f;
-		backing_target_gain_.store(1.0f);
-		guitar_current_gain_ = 1.0f;
-		guitar_target_gain_.store(1.0f);
 		metadata_ = {};
 	}
 
 	bool PrototypePlayer::is_loaded() const
 	{
-		return backing_track_.frame_count > 0 && guitar_track_.frame_count > 0;
+		return !stems_.empty();
 	}
 
 	void PrototypePlayer::toggle_guitar_mute()
 	{
-		const float target_gain = guitar_target_gain_.load();
-		guitar_target_gain_.store(target_gain > 0.5f ? 0.0f : 1.0f);
+		set_stem_target_gain("guitar", stem_target_gain("guitar") > 0.5f ? 0.0f : 1.0f);
 	}
 
 	bool PrototypePlayer::guitar_muted() const
 	{
-		return guitar_target_gain_.load() < 0.5f;
+		return has_stem("guitar") && stem_target_gain("guitar") < 0.5f;
 	}
 
-	void PrototypePlayer::set_stem_target_gain(StemId stem_id, float gain)
+	bool PrototypePlayer::has_stem(std::string_view stem_name) const
 	{
-		const float clamped_gain = std::clamp(gain, 0.0f, 1.0f);
-		switch (stem_id)
-		{
-		case StemId::Backing:
-			backing_target_gain_.store(clamped_gain);
-			break;
-		case StemId::Guitar:
-			guitar_target_gain_.store(clamped_gain);
-			break;
-		}
+		return find_stem(stem_name) != nullptr;
 	}
 
-	float PrototypePlayer::stem_target_gain(StemId stem_id) const
+	size_t PrototypePlayer::loaded_stem_count() const
 	{
-		switch (stem_id)
-		{
-		case StemId::Backing:
-			return backing_target_gain_.load();
-		case StemId::Guitar:
-			return guitar_target_gain_.load();
-		}
+		return stems_.size();
+	}
 
+	void PrototypePlayer::set_stem_target_gain(std::string_view stem_name, float gain)
+	{
+		if (StemTrack *track = find_stem(stem_name))
+			track->target_gain.store(std::clamp(gain, 0.0f, 1.0f));
+	}
+
+	float PrototypePlayer::stem_target_gain(std::string_view stem_name) const
+	{
+		if (const StemTrack *track = find_stem(stem_name))
+			return track->target_gain.load();
 		return 0.0f;
 	}
 
 	int PrototypePlayer::sample_rate() const
 	{
-		return backing_track_.sample_rate;
+		return stems_.empty() ? 0 : stems_.front().sample_rate;
 	}
 
 	const SongMetadataView &PrototypePlayer::metadata() const
@@ -210,37 +233,41 @@ namespace rhythmreplugged
 		const float fade_step = sample_rate() > 0
 			? 1.0f / (static_cast<float>(sample_rate()) * kStemFadeDurationSeconds)
 			: 1.0f;
+		const size_t longest_track_frames = longest_track_frame_count();
 
 		for (size_t frame = 0; frame < frame_count; ++frame)
 		{
-			backing_current_gain_ = step_towards(backing_current_gain_, backing_target_gain_.load(), fade_step);
-			guitar_current_gain_ = step_towards(guitar_current_gain_, guitar_target_gain_.load(), fade_step);
+			for (StemTrack &track : stems_)
+				track.current_gain = step_towards(track.current_gain, track.target_gain.load(), fade_step);
 
 			for (int channel = 0; channel < 2; ++channel)
 			{
 				const size_t output_index = frame * 2 + static_cast<size_t>(channel);
-				float mixed = sample_track_channel(backing_track_, frame_index_, channel) * backing_current_gain_;
-				mixed += sample_track_channel(guitar_track_, frame_index_, channel) * guitar_current_gain_;
+				float mixed = 0.0f;
+				for (StemTrack &track : stems_)
+				{
+					mixed += sample_track_channel(track, frame_index_, channel) * track.current_gain;
+				}
 				mixed = std::clamp(mixed, -1.0f, 1.0f);
 				output[output_index] = static_cast<std::int16_t>(std::lrintf(mixed * 32767.0f));
 			}
 
-			if (frame_index_ < std::max(backing_track_.frame_count, guitar_track_.frame_count))
+			if (frame_index_ < longest_track_frames)
 				++frame_index_;
 		}
 	}
 
-	RetroAudioBatch PrototypePlayer::generate_audio_batch(size_t frame_count)
+	AudioBatch PrototypePlayer::generate_audio_batch(size_t frame_count)
 	{
-		RetroAudioBatch batch;
-		batch.sample_rate = backing_track_.sample_rate;
+		AudioBatch batch;
+		batch.sample_rate = sample_rate();
 		batch.channels = 2;
 		batch.samples.resize(frame_count * 2);
 		render_interleaved_s16(batch.samples.data(), frame_count);
 		return batch;
 	}
 
-	bool PrototypePlayer::decode_vorbis(const std::vector<std::uint8_t> &bytes, DecodedTrack &track, std::string &error_message)
+	bool PrototypePlayer::decode_vorbis(const std::vector<std::uint8_t> &bytes, StemTrack &track, std::string &error_message)
 	{
 		MemoryVorbisSource source{
 			.bytes = bytes.data(),
@@ -308,11 +335,46 @@ namespace rhythmreplugged
 		return success;
 	}
 
-	float PrototypePlayer::sample_track_channel(const DecodedTrack &track, size_t frame_index, int channel) const
+	PrototypePlayer::StemTrack *PrototypePlayer::find_stem(std::string_view stem_name)
 	{
-		if (frame_index >= track.frame_count || channel >= track.channels)
+		for (StemTrack &track : stems_)
+		{
+			if (track.stem_name == stem_name)
+				return &track;
+		}
+
+		return nullptr;
+	}
+
+	const PrototypePlayer::StemTrack *PrototypePlayer::find_stem(std::string_view stem_name) const
+	{
+		for (const StemTrack &track : stems_)
+		{
+			if (track.stem_name == stem_name)
+				return &track;
+		}
+
+		return nullptr;
+	}
+
+	float PrototypePlayer::sample_track_channel(const StemTrack &track, size_t frame_index, int channel) const
+	{
+		if (frame_index >= track.frame_count)
 			return 0.0f;
 
-		return track.samples[frame_index * static_cast<size_t>(track.channels) + static_cast<size_t>(channel)];
+		const int resolved_channel = track.channels == 1 ? 0 : channel;
+		if (resolved_channel >= track.channels)
+			return 0.0f;
+
+		return track.samples[frame_index * static_cast<size_t>(track.channels) + static_cast<size_t>(resolved_channel)];
+	}
+
+	size_t PrototypePlayer::longest_track_frame_count() const
+	{
+		size_t longest = 0;
+		for (const StemTrack &track : stems_)
+			longest = std::max(longest, track.frame_count);
+
+		return longest;
 	}
 }

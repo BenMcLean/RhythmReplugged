@@ -32,6 +32,7 @@ target_include_directories(rr_libretro_contract INTERFACE
 add_library(rr_core
 	${RR_SRC_DIR}/core/app/AppCore.cpp
 	${RR_SRC_DIR}/core/app/AppCore.h
+	${RR_SRC_DIR}/core/app/AppTypes.h
 	${RR_SRC_DIR}/core/audio/PrototypePlayer.cpp
 	${RR_SRC_DIR}/core/audio/PrototypePlayer.h
 	${RR_SRC_DIR}/core/menu/SongBrowser.cpp
@@ -44,10 +45,9 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/play/Transport.h
 	${RR_SRC_DIR}/core/songs/SongIni.cpp
 	${RR_SRC_DIR}/core/songs/SongIni.h
-	${RR_SRC_DIR}/libretro_contract/RetroAudio.h
+	${RR_SRC_DIR}/libretro_contract/AudioTypes.h
 	${RR_SRC_DIR}/libretro_contract/RetroFileSystem.h
 	${RR_SRC_DIR}/libretro_contract/RetroInput.h
-	${RR_SRC_DIR}/libretro_contract/RetroTypes.h
 )
 
 target_include_directories(rr_core PUBLIC

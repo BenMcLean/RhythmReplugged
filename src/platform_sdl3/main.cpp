@@ -19,7 +19,7 @@ namespace
 
 	constexpr int kWindowWidth = 1280;
 	constexpr int kWindowHeight = 720;
-	constexpr Uint64 kRetroFrameDurationNs = 1000000000ull / kRetroFramesPerSecond;
+	constexpr Uint64 kFrameDurationNs = 1000000000ull / kAppFramesPerSecond;
 
 	std::string find_songs_root(const char *argv0)
 	{
@@ -196,10 +196,10 @@ int main(int argc, char *argv[])
 		}
 
 		size_t retro_steps = 0;
-		while (retro_time_accumulator >= kRetroFrameDurationNs && retro_steps < 4)
+		while (retro_time_accumulator >= kFrameDurationNs && retro_steps < 4)
 		{
 			app.retro_run(held_input);
-			retro_time_accumulator -= kRetroFrameDurationNs;
+			retro_time_accumulator -= kFrameDurationNs;
 			++retro_steps;
 		}
 
@@ -340,16 +340,19 @@ int main(int argc, char *argv[])
 				ImGui::TextDisabled("%s", player.song_artist.c_str());
 
 			ImGui::Spacing();
-			if (ImGui::Button(player.guitar_muted ? "Unmute guitar.ogg" : "Mute guitar.ogg", ImVec2(220.0f, 0.0f)))
+			if (player.has_guitar &&
+				ImGui::Button(player.guitar_muted ? "Unmute guitar.ogg" : "Mute guitar.ogg", ImVec2(220.0f, 0.0f)))
 				app.toggle_player_guitar_mute();
 
-			ImGui::SameLine();
+			if (player.has_guitar)
+				ImGui::SameLine();
 			if (ImGui::Button("Back to browser", ImVec2(180.0f, 0.0f)))
 				app.return_to_browser();
 
 			ImGui::Spacing();
-			ImGui::TextUnformatted("song.ogg: ON");
-			ImGui::TextUnformatted(player.guitar_muted ? "guitar.ogg: OFF" : "guitar.ogg: ON");
+			ImGui::Text("Loaded stems: %d", static_cast<int>(player.loaded_stem_count));
+			if (player.has_guitar)
+				ImGui::TextUnformatted(player.guitar_muted ? "guitar.ogg: OFF" : "guitar.ogg: ON");
 
 			if (!player.status_message.empty())
 			{
@@ -367,9 +370,9 @@ int main(int argc, char *argv[])
 		SDL_RenderPresent(renderer);
 
 		const Uint64 frame_end_counter = SDL_GetTicksNS();
-		if (frame_end_counter > current_counter && frame_end_counter - current_counter < kRetroFrameDurationNs)
+		if (frame_end_counter > current_counter && frame_end_counter - current_counter < kFrameDurationNs)
 		{
-			const Uint64 remaining_ns = kRetroFrameDurationNs - (frame_end_counter - current_counter);
+			const Uint64 remaining_ns = kFrameDurationNs - (frame_end_counter - current_counter);
 			SDL_DelayPrecise(remaining_ns);
 		}
 	}

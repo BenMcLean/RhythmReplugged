@@ -1,17 +1,17 @@
 #pragma once
 
+#include "core/app/AppTypes.h"
 #include "core/menu/SongBrowser.h"
 #include "core/play/SongSession.h"
-#include "libretro_contract/RetroAudio.h"
+#include "libretro_contract/AudioTypes.h"
 #include "libretro_contract/RetroInput.h"
-#include "libretro_contract/RetroTypes.h"
 
 #include <atomic>
 #include <string>
 
 namespace rhythmreplugged
 {
-	class AppCore : public IRetroAudioStream
+	class AppCore : public IAudioStream
 	{
 	public:
 		explicit AppCore(IRetroFileSystem &file_system);
@@ -30,7 +30,7 @@ namespace rhythmreplugged
 		AppMode mode() const;
 		const SongBrowserView &song_browser_view() const;
 		PrototypePlayerView prototype_player_view() const;
-		const RetroAudioBatch &audio_batch() const;
+		const AudioBatch &audio_batch() const;
 
 	private:
 		bool activate_browser_selection_unlocked();
@@ -45,7 +45,7 @@ namespace rhythmreplugged
 		SongSession song_session_;
 		std::atomic<AppMode> mode_{AppMode::SongBrowser};
 		RetroInputState previous_input_{};
-		RetroAudioBatch audio_batch_{};
+		AudioBatch audio_batch_{};
 		std::string player_status_message_;
 		bool session_unload_pending_ = false;
 	};

@@ -1,8 +1,8 @@
 #pragma once
 
+#include "core/app/AppTypes.h"
 #include "core/songs/SongIni.h"
 #include "libretro_contract/RetroFileSystem.h"
-#include "libretro_contract/RetroTypes.h"
 
 #include <string>
 #include <vector>

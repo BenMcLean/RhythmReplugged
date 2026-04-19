@@ -1,4 +1,5 @@
 #include "core/menu/SongBrowser.h"
+#include "core/audio/StemCatalog.h"
 
 #include <algorithm>
 #include <array>
@@ -234,19 +235,10 @@ namespace rhythmreplugged
 
 	bool SongBrowser::contains_supported_audio(const std::string &directory_path) const
 	{
-		static constexpr std::array<const char *, 14> k_stem_names = {
-			"song", "guitar", "bass", "rhythm", "keys", "vocals", "vocals_1", "vocals_2",
-			"drums", "drums_1", "drums_2", "drums_3", "drums_4", "crowd"};
-		static constexpr std::array<const char *, 5> k_audio_extensions = {
-			".opus", ".ogg", ".mp3", ".wav", ".aiff"};
-
-		for (const char *stem : k_stem_names)
+		for (std::string_view stem : kKnownStemNames)
 		{
-			for (const char *extension : k_audio_extensions)
-			{
-				if (file_system_.path_exists(directory_path + "/" + stem + extension))
-					return true;
-			}
+			if (file_system_.path_exists(directory_path + "/" + std::string(stem) + ".ogg"))
+				return true;
 		}
 
 		return false;

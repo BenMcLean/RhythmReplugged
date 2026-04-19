@@ -1,8 +1,8 @@
 #pragma once
 
-#include "core/audio/StemTypes.h"
+#include "core/audio/StemCatalog.h"
 #include "core/songs/SongIni.h"
-#include "libretro_contract/RetroAudio.h"
+#include "libretro_contract/AudioTypes.h"
 #include "libretro_contract/RetroFileSystem.h"
 
 #include <atomic>
@@ -21,32 +21,41 @@ namespace rhythmreplugged
 		bool is_loaded() const;
 		void toggle_guitar_mute();
 		bool guitar_muted() const;
-		void set_stem_target_gain(StemId stem_id, float gain);
-		float stem_target_gain(StemId stem_id) const;
+		bool has_stem(std::string_view stem_name) const;
+		size_t loaded_stem_count() const;
+		void set_stem_target_gain(std::string_view stem_name, float gain);
+		float stem_target_gain(std::string_view stem_name) const;
 		int sample_rate() const;
 		const SongMetadataView &metadata() const;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
-		RetroAudioBatch generate_audio_batch(size_t frame_count);
+		AudioBatch generate_audio_batch(size_t frame_count);
 
 	private:
-		struct DecodedTrack
+		struct StemTrack
 		{
+			std::string stem_name;
 			std::vector<float> samples;
 			int channels = 0;
 			int sample_rate = 0;
 			size_t frame_count = 0;
+			float current_gain = 1.0f;
+			std::atomic<float> target_gain{1.0f};
+
+			StemTrack() = default;
+			StemTrack(const StemTrack &) = delete;
+			StemTrack &operator=(const StemTrack &) = delete;
+			StemTrack(StemTrack &&other) noexcept;
+			StemTrack &operator=(StemTrack &&other) noexcept;
 		};
 
-		static bool decode_vorbis(const std::vector<std::uint8_t> &bytes, DecodedTrack &track, std::string &error_message);
-		float sample_track_channel(const DecodedTrack &track, size_t frame_index, int channel) const;
+		static bool decode_vorbis(const std::vector<std::uint8_t> &bytes, StemTrack &track, std::string &error_message);
+		StemTrack *find_stem(std::string_view stem_name);
+		const StemTrack *find_stem(std::string_view stem_name) const;
+		float sample_track_channel(const StemTrack &track, size_t frame_index, int channel) const;
+		size_t longest_track_frame_count() const;
 
-		DecodedTrack backing_track_;
-		DecodedTrack guitar_track_;
+		std::vector<StemTrack> stems_;
 		size_t frame_index_ = 0;
-		float backing_current_gain_ = 1.0f;
-		std::atomic<float> backing_target_gain_{1.0f};
-		float guitar_current_gain_ = 1.0f;
-		std::atomic<float> guitar_target_gain_{1.0f};
 		SongMetadataView metadata_;
 	};
 }

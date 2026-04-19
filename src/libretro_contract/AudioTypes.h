@@ -5,15 +5,15 @@
 
 namespace rhythmreplugged
 {
-	class IRetroAudioStream
+	class IAudioStream
 	{
 	public:
-		virtual ~IRetroAudioStream() = default;
+		virtual ~IAudioStream() = default;
 		virtual int sample_rate() const = 0;
 		virtual void render_interleaved_s16(std::int16_t *output, size_t frame_count) = 0;
 	};
 
-	struct RetroAudioBatch
+	struct AudioBatch
 	{
 		int sample_rate = 0;
 		int channels = 2;

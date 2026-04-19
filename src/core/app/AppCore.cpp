@@ -140,7 +140,7 @@ namespace rhythmreplugged
 		return song_session_.view(player_status_message_);
 	}
 
-	const RetroAudioBatch &AppCore::audio_batch() const
+	const AudioBatch &AppCore::audio_batch() const
 	{
 		return audio_batch_;
 	}

@@ -35,15 +35,25 @@ namespace rhythmreplugged
 			prototype_player_.toggle_guitar_mute();
 	}
 
-	void SongSession::set_stem_target_gain(StemId stem_id, float gain)
+	bool SongSession::has_stem(std::string_view stem_name) const
 	{
-		if (is_loaded())
-			prototype_player_.set_stem_target_gain(stem_id, gain);
+		return prototype_player_.has_stem(stem_name);
 	}
 
-	float SongSession::stem_target_gain(StemId stem_id) const
+	size_t SongSession::loaded_stem_count() const
 	{
-		return prototype_player_.stem_target_gain(stem_id);
+		return prototype_player_.loaded_stem_count();
+	}
+
+	void SongSession::set_stem_target_gain(std::string_view stem_name, float gain)
+	{
+		if (is_loaded())
+			prototype_player_.set_stem_target_gain(stem_name, gain);
+	}
+
+	float SongSession::stem_target_gain(std::string_view stem_name) const
+	{
+		return prototype_player_.stem_target_gain(stem_name);
 	}
 
 	int SongSession::sample_rate() const
@@ -62,7 +72,9 @@ namespace rhythmreplugged
 		player_view.song_title = prototype_player_.metadata().name;
 		player_view.song_artist = prototype_player_.metadata().artist;
 		player_view.status_message = status_message;
-		player_view.guitar_muted = prototype_player_.stem_target_gain(StemId::Guitar) < 0.5f;
+		player_view.has_guitar = prototype_player_.has_stem("guitar");
+		player_view.guitar_muted = prototype_player_.stem_target_gain("guitar") < 0.5f;
+		player_view.loaded_stem_count = prototype_player_.loaded_stem_count();
 		return player_view;
 	}
 
@@ -72,10 +84,10 @@ namespace rhythmreplugged
 		transport_.on_audio_rendered(frame_count);
 	}
 
-	RetroAudioBatch SongSession::render_fixed_tick_audio(int ticks_per_second)
+	AudioBatch SongSession::render_fixed_tick_audio(int ticks_per_second)
 	{
 		const size_t frame_count = transport_.frames_for_next_tick(ticks_per_second);
-		RetroAudioBatch batch = audio_mixer_.render(frame_count);
+		AudioBatch batch = audio_mixer_.render(frame_count);
 		transport_.on_audio_rendered(batch.frame_count());
 		return batch;
 	}

@@ -1,13 +1,12 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include <string>
 #include <vector>
 
 namespace rhythmreplugged
 {
-	inline constexpr int kRetroFramesPerSecond = 60;
+	inline constexpr int kAppFramesPerSecond = 60;
 
 	enum class AppMode
 	{
@@ -41,6 +40,8 @@ namespace rhythmreplugged
 		std::string song_title;
 		std::string song_artist;
 		std::string status_message;
+		bool has_guitar = false;
 		bool guitar_muted = false;
+		size_t loaded_stem_count = 0;
 	};
 }

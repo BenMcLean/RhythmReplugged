@@ -1,5 +1,5 @@
 #include "core/play/Transport.h"
-#include "libretro_contract/RetroTypes.h"
+#include "core/app/AppTypes.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -22,9 +22,9 @@ int main()
 	fixed_tick_transport.configure(48000);
 
 	size_t fixed_tick_total_frames = 0;
-	for (int tick = 0; tick < kRetroFramesPerSecond * 10; ++tick)
+	for (int tick = 0; tick < kAppFramesPerSecond * 10; ++tick)
 	{
-		const size_t frame_count = fixed_tick_transport.frames_for_next_tick(kRetroFramesPerSecond);
+		const size_t frame_count = fixed_tick_transport.frames_for_next_tick(kAppFramesPerSecond);
 		fixed_tick_transport.on_audio_rendered(frame_count);
 		fixed_tick_total_frames += frame_count;
 	}

@@ -12,7 +12,7 @@
 The project is divided into three layers:
 
 1. `libretro_contract`
-   Project-owned interfaces and data types that are intentionally named after libretro concepts where practical.
+   Project-owned interfaces and data types that keep the core compatible with a future libretro host without pretending every abstraction is the libretro ABI.
 
 2. `core`
    Game logic, song browser rules, `song.ini` parsing, and prototype audio decoding/mixing. This layer must not know about SDL, miniaudio, native dialogs, or direct file I/O.
@@ -105,16 +105,24 @@ The standalone host is the reference low-latency path. A future libretro host is
 
 ### `libretro_contract`
 
-- `RetroTypes.h`
 - `RetroFileSystem.h`
 - `RetroInput.h`
-- `RetroAudio.h`
+- `AudioTypes.h`
 
-This layer defines:
+This layer defines generic host-facing abstractions for:
 
 - file and directory entry abstractions
 - controller-like input state
 - audio batch structs
+
+### `core/app`
+
+- `AppTypes.h`
+
+This layer defines:
+
+- app mode enums
+- browser and playback view structs for the standalone/core app flow
 
 ### `core`
 
