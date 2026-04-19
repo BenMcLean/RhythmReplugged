@@ -62,8 +62,8 @@ PRIVATE
 )
 
 add_executable(RhythmReplugged
-	${RR_SRC_DIR}/platform_sdl3/Sdl3AudioOutput.cpp
-	${RR_SRC_DIR}/platform_sdl3/Sdl3AudioOutput.h
+	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.cpp
+	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.h
 	${RR_SRC_DIR}/platform_sdl3/Sdl3FileSystem.cpp
 	${RR_SRC_DIR}/platform_sdl3/Sdl3FileSystem.h
 	${RR_SRC_DIR}/platform_sdl3/main.cpp

@@ -1,5 +1,5 @@
 #include "core/app/AppCore.h"
-#include "platform_sdl3/Sdl3AudioOutput.h"
+#include "platform_sdl3/MiniaudioOutput.h"
 #include "platform_sdl3/Sdl3FileSystem.h"
 
 #include <SDL3/SDL.h>
@@ -141,7 +141,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	Sdl3AudioOutput audio_output;
+	MiniaudioOutput audio_output;
 	RetroInputState held_input{};
 	SDL_Texture *cover_texture = nullptr;
 	std::string loaded_cover_path;

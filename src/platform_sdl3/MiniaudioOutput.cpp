@@ -1,16 +1,16 @@
 #define MINIAUDIO_IMPLEMENTATION
-#include "platform_sdl3/Sdl3AudioOutput.h"
+#include "platform_sdl3/MiniaudioOutput.h"
 
 #include <algorithm>
 
 namespace rhythmreplugged
 {
-	Sdl3AudioOutput::~Sdl3AudioOutput()
+	MiniaudioOutput::~MiniaudioOutput()
 	{
 		shutdown();
 	}
 
-	bool Sdl3AudioOutput::initialize(IAudioStream *stream)
+	bool MiniaudioOutput::initialize(IAudioStream *stream)
 	{
 		const int sample_rate = stream != nullptr ? stream->sample_rate() : 0;
 		if (sample_rate <= 0)
@@ -47,7 +47,7 @@ namespace rhythmreplugged
 		return true;
 	}
 
-	void Sdl3AudioOutput::shutdown()
+	void MiniaudioOutput::shutdown()
 	{
 		if (!initialized_)
 			return;
@@ -58,22 +58,22 @@ namespace rhythmreplugged
 		stream_.store(nullptr);
 	}
 
-	void Sdl3AudioOutput::set_stream(IAudioStream *stream)
+	void MiniaudioOutput::set_stream(IAudioStream *stream)
 	{
 		stream_.store(stream);
 	}
 
-	void Sdl3AudioOutput::data_callback(ma_device *device, void *output, const void *input, ma_uint32 frame_count)
+	void MiniaudioOutput::data_callback(ma_device *device, void *output, const void *input, ma_uint32 frame_count)
 	{
 		(void)input;
-		auto *self = static_cast<Sdl3AudioOutput *>(device->pUserData);
+		auto *self = static_cast<MiniaudioOutput *>(device->pUserData);
 		if (self == nullptr)
 			return;
 
 		self->mix(static_cast<std::int16_t *>(output), frame_count);
 	}
 
-	void Sdl3AudioOutput::mix(std::int16_t *output, ma_uint32 frame_count)
+	void MiniaudioOutput::mix(std::int16_t *output, ma_uint32 frame_count)
 	{
 		IAudioStream *stream = stream_.load();
 		if (stream == nullptr)

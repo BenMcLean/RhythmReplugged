@@ -8,14 +8,14 @@
 
 namespace rhythmreplugged
 {
-	class Sdl3AudioOutput
+	class MiniaudioOutput
 	{
 	public:
-		Sdl3AudioOutput() = default;
-		~Sdl3AudioOutput();
+		MiniaudioOutput() = default;
+		~MiniaudioOutput();
 
-		Sdl3AudioOutput(const Sdl3AudioOutput &) = delete;
-		Sdl3AudioOutput &operator=(const Sdl3AudioOutput &) = delete;
+		MiniaudioOutput(const MiniaudioOutput &) = delete;
+		MiniaudioOutput &operator=(const MiniaudioOutput &) = delete;
 
 		bool initialize(IAudioStream *stream);
 		void shutdown();

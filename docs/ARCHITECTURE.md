@@ -138,7 +138,7 @@ This layer uses only contract interfaces and portable libraries.
 
 - SDL host and main loop
 - Dear ImGui rendering for the standalone prototype UI
-- miniaudio-backed sample queue
+- miniaudio-backed callback output
 
 Dear ImGui is treated as a renderer choice for the SDL host, not as part of the core contract.
 
