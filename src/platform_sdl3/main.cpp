@@ -9,6 +9,7 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -20,6 +21,7 @@ namespace
 	constexpr int kWindowWidth = 1280;
 	constexpr int kWindowHeight = 720;
 	constexpr Uint64 kFrameDurationNs = 1000000000ull / kAppFramesPerSecond;
+	constexpr float kUiScale = 2.0f;
 
 	std::string find_songs_root(const char *argv0)
 	{
@@ -68,6 +70,7 @@ namespace
 		style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.24f, 0.32f, 0.45f, 1.0f);
 		style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.30f, 0.40f, 0.56f, 1.0f);
 		style.Colors[ImGuiCol_FrameBg] = ImVec4(0.10f, 0.12f, 0.18f, 1.0f);
+		style.ScaleAllSizes(kUiScale);
 	}
 }
 
@@ -103,6 +106,9 @@ int main(int argc, char *argv[])
 
 	ImGuiIO &io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	ImFontConfig font_config;
+	font_config.SizePixels = 13.0f * kUiScale;
+	io.FontDefault = io.Fonts->AddFontDefault(&font_config);
 
 	if (!ImGui_ImplSDL3_InitForSDLRenderer(window, renderer))
 	{
@@ -234,7 +240,15 @@ int main(int argc, char *argv[])
 			ImGui::TextWrapped("Root: %s", browser.root_path.c_str());
 			ImGui::TextWrapped("Path: %s", browser.current_path.c_str());
 
-			ImGui::BeginChild("browser_list", ImVec2(720.0f, 0.0f), true);
+			const ImVec2 content_region = ImGui::GetContentRegionAvail();
+			const float column_spacing = ImGui::GetStyle().ItemSpacing.x;
+			const float min_list_width = 420.0f * kUiScale;
+			float list_width = content_region.x * 0.52f;
+			list_width = (std::min)(list_width, content_region.x - column_spacing - (320.0f * kUiScale));
+			list_width = (std::max)(list_width, min_list_width);
+			list_width = (std::min)(list_width, content_region.x);
+
+			ImGui::BeginChild("browser_list", ImVec2(list_width, 0.0f), true);
 			for (int index = 0; index < static_cast<int>(browser.entries.size()); ++index)
 			{
 				const SongListItem &entry = browser.entries[index];
@@ -271,7 +285,11 @@ int main(int argc, char *argv[])
 			ImGui::SameLine();
 
 			ImGui::BeginGroup();
-			ImGui::BeginChild("selection_preview", ImVec2(0.0f, 520.0f), true);
+			const float action_row_height =
+				ImGui::GetFrameHeightWithSpacing() +
+				(browser.status_message.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing() * 3.0f);
+			const float preview_height = (std::max)(220.0f * kUiScale, content_region.y - action_row_height);
+			ImGui::BeginChild("selection_preview", ImVec2(0.0f, preview_height), true);
 			ImGui::TextUnformatted("Selection");
 			ImGui::Separator();
 
@@ -298,7 +316,8 @@ int main(int argc, char *argv[])
 
 				if (cover_texture != nullptr)
 				{
-					ImGui::Image(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(cover_texture)), ImVec2(256.0f, 256.0f));
+					const float cover_size = (std::min)(256.0f * kUiScale, ImGui::GetContentRegionAvail().x);
+					ImGui::Image(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(cover_texture)), ImVec2(cover_size, cover_size));
 				}
 
 				ImGui::TextWrapped("%s", selected_entry->label.c_str());
@@ -310,7 +329,7 @@ int main(int argc, char *argv[])
 
 			ImGui::EndChild();
 
-			if (ImGui::Button("Open / Play", ImVec2(180.0f, 0.0f)))
+			if (ImGui::Button("Open / Play", ImVec2(240.0f * kUiScale, 0.0f)))
 				app.activate_browser_selection();
 
 			if (!browser.status_message.empty())
@@ -341,12 +360,12 @@ int main(int argc, char *argv[])
 
 			ImGui::Spacing();
 			if (player.has_guitar &&
-				ImGui::Button(player.guitar_muted ? "Unmute guitar.ogg" : "Mute guitar.ogg", ImVec2(220.0f, 0.0f)))
+				ImGui::Button(player.guitar_muted ? "Unmute guitar.ogg" : "Mute guitar.ogg", ImVec2(280.0f * kUiScale, 0.0f)))
 				app.toggle_player_guitar_mute();
 
 			if (player.has_guitar)
 				ImGui::SameLine();
-			if (ImGui::Button("Back to browser", ImVec2(180.0f, 0.0f)))
+			if (ImGui::Button("Back to browser", ImVec2(240.0f * kUiScale, 0.0f)))
 				app.return_to_browser();
 
 			ImGui::Spacing();
