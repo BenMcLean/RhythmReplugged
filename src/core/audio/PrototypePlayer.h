@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/audio/StemTypes.h"
 #include "core/songs/SongIni.h"
 #include "libretro_contract/RetroAudio.h"
 #include "libretro_contract/RetroFileSystem.h"

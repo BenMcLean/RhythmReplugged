@@ -5,12 +5,6 @@
 
 namespace rhythmreplugged
 {
-	enum class StemId
-	{
-		Backing,
-		Guitar,
-	};
-
 	class IRetroAudioStream
 	{
 	public:

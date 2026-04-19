@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/audio/PrototypePlayer.h"
+#include "core/audio/StemTypes.h"
 #include "core/play/AudioMixer.h"
 #include "core/play/Transport.h"
 #include "libretro_contract/RetroAudio.h"
