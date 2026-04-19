@@ -23,6 +23,8 @@ namespace rhythmreplugged
 		bool initialize(int sample_rate);
 		void shutdown();
 		void submit(const RetroAudioBatch &batch);
+		void clear_queued_audio();
+		size_t queued_frames() const;
 
 	private:
 		static void data_callback(ma_device *device, void *output, const void *input, ma_uint32 frame_count);
@@ -31,7 +33,7 @@ namespace rhythmreplugged
 		ma_device device_{};
 		bool initialized_ = false;
 		int sample_rate_ = 0;
-		std::mutex mutex_;
+		mutable std::mutex mutex_;
 		std::deque<std::int16_t> queued_samples_;
 	};
 }

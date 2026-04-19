@@ -19,6 +19,8 @@ namespace
 
 	constexpr int kWindowWidth = 1280;
 	constexpr int kWindowHeight = 720;
+	constexpr Uint64 kRetroFrameDurationNs = 1000000000ull / kRetroFramesPerSecond;
+	constexpr size_t kAudioPrefillFrames = 256;
 
 	std::string find_songs_root(const char *argv0)
 	{
@@ -156,8 +158,15 @@ int main(int argc, char *argv[])
 	};
 
 	bool running = true;
+	Uint64 previous_counter = SDL_GetTicksNS();
+	Uint64 retro_time_accumulator = 0;
+	size_t observed_mute_change_count = 0;
 	while (running)
 	{
+		const Uint64 current_counter = SDL_GetTicksNS();
+		retro_time_accumulator += current_counter - previous_counter;
+		previous_counter = current_counter;
+
 		SDL_Event event{};
 		while (SDL_PollEvent(&event))
 		{
@@ -188,12 +197,47 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		app.retro_run(held_input);
-		const RetroAudioBatch &audio_batch = app.audio_batch();
-		if (audio_batch.sample_rate > 0)
+		size_t retro_steps = 0;
+		while (retro_time_accumulator >= kRetroFrameDurationNs && retro_steps < 4)
 		{
-			audio_output.initialize(audio_batch.sample_rate);
-			audio_output.submit(audio_batch);
+			app.retro_run(held_input);
+			retro_time_accumulator -= kRetroFrameDurationNs;
+			++retro_steps;
+
+			const RetroAudioBatch &audio_batch = app.audio_batch();
+			if (audio_batch.sample_rate > 0)
+			{
+				audio_output.initialize(audio_batch.sample_rate);
+				if (observed_mute_change_count != app.player_mute_change_count())
+				{
+					audio_output.clear_queued_audio();
+					observed_mute_change_count = app.player_mute_change_count();
+				}
+				audio_output.submit(audio_batch);
+			}
+		}
+
+		if (app.mode() == AppMode::PrototypePlayer)
+		{
+			while (audio_output.queued_frames() < kAudioPrefillFrames)
+			{
+				app.retro_run(held_input);
+				const RetroAudioBatch &audio_batch = app.audio_batch();
+				if (audio_batch.sample_rate <= 0)
+					break;
+
+				audio_output.initialize(audio_batch.sample_rate);
+				if (observed_mute_change_count != app.player_mute_change_count())
+				{
+					audio_output.clear_queued_audio();
+					observed_mute_change_count = app.player_mute_change_count();
+				}
+				audio_output.submit(audio_batch);
+			}
+		}
+		else
+		{
+			observed_mute_change_count = 0;
 		}
 
 		ImGui_ImplSDLRenderer3_NewFrame();
@@ -347,7 +391,13 @@ int main(int argc, char *argv[])
 		SDL_RenderClear(renderer);
 		ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
 		SDL_RenderPresent(renderer);
-		SDL_Delay(1000 / kRetroFramesPerSecond);
+
+		const Uint64 frame_end_counter = SDL_GetTicksNS();
+		if (frame_end_counter > current_counter && frame_end_counter - current_counter < kRetroFrameDurationNs)
+		{
+			const Uint64 remaining_ns = kRetroFrameDurationNs - (frame_end_counter - current_counter);
+			SDL_DelayPrecise(remaining_ns);
+		}
 	}
 
 	destroy_cover();

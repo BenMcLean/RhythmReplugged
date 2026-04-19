@@ -11,9 +11,9 @@ namespace rhythmreplugged
 	bool AppCore::retro_init(const std::string &song_root_path, std::string &error_message)
 	{
 		mode_ = AppMode::SongBrowser;
+		song_session_.unload();
 		audio_batch_.clear();
 		audio_batch_.sample_rate = 0;
-		audio_frame_remainder_ = 0;
 		player_status_message_.clear();
 		return song_browser_.set_root(song_root_path, error_message);
 	}
@@ -37,10 +37,9 @@ namespace rhythmreplugged
 
 	void AppCore::retro_deinit()
 	{
-		prototype_player_.unload();
+		song_session_.unload();
 		audio_batch_.clear();
 		audio_batch_.sample_rate = 0;
-		audio_frame_remainder_ = 0;
 		player_status_message_.clear();
 	}
 
@@ -61,11 +60,10 @@ namespace rhythmreplugged
 		std::string error_message;
 		if (song_browser_.activate_selected(selected_song_path, error_message) && !selected_song_path.empty())
 		{
-			if (prototype_player_.load(file_system_, selected_song_path, error_message))
+			if (song_session_.load(file_system_, selected_song_path, error_message))
 			{
 				mode_ = AppMode::PrototypePlayer;
 				player_status_message_.clear();
-				audio_frame_remainder_ = 0;
 				return true;
 			}
 
@@ -82,14 +80,19 @@ namespace rhythmreplugged
 	void AppCore::return_to_browser()
 	{
 		mode_ = AppMode::SongBrowser;
-		prototype_player_.unload();
+		song_session_.unload();
 		player_status_message_.clear();
 	}
 
 	void AppCore::toggle_player_guitar_mute()
 	{
 		if (mode_ == AppMode::PrototypePlayer)
-			prototype_player_.toggle_guitar_mute();
+			song_session_.toggle_guitar_mute();
+	}
+
+	size_t AppCore::player_mute_change_count() const
+	{
+		return song_session_.mute_change_count();
 	}
 
 	AppMode AppCore::mode() const
@@ -104,12 +107,7 @@ namespace rhythmreplugged
 
 	PrototypePlayerView AppCore::prototype_player_view() const
 	{
-		PrototypePlayerView view;
-		view.song_title = prototype_player_.metadata().name;
-		view.song_artist = prototype_player_.metadata().artist;
-		view.status_message = player_status_message_;
-		view.guitar_muted = prototype_player_.guitar_muted();
-		return view;
+		return song_session_.view(player_status_message_);
 	}
 
 	const RetroAudioBatch &AppCore::audio_batch() const
@@ -145,12 +143,9 @@ namespace rhythmreplugged
 		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.x, previous_input_.x))
 			toggle_player_guitar_mute();
 
-		if (!prototype_player_.is_loaded())
+		if (!song_session_.is_loaded())
 			return;
 
-		audio_frame_remainder_ += static_cast<size_t>(prototype_player_.sample_rate());
-		const size_t frames_to_generate = audio_frame_remainder_ / static_cast<size_t>(kRetroFramesPerSecond);
-		audio_frame_remainder_ %= static_cast<size_t>(kRetroFramesPerSecond);
-		audio_batch_ = prototype_player_.generate_audio_batch(frames_to_generate);
+		audio_batch_ = song_session_.render_audio_tick(kRetroFramesPerSecond);
 	}
 }

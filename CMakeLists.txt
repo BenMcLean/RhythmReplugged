@@ -36,6 +36,12 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/audio/PrototypePlayer.h
 	${RR_SRC_DIR}/core/menu/SongBrowser.cpp
 	${RR_SRC_DIR}/core/menu/SongBrowser.h
+	${RR_SRC_DIR}/core/play/AudioMixer.cpp
+	${RR_SRC_DIR}/core/play/AudioMixer.h
+	${RR_SRC_DIR}/core/play/SongSession.cpp
+	${RR_SRC_DIR}/core/play/SongSession.h
+	${RR_SRC_DIR}/core/play/Transport.cpp
+	${RR_SRC_DIR}/core/play/Transport.h
 	${RR_SRC_DIR}/core/songs/SongIni.cpp
 	${RR_SRC_DIR}/core/songs/SongIni.h
 	${RR_SRC_DIR}/libretro_contract/RetroAudio.h

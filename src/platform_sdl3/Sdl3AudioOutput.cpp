@@ -21,7 +21,7 @@ namespace rhythmreplugged
 		config.sampleRate = static_cast<ma_uint32>(sample_rate);
 		config.dataCallback = data_callback;
 		config.pUserData = this;
-		config.periodSizeInFrames = 256;
+		config.periodSizeInFrames = 128;
 
 		if (ma_device_init(nullptr, &config, &device_) != MA_SUCCESS)
 			return false;
@@ -56,8 +56,19 @@ namespace rhythmreplugged
 			return;
 
 		std::scoped_lock lock(mutex_);
-		for (std::int16_t sample : batch.samples)
-			queued_samples_.push_back(sample);
+		queued_samples_.insert(queued_samples_.end(), batch.samples.begin(), batch.samples.end());
+	}
+
+	void Sdl3AudioOutput::clear_queued_audio()
+	{
+		std::scoped_lock lock(mutex_);
+		queued_samples_.clear();
+	}
+
+	size_t Sdl3AudioOutput::queued_frames() const
+	{
+		std::scoped_lock lock(mutex_);
+		return queued_samples_.size() / 2;
 	}
 
 	void Sdl3AudioOutput::data_callback(ma_device *device, void *output, const void *input, ma_uint32 frame_count)

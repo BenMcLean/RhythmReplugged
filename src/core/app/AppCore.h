@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/audio/PrototypePlayer.h"
 #include "core/menu/SongBrowser.h"
+#include "core/play/SongSession.h"
 #include "libretro_contract/RetroAudio.h"
 #include "libretro_contract/RetroInput.h"
 #include "libretro_contract/RetroTypes.h"
@@ -22,6 +22,7 @@ namespace rhythmreplugged
 		bool activate_browser_selection();
 		void return_to_browser();
 		void toggle_player_guitar_mute();
+		size_t player_mute_change_count() const;
 
 		AppMode mode() const;
 		const SongBrowserView &song_browser_view() const;
@@ -35,11 +36,10 @@ namespace rhythmreplugged
 
 		IRetroFileSystem &file_system_;
 		SongBrowser song_browser_;
-		PrototypePlayer prototype_player_;
+		SongSession song_session_;
 		AppMode mode_ = AppMode::SongBrowser;
 		RetroInputState previous_input_{};
 		RetroAudioBatch audio_batch_{};
-		size_t audio_frame_remainder_ = 0;
 		std::string player_status_message_;
 	};
 }
