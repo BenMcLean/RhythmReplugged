@@ -1,0 +1,54 @@
+#pragma once
+
+#include "core/songs/SongIni.h"
+#include "libretro_contract/RetroFileSystem.h"
+#include "libretro_contract/RetroTypes.h"
+
+#include <string>
+#include <vector>
+
+namespace rhythmreplugged
+{
+	class SongBrowser
+	{
+	public:
+		explicit SongBrowser(IRetroFileSystem &file_system);
+
+		bool set_root(const std::string &root_path, std::string &error_message);
+		bool move_selection(int delta);
+		bool set_selected_index(int index);
+		bool activate_selected(std::string &selected_song_path, std::string &error_message);
+		void clear_status_message();
+		void set_status_message(std::string message);
+
+		const SongBrowserView &view() const;
+
+	private:
+		struct BrowserEntry
+		{
+			std::string path;
+			std::string name;
+			std::string subtitle;
+			std::string cover_art_path;
+			std::string error_message;
+			bool is_parent = false;
+			bool is_folder = false;
+			bool is_song = false;
+			bool is_valid_song = false;
+		};
+
+		bool load_directory(const std::string &path, std::string &error_message);
+		BrowserEntry make_song_entry(const RetroDirectoryEntry &directory_entry) const;
+		bool contains_supported_chart(const std::string &directory_path) const;
+		bool contains_supported_audio(const std::string &directory_path) const;
+		void rebuild_view();
+
+		IRetroFileSystem &file_system_;
+		std::string root_path_;
+		std::string current_path_;
+		std::string status_message_;
+		std::vector<BrowserEntry> entries_;
+		int selected_index_ = 0;
+		mutable SongBrowserView cached_view_;
+	};
+}
