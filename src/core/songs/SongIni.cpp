@@ -162,6 +162,41 @@ namespace rhythmreplugged
 			return std::string(text.substr(start, end - start));
 		}
 
+		bool has_supported_image_extension(std::string_view file_name)
+		{
+			static constexpr std::array<std::string_view, 8> k_image_extensions = {
+				".png", ".jpg", ".jpeg", ".tga", ".bmp", ".psd", ".gif", ".pic"};
+
+			const std::string lowered_name = to_lower_copy(file_name);
+			for (std::string_view extension : k_image_extensions)
+			{
+				if (lowered_name.size() >= extension.size() &&
+					lowered_name.compare(lowered_name.size() - extension.size(), extension.size(), extension) == 0)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		std::string find_matching_file_in_directory(const IRetroFileSystem &file_system,
+			const std::string &song_directory,
+			std::string_view target_file_name)
+		{
+			const std::string lowered_target = to_lower_copy(target_file_name);
+			for (const RetroDirectoryEntry &entry : file_system.list_directory(song_directory))
+			{
+				if (entry.is_directory)
+					continue;
+
+				if (to_lower_copy(entry.name) == lowered_target)
+					return entry.path;
+			}
+
+			return {};
+		}
+
 		template <typename T>
 		bool try_parse_integer(std::string_view text, T &value)
 		{
@@ -479,22 +514,35 @@ namespace rhythmreplugged
 
 	std::string resolve_cover_art_path(const IRetroFileSystem &file_system, const std::string &song_directory, const SongIniMetadata &metadata)
 	{
-		static constexpr std::array<const char *, 8> k_image_extensions = {
-			".png", ".jpg", ".jpeg", ".tga", ".bmp", ".psd", ".gif", ".pic"};
-
 		const std::string *cover = nullptr;
 		if (metadata.try_get_string("cover", cover) && cover != nullptr && !cover->empty())
 		{
 			const std::string direct_path = song_directory + "/" + *cover;
 			if (file_system.path_exists(direct_path))
 				return direct_path;
+
+			const std::string matched_cover = find_matching_file_in_directory(file_system, song_directory, *cover);
+			if (!matched_cover.empty())
+				return matched_cover;
 		}
 
-		for (const char *extension : k_image_extensions)
+		for (const RetroDirectoryEntry &entry : file_system.list_directory(song_directory))
 		{
-			const std::string candidate = song_directory + "/album" + extension;
-			if (file_system.path_exists(candidate))
-				return candidate;
+			if (entry.is_directory || !has_supported_image_extension(entry.name))
+				continue;
+
+			const std::string lowered_name = to_lower_copy(entry.name);
+			if (lowered_name == "album.png" ||
+				lowered_name == "album.jpg" ||
+				lowered_name == "album.jpeg" ||
+				lowered_name == "album.tga" ||
+				lowered_name == "album.bmp" ||
+				lowered_name == "album.psd" ||
+				lowered_name == "album.gif" ||
+				lowered_name == "album.pic")
+			{
+				return entry.path;
+			}
 		}
 
 		return {};

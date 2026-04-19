@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 namespace
 {
@@ -22,6 +23,8 @@ namespace
 	constexpr int kWindowHeight = 720;
 	constexpr Uint64 kFrameDurationNs = 1000000000ull / kAppFramesPerSecond;
 	constexpr float kUiScale = 2.0f;
+	constexpr float kListCoverSize = 32.0f * kUiScale;
+	constexpr float kPreviewCoverSize = 256.0f * kUiScale;
 
 	std::string find_songs_root(const char *argv0)
 	{
@@ -71,6 +74,46 @@ namespace
 		style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.30f, 0.40f, 0.56f, 1.0f);
 		style.Colors[ImGuiCol_FrameBg] = ImVec4(0.10f, 0.12f, 0.18f, 1.0f);
 		style.ScaleAllSizes(kUiScale);
+	}
+
+	ImTextureRef make_imgui_texture_ref(SDL_Texture *texture)
+	{
+		return ImTextureRef(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(texture)));
+	}
+
+	bool load_cover_texture(SDL_Renderer *renderer, const std::string &cover_path, SDL_Texture *&texture)
+	{
+		texture = IMG_LoadTexture(renderer, cover_path.c_str());
+		if (texture != nullptr)
+			return true;
+
+		SDL_Surface *surface = IMG_Load(cover_path.c_str());
+		if (surface != nullptr)
+		{
+			texture = SDL_CreateTextureFromSurface(renderer, surface);
+			SDL_DestroySurface(surface);
+			if (texture != nullptr)
+				return true;
+
+			return false;
+		}
+
+		const std::string extension = std::filesystem::path(cover_path).extension().string();
+		if (_stricmp(extension.c_str(), ".png") == 0)
+		{
+			surface = SDL_LoadPNG(cover_path.c_str());
+			if (surface != nullptr)
+			{
+				texture = SDL_CreateTextureFromSurface(renderer, surface);
+				SDL_DestroySurface(surface);
+				if (texture != nullptr)
+					return true;
+
+				return false;
+			}
+		}
+
+		return false;
 	}
 }
 
@@ -149,17 +192,32 @@ int main(int argc, char *argv[])
 
 	MiniaudioOutput audio_output;
 	RetroInputState held_input{};
-	SDL_Texture *cover_texture = nullptr;
-	std::string loaded_cover_path;
+	std::unordered_map<std::string, SDL_Texture *> cover_texture_cache;
 
-	auto destroy_cover = [&]()
+	auto destroy_cover_textures = [&]()
 	{
-		if (cover_texture != nullptr)
+		for (auto &[path, texture] : cover_texture_cache)
 		{
-			SDL_DestroyTexture(cover_texture);
-			cover_texture = nullptr;
+			if (texture != nullptr)
+				SDL_DestroyTexture(texture);
 		}
-		loaded_cover_path.clear();
+		cover_texture_cache.clear();
+	};
+
+	auto get_cover_texture = [&](const std::string &cover_path) -> SDL_Texture *
+	{
+		if (cover_path.empty())
+			return nullptr;
+
+		const auto it = cover_texture_cache.find(cover_path);
+		if (it != cover_texture_cache.end())
+			return it->second;
+
+		SDL_Texture *texture = nullptr;
+		load_cover_texture(renderer, cover_path, texture);
+
+		cover_texture_cache.emplace(cover_path, texture);
+		return texture;
 	};
 
 	bool running = true;
@@ -261,7 +319,18 @@ int main(int argc, char *argv[])
 					label = "[X] " + label;
 
 				const bool selected = index == browser.selected_index;
-				if (ImGui::Selectable(label.c_str(), selected))
+				ImGui::PushID(index);
+				ImGui::BeginGroup();
+
+				SDL_Texture *row_cover_texture = get_cover_texture(entry.cover_art_path);
+
+				if (row_cover_texture != nullptr)
+				{
+					ImGui::Image(make_imgui_texture_ref(row_cover_texture), ImVec2(kListCoverSize, kListCoverSize));
+					ImGui::SameLine();
+				}
+
+				if (ImGui::Selectable(label.c_str(), selected, 0, ImVec2(0.0f, kListCoverSize)))
 					app.set_browser_selected_index(index);
 
 				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -279,6 +348,9 @@ int main(int argc, char *argv[])
 					ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", entry.error_message.c_str());
 					ImGui::Unindent();
 				}
+
+				ImGui::EndGroup();
+				ImGui::PopID();
 			}
 			ImGui::EndChild();
 
@@ -303,21 +375,11 @@ int main(int argc, char *argv[])
 
 			if (selected_entry != nullptr)
 			{
-				if (selected_entry->cover_art_path != loaded_cover_path)
+				SDL_Texture *preview_cover_texture = get_cover_texture(selected_entry->cover_art_path);
+				if (preview_cover_texture != nullptr)
 				{
-					destroy_cover();
-					if (!selected_entry->cover_art_path.empty())
-					{
-						cover_texture = IMG_LoadTexture(renderer, selected_entry->cover_art_path.c_str());
-						if (cover_texture != nullptr)
-							loaded_cover_path = selected_entry->cover_art_path;
-					}
-				}
-
-				if (cover_texture != nullptr)
-				{
-					const float cover_size = (std::min)(256.0f * kUiScale, ImGui::GetContentRegionAvail().x);
-					ImGui::Image(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(cover_texture)), ImVec2(cover_size, cover_size));
+					const float cover_size = (std::min)(kPreviewCoverSize, ImGui::GetContentRegionAvail().x);
+					ImGui::Image(make_imgui_texture_ref(preview_cover_texture), ImVec2(cover_size, cover_size));
 				}
 
 				ImGui::TextWrapped("%s", selected_entry->label.c_str());
@@ -343,7 +405,6 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			destroy_cover();
 			const PrototypePlayerView player = app.prototype_player_view();
 			ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 			ImGui::SetNextWindowSize(ImVec2(static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)), ImGuiCond_Always);
@@ -396,7 +457,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	destroy_cover();
+	destroy_cover_textures();
 	audio_output.shutdown();
 	ImGui_ImplSDLRenderer3_Shutdown();
 	ImGui_ImplSDL3_Shutdown();
