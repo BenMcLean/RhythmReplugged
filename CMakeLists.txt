@@ -17,6 +17,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(SDL2 CONFIG REQUIRED)
 find_package(SDL2_image CONFIG REQUIRED)
+find_package(Vorbis CONFIG REQUIRED)
+find_path(MINIAUDIO_INCLUDE_DIRS "miniaudio.h")
 
 set(BUILD_MIDILIBRARY_ONLY ON CACHE BOOL "Build only the midifile library" FORCE)
 add_subdirectory(external/midifile)
@@ -31,9 +33,11 @@ target_link_libraries(RhythmReplugged PRIVATE
 	SDL2::SDL2
 	SDL2::SDL2main
 	SDL2_image::SDL2_image
+	Vorbis::vorbisfile
 	midifile
 )
 
 target_include_directories(RhythmReplugged PRIVATE
+	${MINIAUDIO_INCLUDE_DIRS}
 	${CMAKE_CURRENT_SOURCE_DIR}/external/midifile/include
 )
