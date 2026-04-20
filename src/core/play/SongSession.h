@@ -49,6 +49,7 @@ namespace rhythmreplugged
 		static bool held_mask_satisfies_expected(std::uint8_t held_mask, std::uint8_t expected_mask);
 		size_t note_group_end_index(size_t start_index) const;
 		std::uint8_t note_group_lane_mask(size_t start_index, size_t end_index) const;
+		std::uint8_t imminent_note_lane_mask(double song_time_seconds) const;
 		void refresh_active_sustains(double song_time_seconds, std::uint8_t held_mask);
 		std::uint8_t active_sustain_lane_mask(double song_time_seconds) const;
 		void start_sustains_for_note_group(size_t start_index, size_t end_index);
