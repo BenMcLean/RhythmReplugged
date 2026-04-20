@@ -235,7 +235,7 @@ namespace rhythmreplugged
 
 	bool SongBrowser::contains_supported_audio(const std::string &directory_path) const
 	{
-		for (std::string_view stem : kKnownStemNames)
+		for (std::string_view stem : kPlayableStemNames)
 		{
 			if (file_system_.path_exists(directory_path + "/" + std::string(stem) + ".ogg"))
 				return true;

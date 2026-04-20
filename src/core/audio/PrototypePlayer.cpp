@@ -122,10 +122,10 @@ namespace rhythmreplugged
 		metadata_ = make_song_metadata_view(parse_result.metadata, folder_name_from_path(song_directory));
 
 		stems_.clear();
-		stems_.reserve(kKnownStemNames.size());
+		stems_.reserve(kPlayableStemNames.size());
 
 		int session_sample_rate = 0;
-		for (std::string_view stem_name : kKnownStemNames)
+		for (std::string_view stem_name : kPlayableStemNames)
 		{
 			const std::string stem_path = song_directory + "/" + std::string(stem_name) + ".ogg";
 			const auto stem_bytes = file_system.read_binary_file(stem_path);
