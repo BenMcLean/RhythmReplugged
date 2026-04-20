@@ -41,8 +41,10 @@ namespace rhythmreplugged
 		static constexpr double kChartLookaheadSeconds = 3.0;
 		static constexpr double kNoteHitWindowSeconds = 0.125;
 		static constexpr double kSustainMinimumSeconds = 0.08;
+		static constexpr double kSustainDropLeniencySeconds = 0.025;
 
 		static std::uint8_t lane_mask_from_state(const std::array<bool, 5> &lanes);
+		static bool held_mask_satisfies_expected(std::uint8_t held_mask, std::uint8_t expected_mask);
 		size_t note_group_end_index(size_t start_index) const;
 		std::uint8_t note_group_lane_mask(size_t start_index, size_t end_index) const;
 		std::uint8_t active_sustain_lane_mask(double song_time_seconds) const;
@@ -56,6 +58,8 @@ namespace rhythmreplugged
 		std::string chart_status_message_;
 		std::array<bool, 5> lane_held_{};
 		std::array<double, 5> lane_sustain_end_times_{};
+		std::uint64_t input_generation_ = 0;
+		std::uint64_t consumed_input_generation_ = 0;
 		size_t next_note_index_ = 0;
 		std::atomic<bool> loaded_{false};
 	};
