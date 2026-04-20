@@ -71,6 +71,10 @@ PRIVATE
 add_library(rr_ui
 	${RR_SRC_DIR}/ui/AppUi.cpp
 	${RR_SRC_DIR}/ui/AppUi.h
+	${RR_SRC_DIR}/ui/AppUiHost.cpp
+	${RR_SRC_DIR}/ui/AppUiHost.h
+	${RR_SRC_DIR}/ui/OpenGlCoverTextures.cpp
+	${RR_SRC_DIR}/ui/OpenGlCoverTextures.h
 )
 
 target_include_directories(rr_ui PUBLIC
@@ -80,6 +84,10 @@ target_include_directories(rr_ui PUBLIC
 target_link_libraries(rr_ui PUBLIC
 	rr_core
 	imgui::imgui
+PRIVATE
+	OpenGL::GL
+	SDL3::SDL3
+	SDL3_image::SDL3_image
 )
 
 add_executable(RhythmReplugged
@@ -102,6 +110,33 @@ target_link_libraries(RhythmReplugged PRIVATE
 	OpenGL::GL
 	SDL3::SDL3
 	SDL3_image::SDL3_image
+)
+
+add_library(platform_libretro MODULE
+	${RR_SRC_DIR}/platform_libretro/core.cpp
+	${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.cpp
+	${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.h
+	${RR_SRC_DIR}/platform_libretro/NativeFileSystem.cpp
+	${RR_SRC_DIR}/platform_libretro/NativeFileSystem.h
+)
+
+target_include_directories(platform_libretro PRIVATE
+	${RR_SRC_DIR}
+	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/include
+)
+
+target_link_libraries(platform_libretro PRIVATE
+	rr_core
+	rr_ui
+	imgui::imgui
+	OpenGL::GL
+	SDL3::SDL3
+	SDL3_image::SDL3_image
+)
+
+set_target_properties(platform_libretro PROPERTIES
+	PREFIX ""
+	OUTPUT_NAME "rhythmreplugged_libretro"
 )
 
 add_executable(rr_transport_harness

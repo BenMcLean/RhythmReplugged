@@ -1,12 +1,11 @@
 #include "core/app/AppCore.h"
 #include "platform_sdl3/MiniaudioOutput.h"
 #include "platform_sdl3/Sdl3FileSystem.h"
-#include "ui/AppUi.h"
+#include "ui/AppUiHost.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_opengl.h>
-#include <SDL3_image/SDL_image.h>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
@@ -23,9 +22,6 @@ namespace
 	constexpr int kWindowWidth = 1280;
 	constexpr int kWindowHeight = 720;
 	constexpr Uint64 kFrameDurationNs = 1000000000ull / kAppFramesPerSecond;
-	constexpr float kUiScale = 2.0f;
-	constexpr float kListCoverSize = 32.0f * kUiScale;
-	constexpr float kPreviewCoverSize = 256.0f * kUiScale;
 	constexpr char kOpenGlGlslVersion[] = "#version 130";
 
 	std::string find_songs_root(const char *argv0)
@@ -55,75 +51,6 @@ namespace
 
 		return {};
 	}
-
-	ImTextureRef make_imgui_texture_ref(GLuint texture)
-	{
-		return ImTextureRef(static_cast<ImTextureID>(static_cast<uintptr_t>(texture)));
-	}
-
-	bool upload_cover_texture(SDL_Surface *surface, GLuint &texture)
-	{
-		texture = 0;
-		if (surface == nullptr)
-			return false;
-
-		SDL_Surface *converted_surface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_ABGR8888);
-		if (converted_surface == nullptr)
-			return false;
-
-		glGenTextures(1, &texture);
-		if (texture == 0)
-		{
-			SDL_DestroySurface(converted_surface);
-			return false;
-		}
-
-		glBindTexture(GL_TEXTURE_2D, texture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexImage2D(GL_TEXTURE_2D,
-			0,
-			GL_RGBA,
-			converted_surface->w,
-			converted_surface->h,
-			0,
-			GL_RGBA,
-			GL_UNSIGNED_BYTE,
-			converted_surface->pixels);
-		glBindTexture(GL_TEXTURE_2D, 0);
-
-		SDL_DestroySurface(converted_surface);
-		return true;
-	}
-
-	bool load_cover_texture(const std::string &cover_path, GLuint &texture)
-	{
-		texture = 0;
-
-		SDL_Surface *surface = IMG_Load(cover_path.c_str());
-		if (surface != nullptr)
-		{
-			const bool uploaded = upload_cover_texture(surface, texture);
-			SDL_DestroySurface(surface);
-			return uploaded;
-		}
-
-		const std::string extension = std::filesystem::path(cover_path).extension().string();
-		if (_stricmp(extension.c_str(), ".png") != 0)
-			return false;
-
-		surface = SDL_LoadPNG(cover_path.c_str());
-		if (surface == nullptr)
-			return false;
-
-		const bool uploaded = upload_cover_texture(surface, texture);
-		SDL_DestroySurface(surface);
-		return uploaded;
-	}
-
 }
 
 int main(int argc, char *argv[])
@@ -187,14 +114,7 @@ int main(int argc, char *argv[])
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	ImGui::StyleColorsDark();
-	apply_imgui_style(kUiScale);
-
-	ImGuiIO &io = ImGui::GetIO();
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-	ImFontConfig font_config;
-	font_config.SizePixels = 13.0f * kUiScale;
-	io.FontDefault = io.Fonts->AddFontDefault(&font_config);
+	initialize_app_imgui(kDefaultUiScale);
 
 	if (!ImGui_ImplSDL3_InitForOpenGL(window, gl_context))
 	{
@@ -235,33 +155,7 @@ int main(int argc, char *argv[])
 
 	MiniaudioOutput audio_output;
 	RetroInputState held_input{};
-	std::unordered_map<std::string, GLuint> cover_texture_cache;
-
-	auto destroy_cover_textures = [&]()
-	{
-		for (auto &[path, texture] : cover_texture_cache)
-		{
-			if (texture != 0)
-				glDeleteTextures(1, &texture);
-		}
-		cover_texture_cache.clear();
-	};
-
-	auto get_cover_texture = [&](const std::string &cover_path) -> GLuint
-	{
-		if (cover_path.empty())
-			return 0;
-
-		const auto it = cover_texture_cache.find(cover_path);
-		if (it != cover_texture_cache.end())
-			return it->second;
-
-		GLuint texture = 0;
-		load_cover_texture(cover_path, texture);
-
-		cover_texture_cache.emplace(cover_path, texture);
-		return texture;
-	};
+	OpenGlCoverTextures cover_textures;
 
 	bool running = true;
 	Uint64 previous_counter = SDL_GetTicksNS();
@@ -350,30 +244,11 @@ int main(int argc, char *argv[])
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
 
-		if (app.mode() == AppMode::SongBrowser)
-		{
-			SongBrowserUiActions actions;
-			actions.set_selected_index = [&](int index) { app.set_browser_selected_index(index); };
-			actions.activate_selection = [&]() { app.activate_browser_selection(); };
-			actions.get_cover_texture_ref = [&](const std::string &cover_path)
-			{
-				const GLuint texture = get_cover_texture(cover_path);
-				return texture != 0
-					? std::optional<ImTextureRef>(make_imgui_texture_ref(texture))
-					: std::nullopt;
-			};
-			render_song_browser_ui(
-				app.song_browser_view(),
-				actions,
-				ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height)),
-				kUiScale);
-		}
-		else
-		{
-			render_prototype_player_ui(
-				app.prototype_player_view(),
-				ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height)));
-		}
+		render_app_ui(
+			app,
+			ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height)),
+			kDefaultUiScale,
+			cover_textures);
 
 		ImGui::Render();
 		glViewport(0, 0, drawable_width, drawable_height);
@@ -390,7 +265,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	destroy_cover_textures();
+	cover_textures.clear();
 	audio_output.shutdown();
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplSDL3_Shutdown();

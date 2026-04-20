@@ -19,6 +19,7 @@ namespace rhythmreplugged
 		bool retro_init(const std::string &song_root_path, std::string &error_message);
 		void retro_run(const RetroInputState &input_state);
 		void retro_deinit();
+		void set_audio_batch_enabled(bool enabled);
 		bool set_browser_selected_index(int index);
 		bool activate_browser_selection();
 		void return_to_browser();
@@ -51,5 +52,6 @@ namespace rhythmreplugged
 		AudioBatch audio_batch_{};
 		std::string player_status_message_;
 		bool session_unload_pending_ = false;
+		bool audio_batch_enabled_ = false;
 	};
 }

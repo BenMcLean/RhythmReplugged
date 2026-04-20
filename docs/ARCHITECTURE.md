@@ -6,14 +6,13 @@
 - Keep presentation code separate from both gameplay rules and platform glue so the UI can change without rewriting the core.
 - Shape the top-level lifecycle around libretro concepts early so a future libretro frontend remains practical.
 - Preserve a standalone host with tighter control over rendering and low-latency audio than a libretro frontend can guarantee.
-- Keep the current prototype scope small: folder-based song selection plus a multitrack playback prototype for `song.ogg` and `guitar.ogg`.
 
 ## Top-Level Split
 
-The source tree under `src/` is divided into four layers:
+The source tree under `src/` is divided into various layers:
 
 1. `libretro_contract`
-   Project-owned interfaces and data types that keep the core compatible with a future libretro host without pretending every abstraction is the libretro ABI.
+   Project-owned interfaces and data types that keep the core compatible with libretro but without pretending every abstraction is the libretro ABI.
 
 2. `core`
    Game logic, song browser rules, `song.ini` parsing, and prototype audio decoding/mixing. This layer must not know about SDL, miniaudio, native dialogs, or direct file I/O.
@@ -24,17 +23,15 @@ The source tree under `src/` is divided into four layers:
 4. `platform_sdl3`
    Standalone host implementation. This layer owns window creation, input polling, image loading, and audio output, then calls into `ui` to draw the current frame.
 
-Later, a fifth layer can be added:
-
 5. `platform_libretro`
-   Thin glue between the same `core` layer and the actual libretro ABI.
+   Thin glue between the same `core` and `ui` layers and the actual libretro ABI.
 
 ## Dependency Direction
 
 - `core` depends on `libretro_contract`
 - `ui` depends on `core`
 - `platform_sdl3` depends on `core`, `ui`, and `libretro_contract`
-- `platform_libretro` depends on `core` and `libretro_contract`
+- `platform_libretro` depends on `core`, `ui`, and `libretro_contract`
 
 No dependency may point back upward.
 
@@ -196,6 +193,15 @@ This layer defines:
 - miniaudio-backed callback output
 
 Dear ImGui is treated as a renderer choice for the current UI implementation, not as part of the core contract.
+
+### `platform_libretro`
+
+- libretro ABI glue
+- libretro-owned OpenGL context negotiation
+- custom ImGui platform bridge fed from libretro input and frame timing
+- libretro audio callback output
+
+This host reuses the same `/src/ui` Dear ImGui screens as the SDL host so UI work remains implemented once.
 
 ## Internal Core Split
 

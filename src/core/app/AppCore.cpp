@@ -26,6 +26,7 @@ namespace rhythmreplugged
 	void AppCore::retro_run(const RetroInputState &input_state)
 	{
 		audio_batch_.clear();
+		audio_batch_.sample_rate = 0;
 
 		switch (mode_)
 		{
@@ -36,6 +37,9 @@ namespace rhythmreplugged
 			run_prototype_player(input_state);
 			break;
 		}
+
+		if (audio_batch_enabled_ && mode_ == AppMode::PrototypePlayer)
+			audio_batch_ = song_session_.render_fixed_tick_audio(kAppFramesPerSecond);
 
 		previous_input_ = input_state;
 	}
@@ -48,6 +52,16 @@ namespace rhythmreplugged
 		audio_batch_.clear();
 		audio_batch_.sample_rate = 0;
 		player_status_message_.clear();
+	}
+
+	void AppCore::set_audio_batch_enabled(bool enabled)
+	{
+		audio_batch_enabled_ = enabled;
+		if (!enabled)
+		{
+			audio_batch_.clear();
+			audio_batch_.sample_rate = 0;
+		}
 	}
 
 	bool AppCore::set_browser_selected_index(int index)
