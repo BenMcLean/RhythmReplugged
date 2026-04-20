@@ -1,8 +1,9 @@
 #include "core/play/SongSession.h"
 
-#include "libretro_contract/RetroFileSystem.h"
+	#include "libretro_contract/RetroFileSystem.h"
 
-#include <cmath>
+	#include <cmath>
+	#include <algorithm>
 
 namespace rhythmreplugged
 {
@@ -17,12 +18,13 @@ namespace rhythmreplugged
 		chart_status_message_ = std::move(chart_error_message);
 
 		transport_.configure(prototype_player_.sample_rate());
-		audio_mixer_.set_prototype_player(&prototype_player_);
-		lane_held_.fill(false);
-		lane_sustain_end_times_.fill(0.0);
-		input_generation_ = 0;
-		consumed_input_generation_ = 0;
-		next_note_index_ = 0;
+			audio_mixer_.set_prototype_player(&prototype_player_);
+			lane_held_.fill(false);
+			lane_sustain_end_times_.fill(0.0);
+			lane_sustain_release_times_.fill(-1.0);
+			input_generation_ = 0;
+			consumed_input_generation_ = 0;
+			next_note_index_ = 0;
 		prototype_player_.set_stem_target_gain("guitar", 1.0f);
 		loaded_.store(true);
 		return true;
@@ -36,6 +38,7 @@ namespace rhythmreplugged
 		chart_status_message_.clear();
 		lane_held_.fill(false);
 		lane_sustain_end_times_.fill(0.0);
+		lane_sustain_release_times_.fill(-1.0);
 		input_generation_ = 0;
 		consumed_input_generation_ = 0;
 		next_note_index_ = 0;
@@ -107,6 +110,7 @@ namespace rhythmreplugged
 			}
 		}
 
+		refresh_active_sustains(current_time_seconds, held_mask);
 		const std::uint8_t sustain_mask = active_sustain_lane_mask(current_time_seconds);
 		if (sustain_mask != 0)
 		{
@@ -150,6 +154,16 @@ namespace rhythmreplugged
 	size_t SongSession::emitted_frames() const
 	{
 		return transport_.emitted_frames();
+	}
+
+	void SongSession::set_timing_offset_seconds(double offset_seconds)
+	{
+		timing_offset_seconds_ = std::clamp(offset_seconds, -0.250, 0.250);
+	}
+
+	double SongSession::timing_offset_seconds() const
+	{
+		return timing_offset_seconds_;
 	}
 
 	PrototypePlayerView SongSession::view(const std::string &status_message) const
@@ -221,7 +235,7 @@ namespace rhythmreplugged
 
 	double SongSession::song_time_seconds() const
 	{
-		return transport_.song_time_seconds();
+		return adjusted_song_time_seconds();
 	}
 
 	double SongSession::song_time_beats(double beats_per_minute) const
@@ -274,14 +288,62 @@ namespace rhythmreplugged
 		return mask;
 	}
 
+	void SongSession::refresh_active_sustains(double song_time_seconds, std::uint8_t held_mask)
+	{
+		for (size_t lane = 0; lane < lane_sustain_end_times_.size(); ++lane)
+		{
+			const double sustain_end_time = lane_sustain_end_times_[lane];
+			if (sustain_end_time - song_time_seconds <= -kSustainDropLeniencySeconds)
+			{
+				lane_sustain_end_times_[lane] = 0.0;
+				lane_sustain_release_times_[lane] = -1.0;
+				continue;
+			}
+
+			if (sustain_end_time <= 0.0)
+			{
+				lane_sustain_release_times_[lane] = -1.0;
+				continue;
+			}
+
+			const std::uint8_t lane_bit = static_cast<std::uint8_t>(1u << lane);
+			if ((held_mask & lane_bit) != 0)
+			{
+				lane_sustain_release_times_[lane] = -1.0;
+				continue;
+			}
+
+			double &release_time = lane_sustain_release_times_[lane];
+			if (release_time < 0.0)
+			{
+				release_time = song_time_seconds;
+				continue;
+			}
+
+			if (song_time_seconds - release_time > kSustainDropLeniencySeconds)
+			{
+				lane_sustain_end_times_[lane] = 0.0;
+				release_time = -1.0;
+			}
+		}
+	}
+
 	std::uint8_t SongSession::active_sustain_lane_mask(double song_time_seconds) const
 	{
 		std::uint8_t mask = 0;
 		for (size_t lane = 0; lane < lane_sustain_end_times_.size(); ++lane)
 		{
-			if (lane_sustain_end_times_[lane] - song_time_seconds > -kSustainDropLeniencySeconds)
+			const double sustain_end_time = lane_sustain_end_times_[lane];
+			if (sustain_end_time - song_time_seconds <= -kSustainDropLeniencySeconds)
+				continue;
+
+			const double release_time = lane_sustain_release_times_[lane];
+			if (release_time >= 0.0 && song_time_seconds - release_time > kSustainDropLeniencySeconds)
+				continue;
+
+			if (sustain_end_time > 0.0)
 				mask |= static_cast<std::uint8_t>(1u << lane);
-		}
+		}	
 
 		return mask;
 	}
@@ -301,6 +363,7 @@ namespace rhythmreplugged
 
 			const size_t lane = static_cast<size_t>(note.lane);
 			lane_sustain_end_times_[lane] = (std::max)(lane_sustain_end_times_[lane], note.end_seconds);
+			lane_sustain_release_times_[lane] = -1.0;
 		}
 	}
 
@@ -320,5 +383,10 @@ namespace rhythmreplugged
 
 		if (missed_any_notes)
 			prototype_player_.set_stem_target_gain("guitar", 0.0f);
+	}
+
+	double SongSession::adjusted_song_time_seconds() const
+	{
+		return (std::max)(0.0, transport_.song_time_seconds() - timing_offset_seconds_);
 	}
 }

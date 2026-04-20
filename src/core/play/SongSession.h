@@ -30,6 +30,8 @@ namespace rhythmreplugged
 		float stem_target_gain(std::string_view stem_name) const;
 		int sample_rate() const;
 		size_t emitted_frames() const;
+		void set_timing_offset_seconds(double offset_seconds);
+		double timing_offset_seconds() const;
 		PrototypePlayerView view(const std::string &status_message) const;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
 		AudioBatch render_fixed_tick_audio(int ticks_per_second);
@@ -47,9 +49,11 @@ namespace rhythmreplugged
 		static bool held_mask_satisfies_expected(std::uint8_t held_mask, std::uint8_t expected_mask);
 		size_t note_group_end_index(size_t start_index) const;
 		std::uint8_t note_group_lane_mask(size_t start_index, size_t end_index) const;
+		void refresh_active_sustains(double song_time_seconds, std::uint8_t held_mask);
 		std::uint8_t active_sustain_lane_mask(double song_time_seconds) const;
 		void start_sustains_for_note_group(size_t start_index, size_t end_index);
 		void consume_missed_note_groups(double song_time_seconds);
+		double adjusted_song_time_seconds() const;
 
 		PrototypePlayer prototype_player_;
 		MidiChart midi_chart_;
@@ -58,9 +62,11 @@ namespace rhythmreplugged
 		std::string chart_status_message_;
 		std::array<bool, 5> lane_held_{};
 		std::array<double, 5> lane_sustain_end_times_{};
+		std::array<double, 5> lane_sustain_release_times_{};
 		std::uint64_t input_generation_ = 0;
 		std::uint64_t consumed_input_generation_ = 0;
 		size_t next_note_index_ = 0;
+		double timing_offset_seconds_ = 0.0;
 		std::atomic<bool> loaded_{false};
 	};
 }

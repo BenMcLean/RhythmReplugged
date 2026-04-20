@@ -23,6 +23,8 @@ namespace rhythmreplugged
 		bool activate_browser_selection();
 		void return_to_browser();
 		void toggle_player_guitar_mute();
+		void nudge_timing_offset_seconds(double delta_seconds);
+		void reset_timing_offset();
 		void finalize_audio_stop();
 		int sample_rate() const override;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count) override;
@@ -36,6 +38,7 @@ namespace rhythmreplugged
 		bool activate_browser_selection_unlocked();
 		void return_to_browser_unlocked();
 		void toggle_player_guitar_mute_unlocked();
+		void update_player_status_message();
 		bool pressed(bool current, bool previous) const;
 		void run_song_browser(const RetroInputState &input_state);
 		void run_prototype_player(const RetroInputState &input_state);

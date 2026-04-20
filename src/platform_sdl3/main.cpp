@@ -242,6 +242,14 @@ namespace
 				8.0f);
 		}
 
+		if (!player.status_message.empty())
+		{
+			draw_list->AddText(
+				ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + 18.0f),
+				IM_COL32(230, 235, 245, 255),
+				player.status_message.c_str());
+		}
+
 		ImGui::Dummy(canvas_size);
 		ImGui::EndChild();
 	}
@@ -398,6 +406,16 @@ int main(int argc, char *argv[])
 					held_input.x = is_down;
 				else if (scancode == SDL_SCANCODE_5)
 					held_input.a = is_down;
+
+				if (is_down && app.mode() == AppMode::PrototypePlayer)
+				{
+					if (scancode == SDL_SCANCODE_LEFTBRACKET)
+						app.nudge_timing_offset_seconds(-0.005);
+					else if (scancode == SDL_SCANCODE_RIGHTBRACKET)
+						app.nudge_timing_offset_seconds(0.005);
+					else if (scancode == SDL_SCANCODE_BACKSLASH)
+						app.reset_timing_offset();
+				}
 			}
 		}
 

@@ -1,6 +1,8 @@
 #include "core/app/AppCore.h"
 
 #include <algorithm>
+#include <cmath>
+#include <sstream>
 
 namespace rhythmreplugged
 {
@@ -111,6 +113,18 @@ namespace rhythmreplugged
 			song_session_.toggle_guitar_mute();
 	}
 
+	void AppCore::nudge_timing_offset_seconds(double delta_seconds)
+	{
+		song_session_.set_timing_offset_seconds(song_session_.timing_offset_seconds() + delta_seconds);
+		update_player_status_message();
+	}
+
+	void AppCore::reset_timing_offset()
+	{
+		song_session_.set_timing_offset_seconds(0.0);
+		update_player_status_message();
+	}
+
 	void AppCore::finalize_audio_stop()
 	{
 		if (!session_unload_pending_)
@@ -157,6 +171,17 @@ namespace rhythmreplugged
 		}
 
 		song_session_.render_interleaved_s16(output, frame_count);
+	}
+
+	void AppCore::update_player_status_message()
+	{
+		std::ostringstream status;
+		const long long offset_milliseconds = std::llround(song_session_.timing_offset_seconds() * 1000.0);
+		status << "Timing offset: ";
+		if (offset_milliseconds >= 0)
+			status << '+';
+		status << offset_milliseconds << " ms  ([ / ] adjust, \\ reset)";
+		player_status_message_ = status.str();
 	}
 
 	bool AppCore::pressed(bool current, bool previous) const
