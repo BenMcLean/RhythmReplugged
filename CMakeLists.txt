@@ -22,6 +22,7 @@ add_subdirectory(external/midifile)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(OpenGL REQUIRED)
 find_package(Vorbis CONFIG REQUIRED)
 find_package(unofficial-inih CONFIG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS "miniaudio.h")
@@ -67,6 +68,20 @@ PRIVATE
 	unofficial::inih::libinih
 )
 
+add_library(rr_ui
+	${RR_SRC_DIR}/ui/AppUi.cpp
+	${RR_SRC_DIR}/ui/AppUi.h
+)
+
+target_include_directories(rr_ui PUBLIC
+	${RR_SRC_DIR}
+)
+
+target_link_libraries(rr_ui PUBLIC
+	rr_core
+	imgui::imgui
+)
+
 add_executable(RhythmReplugged
 	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.cpp
 	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.h
@@ -82,7 +97,9 @@ target_include_directories(RhythmReplugged PRIVATE
 
 target_link_libraries(RhythmReplugged PRIVATE
 	rr_core
+	rr_ui
 	imgui::imgui
+	OpenGL::GL
 	SDL3::SDL3
 	SDL3_image::SDL3_image
 )
