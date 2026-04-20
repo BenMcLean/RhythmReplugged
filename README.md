@@ -2,11 +2,12 @@
 
 Rhythm Replugged is a C++ game project built with CMake, SDL3, and vcpkg manifest dependencies.
 
-The project is now split into:
+The code under `src/` is currently split into:
 
-- `libretro_contract` for the host-facing abstractions
-- `core` for song browsing, metadata parsing, and prototype playback logic
-- `platform_sdl3` for the standalone SDL3 + Dear ImGui host
+- `src/libretro_contract` for host-facing abstractions
+- `src/core` for song browsing, metadata parsing, playback state, chart state, and audio logic
+- `src/ui` for presentation code that renders core-owned view data with Dear ImGui
+- `src/platform_sdl3` for the standalone SDL3 host, input polling, texture loading, and audio output wiring
 
 The current architecture plan is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
