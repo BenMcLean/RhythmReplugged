@@ -93,6 +93,10 @@ namespace
 		{
 			return g_input_state(0, RETRO_DEVICE_JOYPAD, 0, id) != 0;
 		};
+		auto keyboard_pressed = [](unsigned id)
+		{
+			return g_input_state(0, RETRO_DEVICE_KEYBOARD, 0, id) != 0;
+		};
 
 		input.up = joypad_pressed(RETRO_DEVICE_ID_JOYPAD_UP);
 		input.down = joypad_pressed(RETRO_DEVICE_ID_JOYPAD_DOWN);
@@ -106,6 +110,18 @@ namespace
 		input.select = joypad_pressed(RETRO_DEVICE_ID_JOYPAD_SELECT);
 		input.l = joypad_pressed(RETRO_DEVICE_ID_JOYPAD_L);
 		input.r = joypad_pressed(RETRO_DEVICE_ID_JOYPAD_R);
+
+		// Keyboard navigation is kept separate from the five-lane gameplay keys
+		// so number-row frets do not trigger browser actions or ImGui navigation.
+		input.up = input.up || keyboard_pressed(RETROK_UP);
+		input.down = input.down || keyboard_pressed(RETROK_DOWN);
+		input.a = input.a || keyboard_pressed(RETROK_RETURN) || keyboard_pressed(RETROK_SPACE);
+		input.b = input.b || keyboard_pressed(RETROK_0) || keyboard_pressed(RETROK_BACKSPACE);
+		input.lane_1 = keyboard_pressed(RETROK_1);
+		input.lane_2 = keyboard_pressed(RETROK_2);
+		input.lane_3 = keyboard_pressed(RETROK_3);
+		input.lane_4 = keyboard_pressed(RETROK_4);
+		input.lane_5 = keyboard_pressed(RETROK_5);
 
 		const int mouse_delta_x = g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
 		const int mouse_delta_y = g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);

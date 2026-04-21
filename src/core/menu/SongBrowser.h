@@ -18,6 +18,7 @@ namespace rhythmreplugged
 		void clear_root(std::string status_message);
 		bool move_selection(int delta);
 		bool set_selected_index(int index);
+		bool navigate_to_parent(std::string &error_message);
 		bool activate_selected(std::string &selected_song_path, std::string &error_message);
 		void clear_status_message();
 		void set_status_message(std::string message);

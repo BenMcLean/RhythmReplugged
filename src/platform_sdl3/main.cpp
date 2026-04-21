@@ -237,22 +237,22 @@ int main(int argc, char *argv[])
 					held_input.right = is_down;
 				else if (scancode == SDL_SCANCODE_RETURN || scancode == SDL_SCANCODE_SPACE)
 					held_input.a = is_down;
-				else if (scancode == SDL_SCANCODE_ESCAPE || scancode == SDL_SCANCODE_BACKSPACE)
+				else if (scancode == SDL_SCANCODE_BACKSPACE || scancode == SDL_SCANCODE_0)
 					held_input.b = is_down;
 				else if (scancode == SDL_SCANCODE_X)
 					held_input.x = is_down;
 				else if (scancode == SDL_SCANCODE_Y)
 					held_input.y = is_down;
 				else if (scancode == SDL_SCANCODE_1)
-					held_input.left = is_down;
+					held_input.lane_1 = is_down;
 				else if (scancode == SDL_SCANCODE_2)
-					held_input.up = is_down;
+					held_input.lane_2 = is_down;
 				else if (scancode == SDL_SCANCODE_3)
-					held_input.y = is_down;
+					held_input.lane_3 = is_down;
 				else if (scancode == SDL_SCANCODE_4)
-					held_input.x = is_down;
+					held_input.lane_4 = is_down;
 				else if (scancode == SDL_SCANCODE_5)
-					held_input.a = is_down;
+					held_input.lane_5 = is_down;
 
 				if (is_down && app.mode() == AppMode::PrototypePlayer)
 				{

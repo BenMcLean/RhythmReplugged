@@ -72,6 +72,15 @@ namespace rhythmreplugged
 		return true;
 	}
 
+	bool SongBrowser::navigate_to_parent(std::string &error_message)
+	{
+		error_message.clear();
+		if (root_path_.empty() || current_path_.empty() || current_path_ == root_path_)
+			return false;
+
+		return load_directory(file_system_.parent_path(current_path_), error_message);
+	}
+
 	bool SongBrowser::activate_selected(std::string &selected_song_path, std::string &error_message)
 	{
 		selected_song_path.clear();

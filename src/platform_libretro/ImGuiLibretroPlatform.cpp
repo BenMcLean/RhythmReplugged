@@ -16,9 +16,6 @@ namespace rhythmreplugged
 	{
 		ImGuiIO &io = ImGui::GetIO();
 		io.BackendPlatformName = "rhythmreplugged_libretro";
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-		io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 	}
 
 	void begin_imgui_libretro_frame(const RetroInputState &input, ImVec2 display_size, float delta_seconds)

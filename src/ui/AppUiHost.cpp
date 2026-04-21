@@ -10,7 +10,6 @@ namespace rhythmreplugged
 		apply_imgui_style(ui_scale);
 
 		ImGuiIO &io = ImGui::GetIO();
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 		ImFontConfig font_config;
 		font_config.SizePixels = 13.0f * ui_scale;
 		io.FontDefault = io.Fonts->AddFontDefault(&font_config);

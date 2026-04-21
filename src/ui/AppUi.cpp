@@ -185,7 +185,7 @@ namespace rhythmreplugged
 
 		ImGui::TextUnformatted("Song Browser");
 		ImGui::Separator();
-		ImGui::TextWrapped("Enter/Space: open or play   Esc/Backspace: back   Up/Down: move");
+		ImGui::TextWrapped("Enter/Space: open or play   Backspace/0: back   Up/Down: move");
 		ImGui::TextWrapped("Root: %s", browser.root_path.c_str());
 		ImGui::TextWrapped("Path: %s", browser.current_path.c_str());
 

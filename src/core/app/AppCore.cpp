@@ -239,6 +239,13 @@ namespace rhythmreplugged
 		if (pressed(input_state.down, previous_input_.down))
 			song_browser_.move_selection(1);
 
+		if (pressed(input_state.b, previous_input_.b))
+		{
+			std::string error_message;
+			if (!song_browser_.navigate_to_parent(error_message) && !error_message.empty())
+				song_browser_.set_status_message(error_message);
+		}
+
 		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.start, previous_input_.start))
 			activate_browser_selection_unlocked();
 	}
@@ -251,19 +258,26 @@ namespace rhythmreplugged
 			return;
 		}
 
+		const std::array<bool, 5> previous_lane_held = {
+			previous_input_.left || previous_input_.lane_1,
+			previous_input_.up || previous_input_.lane_2,
+			previous_input_.y || previous_input_.lane_3,
+			previous_input_.x || previous_input_.lane_4,
+			previous_input_.a || previous_input_.lane_5,
+		};
 		const std::array<bool, 5> lane_held = {
-			input_state.left,
-			input_state.up,
-			input_state.y,
-			input_state.x,
-			input_state.a,
+			input_state.left || input_state.lane_1,
+			input_state.up || input_state.lane_2,
+			input_state.y || input_state.lane_3,
+			input_state.x || input_state.lane_4,
+			input_state.a || input_state.lane_5,
 		};
 		const std::array<bool, 5> lane_pressed = {
-			pressed(input_state.left, previous_input_.left),
-			pressed(input_state.up, previous_input_.up),
-			pressed(input_state.y, previous_input_.y),
-			pressed(input_state.x, previous_input_.x),
-			pressed(input_state.a, previous_input_.a),
+			pressed(lane_held[0], previous_lane_held[0]),
+			pressed(lane_held[1], previous_lane_held[1]),
+			pressed(lane_held[2], previous_lane_held[2]),
+			pressed(lane_held[3], previous_lane_held[3]),
+			pressed(lane_held[4], previous_lane_held[4]),
 		};
 		song_session_.update_gameplay_input(lane_held, lane_pressed);
 	}

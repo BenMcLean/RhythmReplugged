@@ -16,6 +16,11 @@ namespace rhythmreplugged
 		bool select = false;
 		bool l = false;
 		bool r = false;
+		bool lane_1 = false;
+		bool lane_2 = false;
+		bool lane_3 = false;
+		bool lane_4 = false;
+		bool lane_5 = false;
 		bool mouse_active = false;
 		float mouse_x = 0.0f;
 		float mouse_y = 0.0f;
