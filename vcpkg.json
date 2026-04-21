@@ -4,13 +4,7 @@
 	"dependencies": [
 		"sdl3",
 		"sdl3-image",
-		{
-			"name": "imgui",
-			"features": [
-				"sdl3-binding",
-				"opengl3-binding"
-			]
-		},
+		"imgui",
 		"inih",
 		"libvorbis",
 		"miniaudio",

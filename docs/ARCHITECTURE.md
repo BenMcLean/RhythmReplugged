@@ -35,6 +35,19 @@ The source tree under `src/` is divided into various layers:
 
 No dependency may point back upward.
 
+## Host Dependency Rules
+
+These are architectural rules, not just current implementation details:
+
+- `core` must not include SDL headers.
+- `core` must not include `libretro.h`.
+- `ui` must not include SDL headers.
+- `ui` must not include `libretro.h`.
+- `platform_sdl3` may include SDL headers, but must not include `libretro.h`.
+- `platform_libretro` may include `libretro.h`, but must not include SDL headers.
+
+If a future refactor violates one of those rules, that should be treated as an architectural regression.
+
 ## Physical Layout
 
 These layer names are architectural names and also correspond to the current on-disk layout:
@@ -188,7 +201,8 @@ This layer defines:
 ### `platform_sdl3`
 
 - SDL host and main loop
-- Dear ImGui setup and frame orchestration
+- Dear ImGui SDL3 platform backend ownership
+- Dear ImGui OpenGL renderer backend ownership
 - platform texture loading for cover art
 - miniaudio-backed callback output
 
@@ -199,9 +213,25 @@ Dear ImGui is treated as a renderer choice for the current UI implementation, no
 - libretro ABI glue
 - libretro-owned OpenGL context negotiation
 - custom ImGui platform bridge fed from libretro input and frame timing
+- Dear ImGui OpenGL renderer backend ownership
 - libretro audio callback output
 
 This host reuses the same `/src/ui` Dear ImGui screens as the SDL host so UI work remains implemented once.
+
+## Dear ImGui Backend Rule
+
+Dear ImGui has two relevant backend categories in this project:
+
+- a platform backend
+- a renderer backend
+
+The rule is:
+
+- `platform_sdl3` owns the SDL3 platform backend and the OpenGL renderer backend.
+- `platform_libretro` owns only the OpenGL renderer backend.
+- shared layers do not own SDL-specific or libretro-specific Dear ImGui backend code.
+
+That is why the SDL host uses both `imgui_impl_sdl3` and `imgui_impl_opengl3`, while the libretro host uses only `imgui_impl_opengl3` plus project-owned libretro platform glue.
 
 ## Internal Core Split
 
