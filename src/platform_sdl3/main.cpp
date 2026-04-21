@@ -1,4 +1,5 @@
 #include "core/app/AppCore.h"
+#include "core/app/AppLaunch.h"
 #include "platform_sdl3/MiniaudioOutput.h"
 #include "platform_sdl3/Sdl3FileSystem.h"
 #include "ui/AppUiHost.h"
@@ -23,6 +24,13 @@ namespace
 	constexpr int kWindowHeight = 720;
 	constexpr Uint64 kFrameDurationNs = 1000000000ull / kAppFramesPerSecond;
 	constexpr char kOpenGlGlslVersion[] = "#version 130";
+
+	struct SdlLaunchArguments
+	{
+		std::string songs_root_path;
+		std::string content_root_path;
+		std::string content_path;
+	};
 
 	std::string find_songs_root(const char *argv0)
 	{
@@ -50,6 +58,37 @@ namespace
 		}
 
 		return {};
+	}
+
+	SdlLaunchArguments parse_launch_arguments(int argc, char *argv[])
+	{
+		SdlLaunchArguments arguments;
+		for (int index = 1; index < argc; ++index)
+		{
+			const std::string argument = argv[index] != nullptr ? argv[index] : "";
+			if (argument == "--songs-root" && index + 1 < argc)
+			{
+				arguments.songs_root_path = argv[++index] != nullptr ? argv[index] : "";
+				continue;
+			}
+
+			if (argument == "--content-root" && index + 1 < argc)
+			{
+				arguments.content_root_path = argv[++index] != nullptr ? argv[index] : "";
+				continue;
+			}
+
+			if (argument == "--content" && index + 1 < argc)
+			{
+				arguments.content_path = argv[++index] != nullptr ? argv[index] : "";
+				continue;
+			}
+
+			if (!argument.empty() && argument[0] != '-' && arguments.content_path.empty())
+				arguments.content_path = argument;
+		}
+
+		return arguments;
 	}
 }
 
@@ -140,8 +179,14 @@ int main(int argc, char *argv[])
 	Sdl3FileSystem file_system;
 	AppCore app(file_system);
 	std::string init_error;
-	const std::string songs_root = find_songs_root(argc > 0 ? argv[0] : nullptr);
-	if (songs_root.empty() || !app.retro_init(songs_root, init_error))
+	const SdlLaunchArguments launch_arguments = parse_launch_arguments(argc, argv);
+	AppLaunchInputs launch_inputs;
+	launch_inputs.songs_root_path = launch_arguments.songs_root_path;
+	launch_inputs.content_root_path = launch_arguments.content_root_path;
+	launch_inputs.content_path = launch_arguments.content_path;
+	launch_inputs.fallback_songs_root_path = find_songs_root(argc > 0 ? argv[0] : nullptr);
+	const AppLaunchRequest launch_request = resolve_app_launch_request(file_system, launch_inputs);
+	if (!app.retro_init(launch_request, init_error))
 	{
 		std::cerr << "Failed to initialize app: " << init_error << "\n";
 		ImGui_ImplOpenGL3_Shutdown();

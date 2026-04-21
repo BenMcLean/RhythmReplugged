@@ -13,6 +13,7 @@
 		},
 		"inih",
 		"libvorbis",
-		"miniaudio"
+		"miniaudio",
+		"zlib"
 	]
 }

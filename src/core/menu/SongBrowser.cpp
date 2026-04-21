@@ -42,6 +42,16 @@ namespace rhythmreplugged
 		return load_directory(root_path_, error_message);
 	}
 
+	void SongBrowser::clear_root(std::string status_message)
+	{
+		root_path_.clear();
+		current_path_.clear();
+		status_message_ = std::move(status_message);
+		entries_.clear();
+		selected_index_ = 0;
+		rebuild_view();
+	}
+
 	bool SongBrowser::move_selection(int delta)
 	{
 		if (entries_.empty())

@@ -14,13 +14,41 @@ namespace rhythmreplugged
 
 	bool AppCore::retro_init(const std::string &song_root_path, std::string &error_message)
 	{
+		AppLaunchRequest request;
+		request.songs_root_path = song_root_path;
+		return retro_init(request, error_message);
+	}
+
+	bool AppCore::retro_init(const AppLaunchRequest &launch_request, std::string &error_message)
+	{
 		mode_ = AppMode::SongBrowser;
 		song_session_.unload();
 		session_unload_pending_ = false;
 		audio_batch_.clear();
 		audio_batch_.sample_rate = 0;
 		player_status_message_.clear();
-		return song_browser_.set_root(song_root_path, error_message);
+		if (launch_request.songs_root_path.empty())
+		{
+			song_browser_.clear_root("No songs root is configured. Load a folder or song file from your library.");
+			return true;
+		}
+
+		if (!song_browser_.set_root(launch_request.songs_root_path, error_message))
+			return false;
+
+		if (launch_request.startup_song_path.empty())
+			return true;
+
+		if (song_session_.load(file_system_, launch_request.startup_song_path, error_message))
+		{
+			mode_ = AppMode::PrototypePlayer;
+			session_unload_pending_ = false;
+			player_status_message_.clear();
+			return true;
+		}
+
+		song_browser_.set_status_message(error_message);
+		return true;
 	}
 
 	void AppCore::retro_run(const RetroInputState &input_state)

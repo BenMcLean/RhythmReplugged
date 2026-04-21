@@ -1,10 +1,18 @@
 #include "ui/OpenGlCoverTextures.h"
 
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_opengl.h>
-#include <SDL3_image/SDL_image.h>
+#include <formats/image.h>
+#include <formats/rpng.h>
+#include <imgui_impl_opengl3_loader.h>
 
+#include <cctype>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <vector>
+
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
 
 namespace rhythmreplugged
 {
@@ -15,22 +23,100 @@ namespace rhythmreplugged
 			return ImTextureRef(static_cast<ImTextureID>(static_cast<uintptr_t>(texture)));
 		}
 
-		bool upload_cover_texture(SDL_Surface *surface, GLuint &texture)
+		struct DecodedPng
 		{
-			texture = 0;
-			if (surface == nullptr)
+			std::vector<std::uint32_t> pixels;
+			unsigned width = 0;
+			unsigned height = 0;
+		};
+
+		bool equals_ignore_case(std::string_view left, std::string_view right)
+		{
+			if (left.size() != right.size())
 				return false;
 
-			SDL_Surface *converted_surface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_ABGR8888);
-			if (converted_surface == nullptr)
+			for (size_t i = 0; i < left.size(); ++i)
+			{
+				if (std::tolower(static_cast<unsigned char>(left[i])) !=
+					std::tolower(static_cast<unsigned char>(right[i])))
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		bool decode_png_file(const std::string &cover_path, DecodedPng &decoded)
+		{
+			const std::string extension = std::filesystem::path(cover_path).extension().string();
+			if (!equals_ignore_case(extension, ".png"))
+				return false;
+
+			std::ifstream stream(std::filesystem::path(cover_path), std::ios::binary);
+			if (!stream)
+				return false;
+
+			const std::vector<char> bytes((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+			if (bytes.empty())
+				return false;
+
+			rpng_t *rpng = rpng_alloc();
+			if (rpng == nullptr)
+				return false;
+
+			bool success = false;
+			std::uint32_t *pixel_data = nullptr;
+			unsigned width = 0;
+			unsigned height = 0;
+			if (rpng_set_buf_ptr(rpng, const_cast<char *>(bytes.data()), bytes.size()) &&
+				rpng_start(rpng))
+			{
+				while (rpng_iterate_image(rpng))
+				{
+				}
+
+				if (rpng_is_valid(rpng))
+				{
+					int result = IMAGE_PROCESS_NEXT;
+					do
+					{
+						result = rpng_process_image(
+							rpng,
+							reinterpret_cast<void **>(&pixel_data),
+							bytes.size(),
+							&width,
+							&height,
+							true);
+					} while (result == IMAGE_PROCESS_NEXT);
+
+					if ((result == IMAGE_PROCESS_END || result > IMAGE_PROCESS_END) &&
+						pixel_data != nullptr &&
+						width > 0 &&
+						height > 0)
+					{
+						decoded.width = width;
+						decoded.height = height;
+						decoded.pixels.assign(pixel_data, pixel_data + static_cast<size_t>(width) * height);
+						success = true;
+					}
+				}
+			}
+
+			free(pixel_data);
+			rpng_free(rpng);
+			return success;
+		}
+
+		bool upload_cover_texture(const DecodedPng &decoded, GLuint &texture)
+		{
+			texture = 0;
+			if (decoded.pixels.empty() || decoded.width == 0 || decoded.height == 0)
 				return false;
 
 			glGenTextures(1, &texture);
 			if (texture == 0)
-			{
-				SDL_DestroySurface(converted_surface);
 				return false;
-			}
 
 			glBindTexture(GL_TEXTURE_2D, texture);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -41,41 +127,14 @@ namespace rhythmreplugged
 			glTexImage2D(GL_TEXTURE_2D,
 				0,
 				GL_RGBA,
-				converted_surface->w,
-				converted_surface->h,
+				static_cast<GLsizei>(decoded.width),
+				static_cast<GLsizei>(decoded.height),
 				0,
 				GL_RGBA,
 				GL_UNSIGNED_BYTE,
-				converted_surface->pixels);
+				decoded.pixels.data());
 			glBindTexture(GL_TEXTURE_2D, 0);
-
-			SDL_DestroySurface(converted_surface);
 			return true;
-		}
-
-		bool load_cover_texture(const std::string &cover_path, GLuint &texture)
-		{
-			texture = 0;
-
-			SDL_Surface *surface = IMG_Load(cover_path.c_str());
-			if (surface != nullptr)
-			{
-				const bool uploaded = upload_cover_texture(surface, texture);
-				SDL_DestroySurface(surface);
-				return uploaded;
-			}
-
-			const std::string extension = std::filesystem::path(cover_path).extension().string();
-			if (_stricmp(extension.c_str(), ".png") != 0)
-				return false;
-
-			surface = SDL_LoadPNG(cover_path.c_str());
-			if (surface == nullptr)
-				return false;
-
-			const bool uploaded = upload_cover_texture(surface, texture);
-			SDL_DestroySurface(surface);
-			return uploaded;
 		}
 	}
 
@@ -98,8 +157,10 @@ namespace rhythmreplugged
 			return make_imgui_texture_ref(it->second);
 		}
 
+		DecodedPng decoded;
 		GLuint texture = 0;
-		load_cover_texture(cover_path, texture);
+		if (decode_png_file(cover_path, decoded))
+			upload_cover_texture(decoded, texture);
 		textures_.emplace(cover_path, texture);
 		if (texture == 0)
 			return std::nullopt;

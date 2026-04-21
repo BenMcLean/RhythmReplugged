@@ -10,7 +10,7 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 	endif()
 endif()
 
-project(RhythmReplugged LANGUAGES CXX)
+project(RhythmReplugged LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,6 +24,7 @@ find_package(SDL3_image CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(Vorbis CONFIG REQUIRED)
+find_package(ZLIB REQUIRED)
 find_package(unofficial-inih CONFIG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS "miniaudio.h")
 
@@ -33,6 +34,8 @@ target_include_directories(rr_libretro_contract INTERFACE
 )
 
 add_library(rr_core
+	${RR_SRC_DIR}/core/app/AppLaunch.cpp
+	${RR_SRC_DIR}/core/app/AppLaunch.h
 	${RR_SRC_DIR}/core/app/AppCore.cpp
 	${RR_SRC_DIR}/core/app/AppCore.h
 	${RR_SRC_DIR}/core/app/AppTypes.h
@@ -75,10 +78,21 @@ add_library(rr_ui
 	${RR_SRC_DIR}/ui/AppUiHost.h
 	${RR_SRC_DIR}/ui/OpenGlCoverTextures.cpp
 	${RR_SRC_DIR}/ui/OpenGlCoverTextures.h
+	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/formats/png/rpng.c
+	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/streams/trans_stream.c
+	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/streams/trans_stream_pipe.c
+	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/streams/trans_stream_zlib.c
 )
 
 target_include_directories(rr_ui PUBLIC
 	${RR_SRC_DIR}
+	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/include
+PRIVATE
+	${ZLIB_INCLUDE_DIR}
+)
+
+target_compile_definitions(rr_ui PRIVATE
+	HAVE_ZLIB=1
 )
 
 target_link_libraries(rr_ui PUBLIC
@@ -86,8 +100,7 @@ target_link_libraries(rr_ui PUBLIC
 	imgui::imgui
 PRIVATE
 	OpenGL::GL
-	SDL3::SDL3
-	SDL3_image::SDL3_image
+	ZLIB::ZLIB
 )
 
 add_executable(RhythmReplugged
@@ -130,8 +143,6 @@ target_link_libraries(platform_libretro PRIVATE
 	rr_ui
 	imgui::imgui
 	OpenGL::GL
-	SDL3::SDL3
-	SDL3_image::SDL3_image
 )
 
 set_target_properties(platform_libretro PROPERTIES

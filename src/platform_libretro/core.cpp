@@ -1,13 +1,14 @@
 #include <libretro.h>
 
 #include "core/app/AppCore.h"
+#include "core/app/AppLaunch.h"
 #include "platform_libretro/ImGuiLibretroPlatform.h"
 #include "platform_libretro/NativeFileSystem.h"
 #include "ui/AppUiHost.h"
 
-#include <SDL3/SDL_opengl.h>
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
+#include <imgui_impl_opengl3_loader.h>
 
 #include <algorithm>
 #include <cctype>
@@ -15,6 +16,10 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+
+#ifndef GL_FRAMEBUFFER
+#define GL_FRAMEBUFFER 0x8D40
+#endif
 
 namespace
 {
@@ -46,7 +51,7 @@ namespace
 	std::string g_root_path;
 	bool g_is_loaded = false;
 	bool g_gl_ready = false;
-	using GlBindFramebufferProc = void(APIENTRY *)(GLenum target, GLuint framebuffer);
+	using GlBindFramebufferProc = void (*)(GLenum target, GLuint framebuffer);
 	GlBindFramebufferProc g_gl_bind_framebuffer = nullptr;
 
 	void log_message(retro_log_level level, const char *format, ...)
@@ -60,41 +65,6 @@ namespace
 		vsnprintf(buffer, sizeof(buffer), format, args);
 		va_end(args);
 		g_log_callback.log(level, "%s", buffer);
-	}
-
-	std::string to_lower_copy(std::string text)
-	{
-		std::transform(text.begin(), text.end(), text.begin(),
-			[](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-		return text;
-	}
-
-	std::string choose_song_root(const std::string &content_path)
-	{
-		const std::string canonical_content = g_file_system.canonicalize_path(content_path);
-		if (canonical_content.empty())
-			return {};
-
-		if (g_file_system.path_is_directory(canonical_content))
-		{
-			if (g_file_system.path_exists(canonical_content + "/song.ini"))
-				return g_file_system.parent_path(canonical_content);
-			return canonical_content;
-		}
-
-		const std::filesystem::path path(canonical_content);
-		const std::string filename = to_lower_copy(path.filename().string());
-		if (filename == "song.ini" ||
-			filename == "song.ogg" ||
-			filename == "notes.mid" ||
-			filename == "notes.midi" ||
-			filename == "notes.chart" ||
-			filename == "notes.txt")
-		{
-			return path.parent_path().parent_path().generic_string();
-		}
-
-		return path.parent_path().generic_string();
 	}
 
 	bool pressed(bool current, bool previous)
@@ -202,7 +172,11 @@ RR_LIBRETRO_EXPORT void retro_set_environment(retro_environment_t cb)
 {
 	g_environment = cb;
 	if (g_environment != nullptr)
+	{
 		g_environment(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &g_log_callback);
+		bool support_no_game = true;
+		g_environment(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME, &support_no_game);
+	}
 }
 
 RR_LIBRETRO_EXPORT void retro_set_video_refresh(retro_video_refresh_t cb)
@@ -287,8 +261,10 @@ RR_LIBRETRO_EXPORT void retro_reset(void)
 	if (g_root_path.empty())
 		return;
 
-	std::string error_message;
-	g_is_loaded = g_app.retro_init(g_root_path, error_message);
+		std::string error_message;
+	AppLaunchRequest launch_request;
+	launch_request.songs_root_path = g_root_path;
+	g_is_loaded = g_app.retro_init(launch_request, error_message);
 	if (!g_is_loaded)
 		 log_message(RETRO_LOG_ERROR, "Failed to reset content '%s': %s\n", g_root_path.c_str(), error_message.c_str());
 }
@@ -297,8 +273,10 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 {
 	if (game == nullptr || game->path == nullptr)
 	{
-		log_message(RETRO_LOG_ERROR, "No content path was supplied.\n");
-		return false;
+		std::string error_message;
+		g_root_path.clear();
+		g_is_loaded = g_app.retro_init(AppLaunchRequest{}, error_message);
+		return g_is_loaded;
 	}
 
 	g_hw_render = {};
@@ -318,7 +296,10 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 		return false;
 	}
 
-	g_root_path = choose_song_root(game->path);
+	AppLaunchInputs launch_inputs;
+	launch_inputs.content_path = game->path;
+	const AppLaunchRequest launch_request = resolve_app_launch_request(g_file_system, launch_inputs);
+	g_root_path = launch_request.songs_root_path;
 	if (g_root_path.empty())
 	{
 		log_message(RETRO_LOG_ERROR, "Could not derive a song root from '%s'.\n", game->path);
@@ -326,7 +307,7 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 	}
 
 	std::string error_message;
-	g_is_loaded = g_app.retro_init(g_root_path, error_message);
+	g_is_loaded = g_app.retro_init(launch_request, error_message);
 	if (!g_is_loaded)
 	{
 		log_message(RETRO_LOG_ERROR, "App init failed for '%s': %s\n", g_root_path.c_str(), error_message.c_str());
@@ -418,6 +399,8 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 	g_app.retro_run(input);
 	g_previous_input = input;
 	submit_audio();
+	if (g_app.mode() != AppMode::PrototypePlayer)
+		g_app.finalize_audio_stop();
 
 	ImGui_ImplOpenGL3_NewFrame();
 	begin_imgui_libretro_frame(

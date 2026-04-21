@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/app/AppLaunch.h"
 #include "core/app/AppTypes.h"
 #include "core/menu/SongBrowser.h"
 #include "core/play/SongSession.h"
@@ -17,6 +18,7 @@ namespace rhythmreplugged
 		explicit AppCore(IRetroFileSystem &file_system);
 
 		bool retro_init(const std::string &song_root_path, std::string &error_message);
+		bool retro_init(const AppLaunchRequest &launch_request, std::string &error_message);
 		void retro_run(const RetroInputState &input_state);
 		void retro_deinit();
 		void set_audio_batch_enabled(bool enabled);

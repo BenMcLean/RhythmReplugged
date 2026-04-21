@@ -15,6 +15,7 @@ namespace rhythmreplugged
 		explicit SongBrowser(IRetroFileSystem &file_system);
 
 		bool set_root(const std::string &root_path, std::string &error_message);
+		void clear_root(std::string status_message);
 		bool move_selection(int delta);
 		bool set_selected_index(int index);
 		bool activate_selected(std::string &selected_song_path, std::string &error_message);
