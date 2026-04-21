@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #ifndef GL_FRAMEBUFFER
 #define GL_FRAMEBUFFER 0x8D40
@@ -28,6 +29,9 @@ namespace
 	constexpr unsigned kFrameWidth = 1280;
 	constexpr unsigned kFrameHeight = 720;
 	constexpr char kOpenGlGlslVersion[] = "#version 130";
+	constexpr retro_usec_t kNominalFrameTimeUsec = 1000000 / kAppFramesPerSecond;
+	constexpr retro_usec_t kMinimumFrameTimeUsec = kNominalFrameTimeUsec / 2;
+	constexpr retro_usec_t kMaximumFrameTimeUsec = kNominalFrameTimeUsec * 2;
 
 	#if defined(_WIN32)
 	#define RR_LIBRETRO_EXPORT extern "C" __declspec(dllexport)
@@ -52,6 +56,9 @@ namespace
 	bool g_is_loaded = false;
 	bool g_gl_ready = false;
 	int g_reported_sample_rate = 0;
+	std::vector<std::int16_t> g_pending_audio_samples;
+	retro_usec_t g_last_frame_time_usec = kNominalFrameTimeUsec;
+	std::uint64_t g_audio_frame_time_remainder = 0;
 	float g_mouse_x = static_cast<float>(kFrameWidth) * 0.5f;
 	float g_mouse_y = static_cast<float>(kFrameHeight) * 0.5f;
 	using GlBindFramebufferProc = void (*)(GLenum target, GLuint framebuffer);
@@ -226,12 +233,20 @@ namespace
 		g_environment(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
 	}
 
+	void frame_time_callback(retro_usec_t usec)
+	{
+		if (usec > 0)
+			g_last_frame_time_usec = usec;
+	}
+
 	void sync_frontend_sample_rate()
 	{
 		const int sample_rate = current_output_sample_rate();
 		if (sample_rate == g_reported_sample_rate)
 			return;
 
+		g_pending_audio_samples.clear();
+		g_audio_frame_time_remainder = 0;
 		update_frontend_av_info();
 		g_reported_sample_rate = sample_rate;
 	}
@@ -276,26 +291,55 @@ namespace
 		g_gl_bind_framebuffer = nullptr;
 	}
 
+	void queue_audio_from_stream()
+	{
+		if (g_app.mode() != AppMode::PrototypePlayer)
+			return;
+
+		const int sample_rate = g_app.sample_rate();
+		if (sample_rate <= 0)
+			return;
+
+		const retro_usec_t frame_time_usec = (std::clamp)(g_last_frame_time_usec, kMinimumFrameTimeUsec, kMaximumFrameTimeUsec);
+		g_audio_frame_time_remainder +=
+			static_cast<std::uint64_t>(sample_rate) * static_cast<std::uint64_t>(frame_time_usec);
+		const size_t frame_count = static_cast<size_t>(g_audio_frame_time_remainder / 1000000ull);
+		g_audio_frame_time_remainder %= 1000000ull;
+		if (frame_count == 0)
+			return;
+
+		const size_t sample_offset = g_pending_audio_samples.size();
+		g_pending_audio_samples.resize(sample_offset + frame_count * 2);
+		g_app.render_interleaved_s16(g_pending_audio_samples.data() + sample_offset, frame_count);
+	}
+
 	void submit_audio()
 	{
-		const AudioBatch &batch = g_app.audio_batch();
-		if (batch.samples.empty())
+		queue_audio_from_stream();
+		if (g_pending_audio_samples.empty())
 			return;
 
 		if (g_audio_sample_batch != nullptr)
 		{
-			g_audio_sample_batch(batch.samples.data(), batch.frame_count());
+			const size_t pending_frames = g_pending_audio_samples.size() / 2;
+			const size_t consumed_frames = g_audio_sample_batch(g_pending_audio_samples.data(), pending_frames);
+			const size_t consumed_samples = (std::min)(g_pending_audio_samples.size(), consumed_frames * 2);
+			g_pending_audio_samples.erase(
+				g_pending_audio_samples.begin(),
+				g_pending_audio_samples.begin() + static_cast<std::ptrdiff_t>(consumed_samples));
 			return;
 		}
 
 		if (g_audio_sample == nullptr)
 			return;
 
-		for (size_t frame = 0; frame < batch.frame_count(); ++frame)
+		for (size_t frame = 0; frame < g_pending_audio_samples.size() / 2; ++frame)
 		{
 			const size_t index = frame * 2;
-			g_audio_sample(batch.samples[index], batch.samples[index + 1]);
+			g_audio_sample(g_pending_audio_samples[index], g_pending_audio_samples[index + 1]);
 		}
+
+		g_pending_audio_samples.clear();
 	}
 
 	bool configure_hw_render()
@@ -335,6 +379,10 @@ RR_LIBRETRO_EXPORT void retro_set_environment(retro_environment_t cb)
 		bool support_no_game = true;
 		g_environment(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME, &support_no_game);
 		g_environment(RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE, const_cast<retro_system_content_info_override *>(kContentInfoOverrides));
+		retro_frame_time_callback frame_time{};
+		frame_time.callback = frame_time_callback;
+		frame_time.reference = kNominalFrameTimeUsec;
+		g_environment(RETRO_ENVIRONMENT_SET_FRAME_TIME_CALLBACK, &frame_time);
 	}
 }
 
@@ -369,8 +417,11 @@ RR_LIBRETRO_EXPORT void retro_init(void)
 	ImGui::CreateContext();
 	initialize_app_imgui(kDefaultUiScale);
 	initialize_imgui_libretro_platform();
-	g_app.set_audio_batch_enabled(true);
+	g_app.set_audio_batch_enabled(false);
 	g_reported_sample_rate = 0;
+	g_pending_audio_samples.clear();
+	g_last_frame_time_usec = kNominalFrameTimeUsec;
+	g_audio_frame_time_remainder = 0;
 }
 
 RR_LIBRETRO_EXPORT void retro_deinit(void)
@@ -382,6 +433,9 @@ RR_LIBRETRO_EXPORT void retro_deinit(void)
 	g_is_loaded = false;
 	g_gl_ready = false;
 	g_reported_sample_rate = 0;
+	g_pending_audio_samples.clear();
+	g_last_frame_time_usec = kNominalFrameTimeUsec;
+	g_audio_frame_time_remainder = 0;
 	ImGui::DestroyContext();
 }
 
@@ -477,6 +531,8 @@ RR_LIBRETRO_EXPORT void retro_unload_game(void)
 	g_app.retro_deinit();
 	g_root_path.clear();
 	g_is_loaded = false;
+	g_pending_audio_samples.clear();
+	g_audio_frame_time_remainder = 0;
 }
 
 RR_LIBRETRO_EXPORT unsigned retro_get_region(void)

@@ -18,13 +18,13 @@ namespace rhythmreplugged
 		chart_status_message_ = std::move(chart_error_message);
 
 		transport_.configure(prototype_player_.sample_rate());
-			audio_mixer_.set_prototype_player(&prototype_player_);
-			lane_held_.fill(false);
-			lane_sustain_end_times_.fill(0.0);
-			lane_sustain_release_times_.fill(-1.0);
-			input_generation_ = 0;
-			consumed_input_generation_ = 0;
-			next_note_index_ = 0;
+		audio_mixer_.set_prototype_player(&prototype_player_);
+		lane_held_.fill(false);
+		lane_sustain_end_times_.fill(0.0);
+		lane_sustain_release_times_.fill(-1.0);
+		input_generation_ = 0;
+		consumed_input_generation_ = 0;
+		next_note_index_ = 0;
 		prototype_player_.set_stem_target_gain("guitar", 1.0f);
 		loaded_.store(true);
 		return true;
