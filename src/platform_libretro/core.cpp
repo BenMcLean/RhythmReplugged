@@ -51,6 +51,7 @@ namespace
 	std::string g_root_path;
 	bool g_is_loaded = false;
 	bool g_gl_ready = false;
+	int g_reported_sample_rate = 0;
 	float g_mouse_x = static_cast<float>(kFrameWidth) * 0.5f;
 	float g_mouse_y = static_cast<float>(kFrameHeight) * 0.5f;
 	using GlBindFramebufferProc = void (*)(GLenum target, GLuint framebuffer);
@@ -225,6 +226,16 @@ namespace
 		g_environment(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
 	}
 
+	void sync_frontend_sample_rate()
+	{
+		const int sample_rate = current_output_sample_rate();
+		if (sample_rate == g_reported_sample_rate)
+			return;
+
+		update_frontend_av_info();
+		g_reported_sample_rate = sample_rate;
+	}
+
 	void context_reset()
 	{
 		if (g_gl_ready)
@@ -359,6 +370,7 @@ RR_LIBRETRO_EXPORT void retro_init(void)
 	initialize_app_imgui(kDefaultUiScale);
 	initialize_imgui_libretro_platform();
 	g_app.set_audio_batch_enabled(true);
+	g_reported_sample_rate = 0;
 }
 
 RR_LIBRETRO_EXPORT void retro_deinit(void)
@@ -369,6 +381,7 @@ RR_LIBRETRO_EXPORT void retro_deinit(void)
 	g_root_path.clear();
 	g_is_loaded = false;
 	g_gl_ready = false;
+	g_reported_sample_rate = 0;
 	ImGui::DestroyContext();
 }
 
@@ -390,6 +403,7 @@ RR_LIBRETRO_EXPORT void retro_get_system_av_info(struct retro_system_av_info *in
 		return;
 
 	fill_system_av_info(*info);
+	g_reported_sample_rate = current_output_sample_rate();
 }
 
 RR_LIBRETRO_EXPORT void retro_set_controller_port_device(unsigned port, unsigned device)
@@ -537,6 +551,7 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 	}
 
 	g_app.retro_run(input);
+	sync_frontend_sample_rate();
 	g_previous_input = input;
 	submit_audio();
 	if (g_app.mode() != AppMode::PrototypePlayer)
