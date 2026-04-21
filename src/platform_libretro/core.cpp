@@ -51,8 +51,15 @@ namespace
 	std::string g_root_path;
 	bool g_is_loaded = false;
 	bool g_gl_ready = false;
+	float g_mouse_x = static_cast<float>(kFrameWidth) * 0.5f;
+	float g_mouse_y = static_cast<float>(kFrameHeight) * 0.5f;
 	using GlBindFramebufferProc = void (*)(GLenum target, GLuint framebuffer);
 	GlBindFramebufferProc g_gl_bind_framebuffer = nullptr;
+
+	const retro_system_content_info_override kContentInfoOverrides[] = {
+		{"ini", true, false},
+		{nullptr, false, false},
+	};
 
 	void log_message(retro_log_level level, const char *format, ...)
 	{
@@ -75,6 +82,8 @@ namespace
 	RetroInputState poll_input()
 	{
 		RetroInputState input;
+		input.mouse_x = g_mouse_x;
+		input.mouse_y = g_mouse_y;
 		if (g_input_poll != nullptr)
 			g_input_poll();
 		if (g_input_state == nullptr)
@@ -97,7 +106,107 @@ namespace
 		input.select = joypad_pressed(RETRO_DEVICE_ID_JOYPAD_SELECT);
 		input.l = joypad_pressed(RETRO_DEVICE_ID_JOYPAD_L);
 		input.r = joypad_pressed(RETRO_DEVICE_ID_JOYPAD_R);
+
+		const int mouse_delta_x = g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
+		const int mouse_delta_y = g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+		if (mouse_delta_x != 0 || mouse_delta_y != 0)
+		{
+			g_mouse_x = std::clamp(g_mouse_x + static_cast<float>(mouse_delta_x), 0.0f, static_cast<float>(kFrameWidth - 1));
+			g_mouse_y = std::clamp(g_mouse_y + static_cast<float>(mouse_delta_y), 0.0f, static_cast<float>(kFrameHeight - 1));
+			input.mouse_active = true;
+		}
+
+		const int pointer_pressed = g_input_state(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED);
+		const int pointer_offscreen = g_input_state(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_IS_OFFSCREEN);
+		if (pointer_pressed != 0 && pointer_offscreen == 0)
+		{
+			const int pointer_x = g_input_state(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X);
+			const int pointer_y = g_input_state(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y);
+			g_mouse_x = std::clamp(
+				(static_cast<float>(pointer_x) + 32767.0f) * (static_cast<float>(kFrameWidth - 1) / 65534.0f),
+				0.0f,
+				static_cast<float>(kFrameWidth - 1));
+			g_mouse_y = std::clamp(
+				(static_cast<float>(pointer_y) + 32767.0f) * (static_cast<float>(kFrameHeight - 1) / 65534.0f),
+				0.0f,
+				static_cast<float>(kFrameHeight - 1));
+			input.mouse_active = true;
+		}
+
+		input.mouse_x = g_mouse_x;
+		input.mouse_y = g_mouse_y;
+		input.mouse_left = g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) != 0;
+		input.mouse_right = g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_RIGHT) != 0;
+		input.mouse_middle = g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_MIDDLE) != 0;
+		input.mouse_wheel_x =
+			static_cast<float>(g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_HORIZ_WHEELUP) -
+				g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_HORIZ_WHEELDOWN));
+		input.mouse_wheel_y =
+			static_cast<float>(g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_WHEELUP) -
+				g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_WHEELDOWN));
+		if (input.mouse_left || input.mouse_right || input.mouse_middle ||
+			input.mouse_wheel_x != 0.0f || input.mouse_wheel_y != 0.0f)
+		{
+			input.mouse_active = true;
+		}
+
 		return input;
+	}
+
+	std::string query_frontend_directory(unsigned cmd)
+	{
+		if (g_environment == nullptr)
+			return {};
+
+		const char *path = nullptr;
+		if (!g_environment(cmd, &path) || path == nullptr || path[0] == '\0')
+			return {};
+
+		return path;
+	}
+
+	std::string query_browser_root_hint()
+	{
+		std::string path = query_frontend_directory(RETRO_ENVIRONMENT_GET_FILE_BROWSER_START_DIRECTORY);
+		if (!path.empty())
+			return path;
+
+		path = query_frontend_directory(RETRO_ENVIRONMENT_GET_CONTENT_DIRECTORY);
+		if (!path.empty())
+			return path;
+
+		path = query_frontend_directory(RETRO_ENVIRONMENT_GET_PLAYLIST_DIRECTORY);
+		if (!path.empty())
+			return path;
+
+		return query_frontend_directory(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY);
+	}
+
+	int current_output_sample_rate()
+	{
+		const int sample_rate = g_app.sample_rate();
+		return sample_rate > 0 ? sample_rate : 44100;
+	}
+
+	void fill_system_av_info(retro_system_av_info &info)
+	{
+		info.geometry.base_width = kFrameWidth;
+		info.geometry.base_height = kFrameHeight;
+		info.geometry.max_width = kFrameWidth;
+		info.geometry.max_height = kFrameHeight;
+		info.geometry.aspect_ratio = static_cast<float>(kFrameWidth) / static_cast<float>(kFrameHeight);
+		info.timing.fps = static_cast<double>(kAppFramesPerSecond);
+		info.timing.sample_rate = static_cast<double>(current_output_sample_rate());
+	}
+
+	void update_frontend_av_info()
+	{
+		if (g_environment == nullptr)
+			return;
+
+		retro_system_av_info info{};
+		fill_system_av_info(info);
+		g_environment(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
 	}
 
 	void context_reset()
@@ -198,6 +307,7 @@ RR_LIBRETRO_EXPORT void retro_set_environment(retro_environment_t cb)
 		g_environment(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &g_log_callback);
 		bool support_no_game = true;
 		g_environment(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME, &support_no_game);
+		g_environment(RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE, const_cast<retro_system_content_info_override *>(kContentInfoOverrides));
 	}
 }
 
@@ -253,7 +363,7 @@ RR_LIBRETRO_EXPORT void retro_get_system_info(struct retro_system_info *info)
 
 	info->library_name = "Rhythm Replugged";
 	info->library_version = "0.1";
-	info->valid_extensions = "ini|mid|midi|chart|txt|ogg";
+	info->valid_extensions = "ini|png|jpg|jpeg|bmp|mid|midi|chart|txt|ogg";
 	info->need_fullpath = true;
 	info->block_extract = false;
 }
@@ -263,13 +373,7 @@ RR_LIBRETRO_EXPORT void retro_get_system_av_info(struct retro_system_av_info *in
 	if (info == nullptr)
 		return;
 
-	info->geometry.base_width = kFrameWidth;
-	info->geometry.base_height = kFrameHeight;
-	info->geometry.max_width = kFrameWidth;
-	info->geometry.max_height = kFrameHeight;
-	info->geometry.aspect_ratio = static_cast<float>(kFrameWidth) / static_cast<float>(kFrameHeight);
-	info->timing.fps = static_cast<double>(kAppFramesPerSecond);
-	info->timing.sample_rate = 44100.0;
+	fill_system_av_info(*info);
 }
 
 RR_LIBRETRO_EXPORT void retro_set_controller_port_device(unsigned port, unsigned device)
@@ -289,6 +393,8 @@ RR_LIBRETRO_EXPORT void retro_reset(void)
 	g_is_loaded = g_app.retro_init(launch_request, error_message);
 	if (!g_is_loaded)
 		 log_message(RETRO_LOG_ERROR, "Failed to reset content '%s': %s\n", g_root_path.c_str(), error_message.c_str());
+	else
+		update_frontend_av_info();
 }
 
 RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
@@ -300,12 +406,21 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 	{
 		std::string error_message;
 		g_root_path.clear();
-		g_is_loaded = g_app.retro_init(AppLaunchRequest{}, error_message);
+		AppLaunchInputs launch_inputs;
+		launch_inputs.fallback_songs_root_path = query_browser_root_hint();
+		const AppLaunchRequest launch_request = resolve_app_launch_request(g_file_system, launch_inputs);
+		g_root_path = launch_request.songs_root_path;
+		g_is_loaded = g_app.retro_init(launch_request, error_message);
+		if (!g_is_loaded)
+			log_message(RETRO_LOG_ERROR, "App init failed with no explicit content: %s\n", error_message.c_str());
+		else
+			update_frontend_av_info();
 		return g_is_loaded;
 	}
 
 	AppLaunchInputs launch_inputs;
 	launch_inputs.content_path = game->path;
+	launch_inputs.fallback_songs_root_path = query_browser_root_hint();
 	const AppLaunchRequest launch_request = resolve_app_launch_request(g_file_system, launch_inputs);
 	g_root_path = launch_request.songs_root_path;
 	if (g_root_path.empty())
@@ -322,6 +437,7 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 		return false;
 	}
 
+	update_frontend_av_info();
 	return true;
 }
 

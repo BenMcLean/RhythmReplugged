@@ -4,6 +4,8 @@ namespace rhythmreplugged
 {
 	namespace
 	{
+		bool g_mouse_seen = false;
+
 		void set_key(ImGuiIO &io, ImGuiKey key, bool pressed)
 		{
 			io.AddKeyEvent(key, pressed);
@@ -38,6 +40,22 @@ namespace rhythmreplugged
 		set_key(io, ImGuiKey_GamepadBack, input.select);
 		set_key(io, ImGuiKey_GamepadL1, input.l);
 		set_key(io, ImGuiKey_GamepadR1, input.r);
+		if (input.mouse_active ||
+			input.mouse_left ||
+			input.mouse_right ||
+			input.mouse_middle ||
+			input.mouse_wheel_x != 0.0f ||
+			input.mouse_wheel_y != 0.0f)
+		{
+			g_mouse_seen = true;
+		}
+
+		io.MouseDrawCursor = g_mouse_seen;
+		io.AddMousePosEvent(input.mouse_x, input.mouse_y);
+		io.AddMouseButtonEvent(0, input.mouse_left);
+		io.AddMouseButtonEvent(1, input.mouse_right);
+		io.AddMouseButtonEvent(2, input.mouse_middle);
+		io.AddMouseWheelEvent(input.mouse_wheel_x, input.mouse_wheel_y);
 
 		ImGui::NewFrame();
 	}
