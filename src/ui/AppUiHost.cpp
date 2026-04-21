@@ -20,6 +20,9 @@ namespace rhythmreplugged
 	{
 		if (app.mode() == AppMode::SongBrowser)
 		{
+			const SongBrowserView &browser_view = app.song_browser_view();
+			cover_textures.sync_song_browser_directory(browser_view);
+
 			SongBrowserUiActions actions;
 			actions.set_selected_index = [&](int index) { app.set_browser_selected_index(index); };
 			actions.activate_selection = [&]() { app.activate_browser_selection(); };
@@ -27,7 +30,7 @@ namespace rhythmreplugged
 			{
 				return cover_textures.get_texture_ref(cover_path);
 			};
-			render_song_browser_ui(app.song_browser_view(), actions, window_size, ui_scale);
+			render_song_browser_ui(browser_view, actions, window_size, ui_scale);
 			return;
 		}
 

@@ -1,5 +1,7 @@
 #include "ui/OpenGlCoverTextures.h"
 
+#include "core/app/AppTypes.h"
+
 #include <formats/image.h>
 #include <formats/rpng.h>
 #include <imgui_impl_opengl3_loader.h>
@@ -168,6 +170,20 @@ namespace rhythmreplugged
 		return make_imgui_texture_ref(texture);
 	}
 
+	void OpenGlCoverTextures::sync_song_browser_directory(const SongBrowserView &browser)
+	{
+		if (cached_browser_path_ == browser.current_path)
+			return;
+
+		clear();
+		cached_browser_path_ = browser.current_path;
+		for (const SongListItem &entry : browser.entries)
+		{
+			if (!entry.cover_art_path.empty())
+				get_texture_ref(entry.cover_art_path);
+		}
+	}
+
 	void OpenGlCoverTextures::clear()
 	{
 		for (auto &[path, texture] : textures_)
@@ -178,5 +194,6 @@ namespace rhythmreplugged
 		}
 
 		textures_.clear();
+		cached_browser_path_.clear();
 	}
 }
