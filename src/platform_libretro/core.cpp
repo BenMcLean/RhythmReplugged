@@ -161,6 +161,28 @@ namespace
 			g_audio_sample(batch.samples[index], batch.samples[index + 1]);
 		}
 	}
+
+	bool configure_hw_render()
+	{
+		g_hw_render = {};
+		g_hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
+		g_hw_render.context_reset = context_reset;
+		g_hw_render.context_destroy = context_destroy;
+		g_hw_render.depth = true;
+		g_hw_render.stencil = true;
+		g_hw_render.bottom_left_origin = true;
+		g_hw_render.version_major = 3;
+		g_hw_render.version_minor = 0;
+		g_hw_render.cache_context = false;
+		g_hw_render.debug_context = false;
+		if (g_environment == nullptr || !g_environment(RETRO_ENVIRONMENT_SET_HW_RENDER, &g_hw_render))
+		{
+			log_message(RETRO_LOG_ERROR, "Frontend rejected OpenGL hardware rendering.\n");
+			return false;
+		}
+
+		return true;
+	}
 }
 
 RR_LIBRETRO_EXPORT unsigned retro_api_version(void)
@@ -271,29 +293,15 @@ RR_LIBRETRO_EXPORT void retro_reset(void)
 
 RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 {
+	if (!configure_hw_render())
+		return false;
+
 	if (game == nullptr || game->path == nullptr)
 	{
 		std::string error_message;
 		g_root_path.clear();
 		g_is_loaded = g_app.retro_init(AppLaunchRequest{}, error_message);
 		return g_is_loaded;
-	}
-
-	g_hw_render = {};
-	g_hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
-	g_hw_render.context_reset = context_reset;
-	g_hw_render.context_destroy = context_destroy;
-	g_hw_render.depth = true;
-	g_hw_render.stencil = true;
-	g_hw_render.bottom_left_origin = true;
-	g_hw_render.version_major = 3;
-	g_hw_render.version_minor = 0;
-	g_hw_render.cache_context = false;
-	g_hw_render.debug_context = false;
-	if (g_environment == nullptr || !g_environment(RETRO_ENVIRONMENT_SET_HW_RENDER, &g_hw_render))
-	{
-		log_message(RETRO_LOG_ERROR, "Frontend rejected OpenGL hardware rendering.\n");
-		return false;
 	}
 
 	AppLaunchInputs launch_inputs;
