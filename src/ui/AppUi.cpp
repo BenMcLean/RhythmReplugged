@@ -213,11 +213,12 @@ namespace rhythmreplugged
 
 			const bool selected = index == browser.selected_index;
 			ImGui::PushID(index);
-			ImGui::BeginGroup();
 
 			const std::optional<ImTextureRef> row_cover_texture = actions.get_cover_texture_ref != nullptr
 				? actions.get_cover_texture_ref(entry.cover_art_path)
 				: std::nullopt;
+
+			const float row_start_y = ImGui::GetCursorPosY();
 
 			if (row_cover_texture.has_value())
 			{
@@ -225,13 +226,17 @@ namespace rhythmreplugged
 				ImGui::SameLine();
 			}
 
-			if (ImGui::Selectable(label.c_str(), selected, 0, ImVec2(0.0f, list_cover_size)) &&
+			ImGui::BeginGroup();
+			const float text_start_y = ImGui::GetCursorPosY();
+			const bool activated = ImGui::Selectable(label.c_str(), selected, 0, ImVec2(0.0f, 0.0f));
+			const bool title_hovered = ImGui::IsItemHovered();
+			if (activated &&
 				actions.set_selected_index != nullptr)
 			{
 				actions.set_selected_index(index);
 			}
 
-			if (ImGui::IsItemHovered() &&
+			if (title_hovered &&
 				ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) &&
 				actions.activate_selection != nullptr)
 			{
@@ -240,18 +245,21 @@ namespace rhythmreplugged
 
 			if (!entry.subtitle.empty())
 			{
-				ImGui::Indent();
 				ImGui::TextDisabled("%s", entry.subtitle.c_str());
-				ImGui::Unindent();
 			}
 			else if (!entry.error_message.empty())
 			{
-				ImGui::Indent();
 				ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", entry.error_message.c_str());
-				ImGui::Unindent();
+			}
+
+			const float text_block_height = ImGui::GetCursorPosY() - text_start_y;
+			if (text_block_height < list_cover_size)
+			{
+				ImGui::Dummy(ImVec2(0.0f, list_cover_size - text_block_height));
 			}
 
 			ImGui::EndGroup();
+			ImGui::SetCursorPosY(row_start_y + list_cover_size);
 			ImGui::PopID();
 		}
 		ImGui::EndChild();
