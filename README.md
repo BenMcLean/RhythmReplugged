@@ -51,12 +51,12 @@ Set `VCPKG_ROOT` to your local vcpkg checkout before configuring. That is the pa
 
 This repo keeps both desktop workflows available at the same time:
 
-- Windows configure presets: `windows-x86`, `windows-x64`
+- Windows configure presets: `windows-x64`
 - Linux configure presets: `linux-debug`, `linux-release`
 - Windows VS Code debugger: `Debug CMake Target (Windows/MSVC)`
 - Linux VS Code debugger: `Debug CMake Target (Linux/GDB)`
 
-Pick the preset and debugger that match the machine you are currently on. The same workspace can support both without removing either path.
+Choose the preset and debugger that match the machine you are currently on. The same workspace can support both without removing either path.
 
 ### Windows VS Code Quick Start
 
@@ -129,7 +129,7 @@ The first Linux configure may need a few system packages before `vcpkg` can fini
 
 These presets are meant for native builds on each platform:
 
-- use `windows-x86` or `windows-x64` on Windows
+- use `windows-x64` on Windows
 - use `linux-debug` or `linux-release` on Linux
 
 The checked-in presets expect `VCPKG_ROOT` to be defined. If you do not want to set it globally on your machine, put it in an untracked `CMakeUserPresets.json` instead.
@@ -152,22 +152,3 @@ This produces:
 - `build/windows-x64/Release/rhythmreplugged_libretro.dll`
 
 The current x64 release core builds as a single drop-in DLL without extra third-party sidecar DLLs.
-
-### First RetroArch Test
-
-1. Use a 64-bit RetroArch build.
-2. In RetroArch, load `build/windows-x64/Release/rhythmreplugged_libretro.dll` as a core.
-3. Use `Load Content`, not just `Start Core`, for the first real test path.
-4. Point RetroArch at either:
-   - a song directory containing `song.ini`, or
-   - a file inside such a song directory
-5. Make sure the song contains:
-   - `song.ini`
-   - one supported chart file: `notes.mid`, `notes.midi`, `notes.chart`, or `notes.txt`
-   - at least one supported `.ogg` stem such as `song.ogg`, `guitar.ogg`, `bass.ogg`, `drums.ogg`, etc.
-
-Current basic controls:
-
-- `Up` / `Down` browse
-- `A` or `Start` open/play
-- `B` return to the browser
