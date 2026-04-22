@@ -69,10 +69,13 @@ Choose the preset and debugger that match the machine you are currently on. The 
 ### Linux VS Code Quick Start
 
 1. Install the CMake Tools extension if prompted.
-2. Run `CMake: Select Configure Preset` and choose `linux-debug`.
-3. Run `CMake: Select Launch Target` and choose `RhythmReplugged`.
-4. Build with CMake Tools.
-5. Start debugging with `Debug CMake Target (Linux/GDB)`.
+2. Make sure `VCPKG_ROOT` points at your local vcpkg checkout before VS Code configures the project.
+3. Run `CMake: Select Configure Preset` and choose `linux-debug`.
+4. Run `CMake: Select Launch Target` and choose `RhythmReplugged`.
+5. Build with CMake Tools.
+6. Start debugging with `Debug CMake Target (Linux/GDB)`.
+
+If CMake Tools fails with a toolchain path like `/scripts/buildsystems/vcpkg.cmake`, VS Code did not inherit `VCPKG_ROOT` even if your interactive shell has it. In that case, create an untracked `CMakeUserPresets.json` that inherits from `linux-debug` or `linux-release` and sets `environment.VCPKG_ROOT` explicitly for the local machine.
 
 ### Command line build
 
@@ -90,8 +93,9 @@ The standalone SDL3 desktop host is set up to build on Linux too. The repo inclu
 ### Tools
 
 - `cmake`
-- `make`
+- `ninja` or `make`
 - a C++20 compiler such as `g++`
+- `pkg-config`
 - `vcpkg`
 - OpenGL development files for your distro
 
@@ -124,6 +128,7 @@ The first Linux configure may need a few system packages before `vcpkg` can fini
 - X11 / Xrandr / Xi / Xinerama / Xcursor development packages
 - Wayland development packages on Wayland-first distros
 - `pkg-config`
+- `ninja-build` if you want to use the checked-in Linux presets as written
 
 ## Cross-Platform Notes
 
@@ -132,7 +137,7 @@ These presets are meant for native builds on each platform:
 - use `windows-x64` on Windows
 - use `linux-debug` or `linux-release` on Linux
 
-The checked-in presets expect `VCPKG_ROOT` to be defined. If you do not want to set it globally on your machine, put it in an untracked `CMakeUserPresets.json` instead.
+The checked-in presets expect `VCPKG_ROOT` to be defined. If you do not want to set it globally on your machine, put it in an untracked `CMakeUserPresets.json` instead. That is also the safest fallback if VS Code configures with a broken toolchain path such as `/scripts/buildsystems/vcpkg.cmake`.
 
 The repo is set up so both workflows can live side by side in one checkout, but it does not currently provide a cross-compilation toolchain for producing Windows binaries from Linux or Linux binaries from Windows.
 
