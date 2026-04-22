@@ -7,8 +7,24 @@
 			"request": "launch",
 			"program": "${command:cmake.launchTargetPath}",
 			"cwd": "${workspaceFolder}",
+			"args": []
+		},
+		{
+			"name": "Debug CMake Target (Linux/GDB)",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${command:cmake.launchTargetPath}",
+			"cwd": "${workspaceFolder}",
 			"args": [],
-			"console": "integratedTerminal"
+			"MIMode": "gdb",
+			"externalConsole": false,
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				}
+			]
 		}
 	]
 }

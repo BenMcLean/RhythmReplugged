@@ -2,13 +2,9 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0091 NEW)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-	if(DEFINED ENV{VCPKG_ROOT} AND EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
-		set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-			CACHE STRING "Vcpkg toolchain file")
-	elseif(EXISTS "C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake")
-		set(CMAKE_TOOLCHAIN_FILE "C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake"
-			CACHE STRING "Vcpkg toolchain file")
-	endif()
+	message(FATAL_ERROR
+		"CMAKE_TOOLCHAIN_FILE is not set. Configure with a CMake preset after setting "
+		"VCPKG_ROOT, or define VCPKG_ROOT in CMakeUserPresets.json.")
 endif()
 
 project(RhythmReplugged LANGUAGES C CXX)
@@ -16,6 +12,8 @@ project(RhythmReplugged LANGUAGES C CXX)
 if(MSVC AND DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "-windows-static$")
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,12 +34,8 @@ find_library(IMGUI_LIBRARY_RELEASE NAMES imgui REQUIRED)
 find_library(IMGUI_LIBRARY_DEBUG NAMES imguid imgui REQUIRED)
 
 set(RR_VCPKG_ROOT "")
-if(DEFINED ENV{VCPKG_ROOT} AND EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
-	set(RR_VCPKG_ROOT "$ENV{VCPKG_ROOT}")
-elseif(CMAKE_TOOLCHAIN_FILE MATCHES [[^(.*)[/\\]scripts[/\\]buildsystems[/\\]vcpkg\.cmake$]])
+if(CMAKE_TOOLCHAIN_FILE MATCHES [[^(.*)[/\\]scripts[/\\]buildsystems[/\\]vcpkg\.cmake$]])
 	set(RR_VCPKG_ROOT "${CMAKE_MATCH_1}")
-elseif(EXISTS "C:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake")
-	set(RR_VCPKG_ROOT "C:/tools/vcpkg")
 endif()
 
 file(GLOB RR_IMGUI_SDL3_BACKEND_SOURCES
