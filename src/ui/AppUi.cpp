@@ -176,6 +176,9 @@ namespace rhythmreplugged
 		ImVec2 window_size,
 		float ui_scale)
 	{
+		int pending_selected_index = -1;
+		bool pending_activate_selection = false;
+
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
 		ImGui::Begin("Song Browser", nullptr,
@@ -233,14 +236,14 @@ namespace rhythmreplugged
 			if (activated &&
 				actions.set_selected_index != nullptr)
 			{
-				actions.set_selected_index(index);
+				pending_selected_index = index;
 			}
 
 			if (title_hovered &&
 				ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) &&
 				actions.activate_selection != nullptr)
 			{
-				actions.activate_selection();
+				pending_activate_selection = true;
 			}
 
 			if (!entry.subtitle.empty())
@@ -301,13 +304,13 @@ namespace rhythmreplugged
 				ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", selected_entry->error_message.c_str());
 		}
 
-		ImGui::EndChild();
+			ImGui::EndChild();
 
-		if (ImGui::Button("Open / Play", ImVec2(240.0f * ui_scale, 0.0f)) &&
-			actions.activate_selection != nullptr)
-		{
-			actions.activate_selection();
-		}
+			if (ImGui::Button("Open / Play", ImVec2(240.0f * ui_scale, 0.0f)) &&
+				actions.activate_selection != nullptr)
+			{
+				pending_activate_selection = true;
+			}
 
 		if (!browser.status_message.empty())
 		{
@@ -315,9 +318,21 @@ namespace rhythmreplugged
 			ImGui::TextWrapped("%s", browser.status_message.c_str());
 		}
 
-		ImGui::EndGroup();
-		ImGui::End();
-	}
+			ImGui::EndGroup();
+			ImGui::End();
+
+			if (pending_selected_index >= 0 &&
+				actions.set_selected_index != nullptr)
+			{
+				actions.set_selected_index(pending_selected_index);
+			}
+
+			if (pending_activate_selection &&
+				actions.activate_selection != nullptr)
+			{
+				actions.activate_selection();
+			}
+		}
 
 	void render_prototype_player_ui(const PrototypePlayerView &player, ImVec2 window_size)
 	{
