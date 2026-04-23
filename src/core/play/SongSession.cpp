@@ -158,6 +158,11 @@ namespace rhythmreplugged
 		return transport_.emitted_frames();
 	}
 
+	bool SongSession::playback_finished() const
+	{
+		return prototype_player_.playback_finished();
+	}
+
 	void SongSession::set_timing_offset_seconds(double offset_seconds)
 	{
 		timing_offset_seconds_ = std::clamp(offset_seconds, -0.250, 0.250);

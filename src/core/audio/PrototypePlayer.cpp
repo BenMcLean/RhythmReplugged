@@ -225,6 +225,11 @@ namespace rhythmreplugged
 		return metadata_;
 	}
 
+	bool PrototypePlayer::playback_finished() const
+	{
+		return !stems_.empty() && frame_index_ >= longest_track_frame_count();
+	}
+
 	void PrototypePlayer::render_interleaved_s16(std::int16_t *output, size_t frame_count)
 	{
 		if (output == nullptr || frame_count == 0)

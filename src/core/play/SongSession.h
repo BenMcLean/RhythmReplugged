@@ -30,6 +30,7 @@ namespace rhythmreplugged
 		float stem_target_gain(std::string_view stem_name) const;
 		int sample_rate() const;
 		size_t emitted_frames() const;
+		bool playback_finished() const;
 		void set_timing_offset_seconds(double offset_seconds);
 		double timing_offset_seconds() const;
 		PrototypePlayerView view(const std::string &status_message) const;

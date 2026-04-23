@@ -27,6 +27,7 @@ namespace rhythmreplugged
 		float stem_target_gain(std::string_view stem_name) const;
 		int sample_rate() const;
 		const SongMetadataView &metadata() const;
+		bool playback_finished() const;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
 		AudioBatch generate_audio_batch(size_t frame_count);
 

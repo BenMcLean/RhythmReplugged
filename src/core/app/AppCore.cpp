@@ -252,6 +252,12 @@ namespace rhythmreplugged
 
 	void AppCore::run_prototype_player(const RetroInputState &input_state)
 	{
+		if (song_session_.playback_finished())
+		{
+			return_to_browser_unlocked();
+			return;
+		}
+
 		if (pressed(input_state.b, previous_input_.b))
 		{
 			return_to_browser_unlocked();

@@ -160,6 +160,13 @@ namespace rhythmreplugged
 			return std::string(text.substr(start, end - start));
 		}
 
+		bool is_comment_line(std::string_view trimmed)
+		{
+			return !trimmed.empty() &&
+				(trimmed.front() == ';' || trimmed.front() == '#' ||
+					(trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '/'));
+		}
+
 		bool has_supported_image_extension(std::string_view file_name)
 		{
 			static constexpr std::array<std::string_view, 8> k_image_extensions = {
@@ -364,7 +371,7 @@ namespace rhythmreplugged
 				{
 					last_name.clear();
 				}
-				else if (trimmed.empty() || trimmed.front() == ';' || trimmed.front() == '#')
+				else if (trimmed.empty() || is_comment_line(trimmed))
 				{
 					last_name.clear();
 				}
