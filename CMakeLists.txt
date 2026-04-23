@@ -27,7 +27,6 @@ find_package(SDL3_image CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(Vorbis CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
-find_package(unofficial-inih CONFIG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS "miniaudio.h")
 find_path(IMGUI_INCLUDE_DIRS "imgui.h" REQUIRED)
 find_library(IMGUI_LIBRARY_RELEASE NAMES imgui REQUIRED)
@@ -105,7 +104,6 @@ target_link_libraries(rr_core PUBLIC
 PRIVATE
 	midifile
 	Vorbis::vorbisfile
-	unofficial::inih::libinih
 )
 
 add_library(rr_ui

@@ -1,7 +1,5 @@
 #include "core/songs/SongIni.h"
 
-#include <ini.h>
-
 #include <array>
 #include <charconv>
 #include <cctype>
@@ -256,12 +254,70 @@ namespace rhythmreplugged
 			return lookup;
 		}
 
-		std::string extract_last_song_section(std::string_view ini_text)
+		void assign_song_ini_value(SongIniMetadata &metadata, std::string_view name, std::string_view value)
 		{
-			std::string last_song_section;
-			bool collecting = false;
+			const auto &lookup = song_ini_field_lookup();
+			const auto it = lookup.find(to_lower_copy(name));
+			if (it == lookup.end())
+				return;
+
+			const SongIniFieldDefinition &definition = it->second;
+			switch (definition.type)
+			{
+			case SongIniFieldType::String:
+				metadata.set_string(definition.output_name, trim_copy(value));
+				return;
+			case SongIniFieldType::Int64:
+			{
+				std::int64_t parsed = 0;
+				try_parse_integer(value, parsed);
+				metadata.set_int64(definition.output_name, parsed);
+				return;
+			}
+			case SongIniFieldType::UInt32:
+			{
+				std::uint32_t parsed = 0;
+				try_parse_integer(value, parsed);
+				metadata.set_uint32(definition.output_name, parsed);
+				return;
+			}
+			case SongIniFieldType::Int32:
+			{
+				std::int32_t parsed = 0;
+				try_parse_integer(value, parsed);
+				metadata.set_int32(definition.output_name, parsed);
+				return;
+			}
+			case SongIniFieldType::UInt16:
+			{
+				std::uint16_t parsed = 0;
+				try_parse_integer(value, parsed);
+				metadata.set_uint16(definition.output_name, parsed);
+				return;
+			}
+			case SongIniFieldType::Int16:
+			{
+				std::int16_t parsed = 0;
+				try_parse_integer(value, parsed);
+				metadata.set_int16(definition.output_name, parsed);
+				return;
+			}
+			case SongIniFieldType::Bool:
+				metadata.set_bool(definition.output_name, try_parse_bool(value));
+				return;
+			case SongIniFieldType::Int64Pair:
+				metadata.set_int64_pair(definition.output_name, parse_int64_pair(value));
+				return;
+			}
+		}
+
+		bool parse_last_song_section(std::string_view ini_text, SongIniParseResult &result)
+		{
+			size_t last_song_start = std::string_view::npos;
+			int last_song_line = 0;
 
 			size_t line_start = 0;
+			int line_number = 1;
 			while (line_start <= ini_text.size())
 			{
 				const size_t line_end = ini_text.find('\n', line_start);
@@ -271,100 +327,79 @@ namespace rhythmreplugged
 					line.remove_suffix(1);
 
 				const std::string trimmed = trim_copy(line);
-				if (trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']')
+				if (trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']' &&
+					to_lower_copy(trimmed) == "[song]")
 				{
-					collecting = to_lower_copy(trimmed) == "[song]";
-					if (collecting)
-					{
-						last_song_section.clear();
-						last_song_section.append(trimmed);
-						last_song_section.push_back('\n');
-					}
-				}
-				else if (collecting)
-				{
-					last_song_section.append(line);
-					last_song_section.push_back('\n');
+					last_song_start = line_start;
+					last_song_line = line_number;
 				}
 
 				if (line_end == std::string_view::npos)
 					break;
 
 				line_start = line_end + 1;
+				++line_number;
 			}
 
-			return last_song_section;
-		}
+			if (last_song_start == std::string_view::npos)
+				return false;
 
-		struct SongIniParseContext
-		{
-			SongIniMetadata *metadata = nullptr;
-		};
+			result.has_song_section = true;
+			result.parsed_successfully = true;
 
-		int song_ini_handler(void *user, const char *section, const char *name, const char *value)
-		{
-			auto *context = static_cast<SongIniParseContext *>(user);
-			if (context == nullptr || context->metadata == nullptr || section == nullptr || name == nullptr || value == nullptr)
-				return 1;
+			std::string last_name;
+			line_start = last_song_start;
+			line_number = last_song_line;
 
-			if (to_lower_copy(section) != "song")
-				return 1;
-
-			const auto &lookup = song_ini_field_lookup();
-			const auto it = lookup.find(to_lower_copy(name));
-			if (it == lookup.end())
-				return 1;
-
-			const SongIniFieldDefinition &definition = it->second;
-			switch (definition.type)
+			while (line_start <= ini_text.size())
 			{
-			case SongIniFieldType::String:
-				context->metadata->set_string(definition.output_name, trim_copy(value));
-				return 1;
-			case SongIniFieldType::Int64:
-			{
-				std::int64_t parsed = 0;
-				try_parse_integer(value, parsed);
-				context->metadata->set_int64(definition.output_name, parsed);
-				return 1;
-			}
-			case SongIniFieldType::UInt32:
-			{
-				std::uint32_t parsed = 0;
-				try_parse_integer(value, parsed);
-				context->metadata->set_uint32(definition.output_name, parsed);
-				return 1;
-			}
-			case SongIniFieldType::Int32:
-			{
-				std::int32_t parsed = 0;
-				try_parse_integer(value, parsed);
-				context->metadata->set_int32(definition.output_name, parsed);
-				return 1;
-			}
-			case SongIniFieldType::UInt16:
-			{
-				std::uint16_t parsed = 0;
-				try_parse_integer(value, parsed);
-				context->metadata->set_uint16(definition.output_name, parsed);
-				return 1;
-			}
-			case SongIniFieldType::Int16:
-			{
-				std::int16_t parsed = 0;
-				try_parse_integer(value, parsed);
-				context->metadata->set_int16(definition.output_name, parsed);
-				return 1;
-			}
-			case SongIniFieldType::Bool:
-				context->metadata->set_bool(definition.output_name, try_parse_bool(value));
-				return 1;
-			case SongIniFieldType::Int64Pair:
-				context->metadata->set_int64_pair(definition.output_name, parse_int64_pair(value));
-				return 1;
+				const size_t line_end = ini_text.find('\n', line_start);
+				const size_t actual_end = line_end == std::string_view::npos ? ini_text.size() : line_end;
+				std::string_view line = ini_text.substr(line_start, actual_end - line_start);
+				if (!line.empty() && line.back() == '\r')
+					line.remove_suffix(1);
+
+				const std::string trimmed = trim_copy(line);
+				if (line_number == last_song_line)
+				{
+					last_name.clear();
+				}
+				else if (trimmed.empty() || trimmed.front() == ';' || trimmed.front() == '#')
+				{
+					last_name.clear();
+				}
+				else if (trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']')
+				{
+					break;
+				}
+				else if (!line.empty() && std::isspace(static_cast<unsigned char>(line.front())) != 0)
+				{
+					if (!last_name.empty())
+						assign_song_ini_value(result.metadata, last_name, trimmed);
+				}
+				else
+				{
+					const size_t delimiter = line.find_first_of("=:");
+					if (delimiter == std::string_view::npos)
+					{
+						result.parsed_successfully = false;
+						result.parse_error_line = line_number;
+						result.error_message = "song.ini has a parse error near line " + std::to_string(line_number) + ".";
+						return true;
+					}
+
+					last_name = trim_copy(line.substr(0, delimiter));
+					assign_song_ini_value(result.metadata, last_name, line.substr(delimiter + 1));
+				}
+
+				if (line_end == std::string_view::npos)
+					break;
+
+				line_start = line_end + 1;
+				++line_number;
 			}
 
-			return 1;
+			return true;
 		}
 	}
 
@@ -491,23 +526,11 @@ namespace rhythmreplugged
 			return result;
 		}
 
-		const std::string song_section = extract_last_song_section(*text);
-		if (song_section.empty())
+		if (!parse_last_song_section(*text, result))
 		{
 			result.error_message = "song.ini is missing a [song] section.";
 			return result;
 		}
-
-		result.has_song_section = true;
-		SongIniParseContext context{&result.metadata};
-		const int parse_code = ini_parse_string(song_section.c_str(), song_ini_handler, &context);
-		result.parsed_successfully = parse_code == 0;
-		result.parse_error_line = parse_code > 0 ? parse_code : 0;
-
-		if (parse_code < 0)
-			result.error_message = "inih failed to parse song.ini.";
-		else if (parse_code > 0)
-			result.error_message = "song.ini has a parse error near line " + std::to_string(parse_code) + ".";
 
 		return result;
 	}

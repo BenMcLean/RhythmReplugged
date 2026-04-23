@@ -5,7 +5,6 @@
 		"sdl3",
 		"sdl3-image",
 		"imgui",
-		"inih",
 		"libvorbis",
 		"miniaudio",
 		"zlib"
