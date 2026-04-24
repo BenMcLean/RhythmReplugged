@@ -176,21 +176,28 @@ namespace rhythmreplugged
 		ImVec2 window_size,
 		float ui_scale)
 	{
+		static std::string last_browser_path;
+		static int last_selected_index = -1;
+
 		int pending_selected_index = -1;
 		bool pending_activate_selection = false;
+		const std::string window_title = browser.current_path.empty()
+			? std::string("Song Browser")
+			: browser.current_path + "##Song Browser";
+		const ImGuiIO &io = ImGui::GetIO();
+		const bool browser_changed = browser.current_path != last_browser_path;
+		const bool selected_index_changed = browser.selected_index != last_selected_index;
+		const bool mouse_scrolling = io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f;
+		const bool should_follow_selection = (browser_changed || selected_index_changed) && !mouse_scrolling;
 
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
-		ImGui::Begin("Song Browser", nullptr,
+		ImGui::Begin(window_title.c_str(), nullptr,
 			ImGuiWindowFlags_NoResize |
 			ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoCollapse);
-
-		ImGui::TextUnformatted("Song Browser");
-		ImGui::Separator();
-		ImGui::TextWrapped("Enter/Space: open or play   Backspace/0: back   Up/Down: move");
-		ImGui::TextWrapped("Root: %s", browser.root_path.c_str());
-		ImGui::TextWrapped("Path: %s", browser.current_path.c_str());
+			ImGuiWindowFlags_NoCollapse |
+			ImGuiWindowFlags_NoScrollbar |
+			ImGuiWindowFlags_NoScrollWithMouse);
 
 		const ImVec2 content_region = ImGui::GetContentRegionAvail();
 		const float column_spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -202,7 +209,7 @@ namespace rhythmreplugged
 		list_width = (std::max)(list_width, min_list_width);
 		list_width = (std::min)(list_width, content_region.x);
 
-		ImGui::BeginChild("browser_list", ImVec2(list_width, 0.0f), true);
+		ImGui::BeginChild("browser_list", ImVec2(list_width, content_region.y), true);
 		for (int index = 0; index < static_cast<int>(browser.entries.size()); ++index)
 		{
 			const SongListItem &entry = browser.entries[index];
@@ -221,8 +228,6 @@ namespace rhythmreplugged
 				? actions.get_cover_texture_ref(entry.cover_art_path)
 				: std::nullopt;
 
-			const float row_start_y = ImGui::GetCursorPosY();
-
 			if (row_cover_texture.has_value())
 			{
 				ImGui::Image(*row_cover_texture, ImVec2(list_cover_size, list_cover_size));
@@ -233,6 +238,8 @@ namespace rhythmreplugged
 			const float text_start_y = ImGui::GetCursorPosY();
 			const bool activated = ImGui::Selectable(label.c_str(), selected, 0, ImVec2(0.0f, 0.0f));
 			const bool title_hovered = ImGui::IsItemHovered();
+			if (selected && should_follow_selection)
+				ImGui::SetScrollHereY(0.5f);
 			if (activated &&
 				actions.set_selected_index != nullptr)
 			{
@@ -262,7 +269,6 @@ namespace rhythmreplugged
 			}
 
 			ImGui::EndGroup();
-			ImGui::SetCursorPosY(row_start_y + list_cover_size);
 			ImGui::PopID();
 		}
 		ImGui::EndChild();
@@ -270,10 +276,13 @@ namespace rhythmreplugged
 		ImGui::SameLine();
 
 		ImGui::BeginGroup();
-		const float action_row_height =
-			ImGui::GetFrameHeightWithSpacing() +
-			(browser.status_message.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing() * 3.0f);
-		const float preview_height = (std::max)(220.0f * ui_scale, content_region.y - action_row_height);
+		const float button_height = ImGui::GetFrameHeight();
+		const float button_spacing = ImGui::GetStyle().ItemSpacing.y;
+		const float status_height = browser.status_message.empty()
+			? 0.0f
+			: ImGui::GetTextLineHeightWithSpacing() * 3.0f + button_spacing;
+		const float action_row_height = button_height + button_spacing + status_height;
+		const float preview_height = (std::max)(0.0f, content_region.y - action_row_height);
 		ImGui::BeginChild("selection_preview", ImVec2(0.0f, preview_height), true);
 		ImGui::TextUnformatted("Selection");
 		ImGui::Separator();
@@ -304,13 +313,13 @@ namespace rhythmreplugged
 				ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", selected_entry->error_message.c_str());
 		}
 
-			ImGui::EndChild();
+		ImGui::EndChild();
 
-			if (ImGui::Button("Open / Play", ImVec2(240.0f * ui_scale, 0.0f)) &&
-				actions.activate_selection != nullptr)
-			{
-				pending_activate_selection = true;
-			}
+		if (ImGui::Button("Open / Play", ImVec2(240.0f * ui_scale, 0.0f)) &&
+			actions.activate_selection != nullptr)
+		{
+			pending_activate_selection = true;
+		}
 
 		if (!browser.status_message.empty())
 		{
@@ -332,6 +341,9 @@ namespace rhythmreplugged
 			{
 				actions.activate_selection();
 			}
+
+		last_browser_path = browser.current_path;
+		last_selected_index = browser.selected_index;
 		}
 
 	void render_prototype_player_ui(const PrototypePlayerView &player, ImVec2 window_size)
