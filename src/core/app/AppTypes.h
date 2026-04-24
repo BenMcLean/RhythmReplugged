@@ -95,13 +95,25 @@ namespace rhythmreplugged
 
 	struct HighwayCameraView
 	{
-		float field_of_view_degrees = 55.0f;
-		float pitch_degrees = 17.0f;
-		float camera_height = 2.0f;
-		float camera_distance = 4.5f;
-		float visible_depth_seconds = 1.5f;
+		float field_of_view_degrees = 0.0f;
+		float pitch_degrees = 0.0f;
+		float camera_height = 0.0f;
+		float camera_distance = 0.0f;
+		float visible_depth_seconds = 0.0f;
 		float curve_amount = 0.0f;
 	};
+
+	inline HighwayCameraView make_default_guitar_camera_view()
+	{
+		HighwayCameraView camera;
+		camera.field_of_view_degrees = 55.0f;
+		camera.pitch_degrees = 28.0f;
+		camera.camera_height = 2.5f;
+		camera.camera_distance = 2.0f;
+		camera.visible_depth_seconds = 3.0f;
+		camera.curve_amount = 0.0f;
+		return camera;
+	}
 
 	struct HighwayStyleView
 	{
@@ -118,6 +130,24 @@ namespace rhythmreplugged
 		float note_height = 0.18f;
 		float sustain_width = 0.22f;
 	};
+
+	inline HighwayStyleView make_default_guitar_highway_style_view()
+	{
+		HighwayStyleView style;
+		style.lane_colors[0] = {90.0f / 255.0f, 197.0f / 255.0f, 92.0f / 255.0f, 1.0f};
+		style.lane_colors[1] = {210.0f / 255.0f, 62.0f / 255.0f, 62.0f / 255.0f, 1.0f};
+		style.lane_colors[2] = {226.0f / 255.0f, 209.0f / 255.0f, 63.0f / 255.0f, 1.0f};
+		style.lane_colors[3] = {65.0f / 255.0f, 117.0f / 255.0f, 220.0f / 255.0f, 1.0f};
+		style.lane_colors[4] = {234.0f / 255.0f, 140.0f / 255.0f, 41.0f / 255.0f, 1.0f};
+		style.lane_border_color = {48.0f / 255.0f, 58.0f / 255.0f, 74.0f / 255.0f, 1.0f};
+		style.hit_line_color = {245.0f / 255.0f, 245.0f / 255.0f, 245.0f / 255.0f, 1.0f};
+		style.sustain_color = {235.0f / 255.0f, 235.0f / 255.0f, 235.0f / 255.0f, 0.70f};
+		style.measure_line_color = {235.0f / 255.0f, 240.0f / 255.0f, 250.0f / 255.0f, 0.85f};
+		style.beat_line_color = {100.0f / 255.0f, 112.0f / 255.0f, 128.0f / 255.0f, 0.50f};
+		style.background_top_color = {18.0f / 255.0f, 24.0f / 255.0f, 34.0f / 255.0f, 1.0f};
+		style.background_bottom_color = {8.0f / 255.0f, 10.0f / 255.0f, 16.0f / 255.0f, 1.0f};
+		return style;
+	}
 
 	struct HighwayNoteView
 	{

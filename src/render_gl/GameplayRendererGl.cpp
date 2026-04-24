@@ -689,10 +689,11 @@ void main()
 			const float aspect_ratio = static_cast<float>(viewport[2]) / static_cast<float>(viewport[3]);
 			const Vec3 eye = {0.0f, player.camera.camera_height, player.camera.camera_distance};
 			const float look_pitch = radians(player.camera.pitch_degrees);
+			const float look_depth = 7.5f;
 			const Vec3 target = {
 				0.0f,
-				player.camera.camera_height - std::tan(look_pitch) * player.camera.camera_distance,
-				-4.0f,
+				player.camera.camera_height - std::tan(look_pitch) * (player.camera.camera_distance + look_depth),
+				-look_depth,
 			};
 			const Mat4 projection = perspective(radians(player.camera.field_of_view_degrees), aspect_ratio, 0.1f, 50.0f);
 			const Mat4 view = look_at(eye, target, {0.0f, 1.0f, 0.0f});
