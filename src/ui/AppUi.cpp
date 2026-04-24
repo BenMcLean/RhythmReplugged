@@ -14,135 +14,21 @@ namespace
 		IM_COL32(234, 140, 41, 255),
 	};
 
-	void draw_chart_highway(const PrototypePlayerView &player, float width, float height)
+	void draw_status_pill(const char *id, const ImVec2 &position, const char *text, ImU32 background_color)
 	{
-		ImGui::BeginChild("chart_highway_panel", ImVec2(width, height), false,
-			ImGuiWindowFlags_NoBackground);
-
-		if (!player.has_chart)
-		{
-			const ImVec2 canvas_size = ImGui::GetContentRegionAvail();
-			const ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-			ImDrawList *draw_list = ImGui::GetWindowDrawList();
-			draw_list->AddRectFilled(canvas_pos,
-				ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-				IM_COL32(11, 14, 19, 255),
-				8.0f);
-			draw_list->AddText(
-				ImVec2(canvas_pos.x + 24.0f, canvas_pos.y + 24.0f),
-				IM_COL32(215, 220, 230, 255),
-				"No supported 5-fret chart loaded.");
-			ImGui::Dummy(canvas_size);
-			ImGui::EndChild();
-			return;
-		}
-
-		const ImVec2 canvas_size = ImGui::GetContentRegionAvail();
-		const ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		(void)id;
 		ImDrawList *draw_list = ImGui::GetWindowDrawList();
-
-		draw_list->AddRectFilled(canvas_pos,
-			ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-			IM_COL32(11, 14, 19, 255),
-			8.0f);
-
-		const float lane_padding = 18.0f;
-		const float lane_count = 5.0f;
-		const float lane_width = (canvas_size.x - lane_padding * 2.0f) / lane_count;
-		const float lane_top = canvas_pos.y + 10.0f;
-		const float lane_bottom = canvas_pos.y + canvas_size.y - 10.0f;
-		const float hit_line_y = lane_bottom - 44.0f;
-		const float pixels_per_second = (hit_line_y - lane_top) / 3.0f;
-
-		for (int lane = 0; lane < 5; ++lane)
-		{
-			const float lane_left = canvas_pos.x + lane_padding + lane_width * static_cast<float>(lane);
-			const float lane_right = lane_left + lane_width;
-			const bool is_held = player.lane_held[static_cast<size_t>(lane)];
-			const bool is_sustaining = player.lane_sustaining[static_cast<size_t>(lane)];
-			draw_list->AddRectFilled(ImVec2(lane_left, lane_top), ImVec2(lane_right, lane_bottom),
-				is_held ? IM_COL32(34, 41, 54, 255) : (is_sustaining ? IM_COL32(28, 34, 45, 255) : IM_COL32(22, 27, 35, 255)));
-			draw_list->AddLine(ImVec2(lane_right, lane_top), ImVec2(lane_right, lane_bottom),
-				IM_COL32(48, 58, 74, 255), 1.0f);
-			draw_list->AddCircleFilled(
-				ImVec2((lane_left + lane_right) * 0.5f, hit_line_y),
-				(std::min)(lane_width * 0.29f, 20.0f),
-				is_held || is_sustaining ? kLaneColors[lane] : IM_COL32(36, 44, 58, 255));
-			draw_list->AddCircle(
-				ImVec2((lane_left + lane_right) * 0.5f, hit_line_y),
-				(std::min)(lane_width * 0.29f, 20.0f),
-				player.guitar_muted ? IM_COL32(230, 92, 92, 220) : (is_sustaining ? IM_COL32(255, 250, 210, 240) : IM_COL32(245, 245, 245, 220)),
-				0,
-				is_sustaining ? 3.5f : 2.5f);
-		}
-
-		draw_list->AddLine(ImVec2(canvas_pos.x + lane_padding, hit_line_y),
-			ImVec2(canvas_pos.x + canvas_size.x - lane_padding, hit_line_y),
-			IM_COL32(245, 245, 245, 255), 3.0f);
-
-		for (const PrototypePlayerView::ChartMeasureLineView &measure_line : player.visible_measure_lines)
-		{
-			const float line_y = hit_line_y - measure_line.offset_seconds * pixels_per_second;
-			if (line_y < lane_top || line_y > lane_bottom)
-				continue;
-
-			draw_list->AddLine(
-				ImVec2(canvas_pos.x + lane_padding, line_y),
-				ImVec2(canvas_pos.x + canvas_size.x - lane_padding, line_y),
-				measure_line.is_measure
-					? IM_COL32(235, 240, 250, 220)
-					: (measure_line.is_strong ? IM_COL32(170, 185, 205, 170) : IM_COL32(100, 112, 128, 110)),
-				measure_line.is_measure ? 3.0f : (measure_line.is_strong ? 2.0f : 1.0f));
-		}
-
-		for (const PrototypePlayerView::ChartNoteView &note : player.visible_chart_notes)
-		{
-			if (note.lane < 0 || note.lane >= 5)
-				continue;
-
-			const float lane_left = canvas_pos.x + lane_padding + lane_width * static_cast<float>(note.lane);
-			const float lane_right = lane_left + lane_width;
-			const float note_center_x = (lane_left + lane_right) * 0.5f;
-			const float note_y = hit_line_y - note.start_offset_seconds * pixels_per_second;
-			const float sustain_height = note.length_seconds * pixels_per_second;
-
-			if (sustain_height > 6.0f)
-			{
-				draw_list->AddRectFilled(
-					ImVec2(note_center_x - 6.0f, note_y - sustain_height),
-					ImVec2(note_center_x + 6.0f, note_y),
-					IM_COL32(235, 235, 235, 150),
-					4.0f);
-			}
-
-			draw_list->AddCircleFilled(ImVec2(note_center_x, note_y),
-				(std::min)(lane_width * 0.28f, 18.0f),
-				kLaneColors[note.lane]);
-			draw_list->AddCircle(ImVec2(note_center_x, note_y),
-				(std::min)(lane_width * 0.28f, 18.0f),
-				IM_COL32(245, 245, 245, 220),
-				0,
-				2.0f);
-		}
-
-		if (player.guitar_muted)
-		{
-			draw_list->AddRectFilled(canvas_pos,
-				ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-				IM_COL32(120, 18, 18, 40),
-				8.0f);
-		}
-
-		if (!player.status_message.empty())
-		{
-			draw_list->AddText(
-				ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + 18.0f),
-				IM_COL32(230, 235, 245, 255),
-				player.status_message.c_str());
-		}
-
-		ImGui::Dummy(canvas_size);
-		ImGui::EndChild();
+		const ImVec2 text_size = ImGui::CalcTextSize(text);
+		const ImVec2 padding(14.0f, 10.0f);
+		draw_list->AddRectFilled(
+			position,
+			ImVec2(position.x + text_size.x + padding.x * 2.0f, position.y + text_size.y + padding.y * 2.0f),
+			background_color,
+			10.0f);
+		draw_list->AddText(
+			ImVec2(position.x + padding.x, position.y + padding.y),
+			IM_COL32(235, 239, 246, 255),
+			text);
 	}
 }
 
@@ -355,9 +241,45 @@ namespace rhythmreplugged
 			ImGuiWindowFlags_NoResize |
 			ImGuiWindowFlags_NoMove |
 			ImGuiWindowFlags_NoCollapse |
-			ImGuiWindowFlags_NoTitleBar);
+			ImGuiWindowFlags_NoTitleBar |
+			ImGuiWindowFlags_NoBackground);
 
-		draw_chart_highway(player, ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
+		const ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+		ImDrawList *draw_list = ImGui::GetWindowDrawList();
+
+		std::string title = player.song_title.empty() ? "Gameplay Prototype" : player.song_title;
+		if (!player.song_artist.empty())
+			title += " - " + player.song_artist;
+
+		draw_list->AddText(
+			ImVec2(canvas_pos.x + 28.0f, canvas_pos.y + 24.0f),
+			IM_COL32(240, 243, 248, 255),
+			title.c_str());
+
+		std::string chart_label = player.has_chart
+			? (player.chart_track_name + " / " + player.chart_difficulty_name)
+			: std::string("No supported 5-fret chart loaded");
+		draw_list->AddText(
+			ImVec2(canvas_pos.x + 28.0f, canvas_pos.y + 52.0f),
+			IM_COL32(180, 188, 202, 255),
+			chart_label.c_str());
+
+		if (!player.status_message.empty())
+			draw_status_pill("player_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + 76.0f), player.status_message.c_str(), IM_COL32(16, 20, 29, 210));
+
+		if (player.guitar_muted)
+			draw_status_pill("mute_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + window_size.y - 62.0f), "Guitar muted", IM_COL32(120, 18, 18, 210));
+
+		const float indicator_y = canvas_pos.y + window_size.y - 54.0f;
+		for (int lane = 0; lane < 5; ++lane)
+		{
+			const float x = canvas_pos.x + 32.0f + static_cast<float>(lane) * 42.0f;
+			const bool active = player.lane_held[static_cast<size_t>(lane)] || player.lane_sustaining[static_cast<size_t>(lane)];
+			draw_list->AddCircleFilled(ImVec2(x, indicator_y), 14.0f, active ? kLaneColors[lane] : IM_COL32(44, 52, 67, 225));
+			draw_list->AddCircle(ImVec2(x, indicator_y), 14.0f, IM_COL32(245, 245, 245, 210), 0, active ? 3.0f : 2.0f);
+		}
+
+		ImGui::Dummy(window_size);
 
 		ImGui::End();
 		ImGui::PopStyleVar();

@@ -2,6 +2,7 @@
 #include "core/app/AppLaunch.h"
 #include "platform_sdl3/MiniaudioOutput.h"
 #include "platform_sdl3/Sdl3FileSystem.h"
+#include "render_gl/GameplayRendererGl.h"
 #include "ui/AppUiHost.h"
 
 #include <SDL3/SDL.h>
@@ -201,6 +202,20 @@ int main(int argc, char *argv[])
 	MiniaudioOutput audio_output;
 	RetroInputState held_input{};
 	OpenGlCoverTextures cover_textures;
+	GameplayRendererGl gameplay_renderer;
+	std::string gameplay_renderer_error;
+	if (!gameplay_renderer.initialize(gameplay_renderer_error))
+	{
+		std::cerr << "Gameplay renderer init failed: " << gameplay_renderer_error << "\n";
+		cover_textures.clear();
+		ImGui_ImplOpenGL3_Shutdown();
+		ImGui_ImplSDL3_Shutdown();
+		ImGui::DestroyContext();
+		SDL_GL_DestroyContext(gl_context);
+		SDL_DestroyWindow(window);
+		SDL_Quit();
+		return 1;
+	}
 
 	bool running = true;
 	Uint64 previous_counter = SDL_GetTicksNS();
@@ -289,6 +304,8 @@ int main(int argc, char *argv[])
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
 
+		gameplay_renderer.render(app.gameplay_scene_view(), drawable_width, drawable_height);
+
 		render_app_ui(
 			app,
 			ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height)),
@@ -296,9 +313,6 @@ int main(int argc, char *argv[])
 			cover_textures);
 
 		ImGui::Render();
-		glViewport(0, 0, drawable_width, drawable_height);
-		glClearColor(12.0f / 255.0f, 14.0f / 255.0f, 20.0f / 255.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		SDL_GL_SwapWindow(window);
 
@@ -310,6 +324,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	gameplay_renderer.shutdown();
 	cover_textures.clear();
 	audio_output.shutdown();
 	ImGui_ImplOpenGL3_Shutdown();

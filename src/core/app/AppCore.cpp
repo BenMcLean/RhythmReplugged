@@ -196,6 +196,83 @@ namespace rhythmreplugged
 		return song_session_.view(player_status_message_);
 	}
 
+	GameplaySceneView AppCore::gameplay_scene_view() const
+	{
+		GameplaySceneView scene;
+		scene.clear_color = {12.0f / 255.0f, 14.0f / 255.0f, 20.0f / 255.0f, 1.0f};
+
+		if (mode_ != AppMode::PrototypePlayer)
+			return scene;
+
+		const PrototypePlayerView player = prototype_player_view();
+		PlayerGameplayView gameplay_player;
+		gameplay_player.normalized_rect = {0.0f, 0.0f, 1.0f, 1.0f};
+		gameplay_player.camera.field_of_view_degrees = 55.0f;
+		gameplay_player.camera.pitch_degrees = 17.0f;
+		gameplay_player.camera.camera_height = 2.0f;
+		gameplay_player.camera.camera_distance = 4.5f;
+		gameplay_player.camera.visible_depth_seconds = 1.5f;
+		gameplay_player.camera.curve_amount = 0.0f;
+
+		HighwayStyleView style;
+		style.lane_colors[0] = {90.0f / 255.0f, 197.0f / 255.0f, 92.0f / 255.0f, 1.0f};
+		style.lane_colors[1] = {210.0f / 255.0f, 62.0f / 255.0f, 62.0f / 255.0f, 1.0f};
+		style.lane_colors[2] = {226.0f / 255.0f, 209.0f / 255.0f, 63.0f / 255.0f, 1.0f};
+		style.lane_colors[3] = {65.0f / 255.0f, 117.0f / 255.0f, 220.0f / 255.0f, 1.0f};
+		style.lane_colors[4] = {234.0f / 255.0f, 140.0f / 255.0f, 41.0f / 255.0f, 1.0f};
+		style.lane_border_color = {48.0f / 255.0f, 58.0f / 255.0f, 74.0f / 255.0f, 1.0f};
+		style.hit_line_color = {245.0f / 255.0f, 245.0f / 255.0f, 245.0f / 255.0f, 1.0f};
+		style.sustain_color = {235.0f / 255.0f, 235.0f / 255.0f, 235.0f / 255.0f, 0.70f};
+		style.measure_line_color = {235.0f / 255.0f, 240.0f / 255.0f, 250.0f / 255.0f, 0.85f};
+		style.beat_line_color = {100.0f / 255.0f, 112.0f / 255.0f, 128.0f / 255.0f, 0.50f};
+		style.background_top_color = {18.0f / 255.0f, 24.0f / 255.0f, 34.0f / 255.0f, 1.0f};
+		style.background_bottom_color = {8.0f / 255.0f, 10.0f / 255.0f, 16.0f / 255.0f, 1.0f};
+		gameplay_player.world.style = style;
+
+		InstrumentLaneView lane;
+		lane.instrument_type = HighwayInstrumentType::FiveFretGuitar;
+		lane.instrument_label = player.chart_track_name.empty() ? "Guitar" : player.chart_track_name;
+		lane.is_active = true;
+		lane.is_muted = player.guitar_muted;
+		lane.has_chart = player.has_chart;
+		lane.lane_center_x = 0.0f;
+		lane.lane_width = 5.0f;
+		lane.lane_depth_offset = 0.0f;
+		lane.lane_held = player.lane_held;
+		lane.lane_sustaining = player.lane_sustaining;
+		lane.visible_notes.reserve(player.visible_chart_notes.size());
+		for (const PrototypePlayerView::ChartNoteView &note : player.visible_chart_notes)
+		{
+			HighwayNoteView note_view;
+			note_view.lane = note.lane;
+			note_view.start_offset_seconds = note.start_offset_seconds;
+			note_view.length_seconds = note.length_seconds;
+			lane.visible_notes.push_back(note_view);
+		}
+
+		lane.visible_measure_lines.reserve(player.visible_measure_lines.size());
+		for (const PrototypePlayerView::ChartMeasureLineView &measure_line : player.visible_measure_lines)
+		{
+			HighwayMeasureLineView measure_line_view;
+			measure_line_view.offset_seconds = measure_line.offset_seconds;
+			measure_line_view.is_measure = measure_line.is_measure;
+			measure_line_view.is_strong = measure_line.is_strong;
+			lane.visible_measure_lines.push_back(measure_line_view);
+		}
+
+		gameplay_player.world.lanes.push_back(std::move(lane));
+		gameplay_player.world.focused_lane_index = 0;
+		gameplay_player.world.focus_blend = 1.0f;
+
+		gameplay_player.hud.player_label = player.song_title.empty() ? "Player 1" : player.song_title;
+		gameplay_player.hud.status_message = player.status_message;
+		gameplay_player.hud.song_time_seconds = player.song_time_seconds;
+		gameplay_player.hud.failed = false;
+
+		scene.players.push_back(std::move(gameplay_player));
+		return scene;
+	}
+
 	const AudioBatch &AppCore::audio_batch() const
 	{
 		return audio_batch_;

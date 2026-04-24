@@ -35,6 +35,7 @@ namespace rhythmreplugged
 		AppMode mode() const;
 		const SongBrowserView &song_browser_view() const;
 		PrototypePlayerView prototype_player_view() const;
+		GameplaySceneView gameplay_scene_view() const;
 		const AudioBatch &audio_batch() const;
 
 	private:

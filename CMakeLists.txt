@@ -139,6 +139,22 @@ PRIVATE
 	ZLIB::ZLIB
 )
 
+add_library(rr_render_gl
+	${RR_SRC_DIR}/render_gl/GameplayRendererGl.cpp
+	${RR_SRC_DIR}/render_gl/GameplayRendererGl.h
+)
+
+target_include_directories(rr_render_gl PUBLIC
+	${RR_SRC_DIR}
+	${RR_IMGUI_BACKEND_INCLUDE_DIR}
+)
+
+target_link_libraries(rr_render_gl PUBLIC
+	rr_core
+PRIVATE
+	OpenGL::GL
+)
+
 add_executable(RhythmReplugged
 	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.cpp
 	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.h
@@ -157,6 +173,7 @@ target_include_directories(RhythmReplugged PRIVATE
 
 target_link_libraries(RhythmReplugged PRIVATE
 	rr_core
+	rr_render_gl
 	rr_ui
 	OpenGL::GL
 	SDL3::SDL3
@@ -180,6 +197,7 @@ target_include_directories(platform_libretro PRIVATE
 
 target_link_libraries(platform_libretro PRIVATE
 	rr_core
+	rr_render_gl
 	rr_ui
 	OpenGL::GL
 )

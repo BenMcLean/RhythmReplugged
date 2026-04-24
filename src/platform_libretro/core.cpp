@@ -4,6 +4,7 @@
 #include "core/app/AppLaunch.h"
 #include "platform_libretro/ImGuiLibretroPlatform.h"
 #include "platform_libretro/NativeFileSystem.h"
+#include "render_gl/GameplayRendererGl.h"
 #include "ui/AppUiHost.h"
 
 #include <imgui.h>
@@ -51,6 +52,7 @@ namespace
 	NativeFileSystem g_file_system;
 	AppCore g_app(g_file_system);
 	OpenGlCoverTextures g_cover_textures;
+	GameplayRendererGl g_gameplay_renderer;
 	RetroInputState g_previous_input{};
 	std::string g_root_path;
 	bool g_is_loaded = false;
@@ -255,6 +257,7 @@ namespace
 	{
 		if (g_gl_ready)
 		{
+			g_gameplay_renderer.on_context_lost();
 			g_cover_textures.clear();
 			ImGui_ImplOpenGL3_Shutdown();
 			g_gl_ready = false;
@@ -277,6 +280,15 @@ namespace
 			return;
 		}
 
+		std::string renderer_error;
+		g_gameplay_renderer.on_context_restored(renderer_error);
+		if (!renderer_error.empty())
+		{
+			log_message(RETRO_LOG_ERROR, "Gameplay renderer init failed: %s\n", renderer_error.c_str());
+			ImGui_ImplOpenGL3_Shutdown();
+			return;
+		}
+
 		g_gl_ready = true;
 	}
 
@@ -285,6 +297,7 @@ namespace
 		if (!g_gl_ready)
 			return;
 
+		g_gameplay_renderer.on_context_lost();
 		g_cover_textures.clear();
 		ImGui_ImplOpenGL3_Shutdown();
 		g_gl_ready = false;
@@ -436,6 +449,7 @@ RR_LIBRETRO_EXPORT void retro_deinit(void)
 	g_pending_audio_samples.clear();
 	g_last_frame_time_usec = kNominalFrameTimeUsec;
 	g_audio_frame_time_remainder = 0;
+	g_gameplay_renderer.shutdown();
 	ImGui::DestroyContext();
 }
 
@@ -630,9 +644,7 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 		framebuffer = static_cast<GLuint>(g_hw_render.get_current_framebuffer());
 	if (g_gl_bind_framebuffer != nullptr)
 		g_gl_bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
-	glViewport(0, 0, static_cast<GLsizei>(kFrameWidth), static_cast<GLsizei>(kFrameHeight));
-	glClearColor(12.0f / 255.0f, 14.0f / 255.0f, 20.0f / 255.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
+	g_gameplay_renderer.render(g_app.gameplay_scene_view(), static_cast<int>(kFrameWidth), static_cast<int>(kFrameHeight));
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 	if (g_video_refresh != nullptr)
