@@ -9,6 +9,8 @@ namespace rhythmreplugged
 {
 	namespace
 	{
+		constexpr char kNonAlphabeticGroup = '#';
+
 		std::string to_lower_copy(std::string_view text)
 		{
 			std::string lowered;
@@ -70,6 +72,88 @@ namespace rhythmreplugged
 		selected_index_ = index;
 		rebuild_view();
 		return true;
+	}
+
+	bool SongBrowser::jump_to_next_letter()
+	{
+		const int current_index = normalize_letter_navigation_index();
+		if (current_index < 0)
+			return false;
+
+		const char current_letter = entry_letter(entries_[current_index]);
+		for (int index = current_index + 1; index < static_cast<int>(entries_.size()); ++index)
+		{
+			if (entries_[index].is_parent)
+				continue;
+
+			const char candidate_letter = entry_letter(entries_[index]);
+			if (candidate_letter == current_letter)
+				continue;
+
+			if (current_letter == kNonAlphabeticGroup || candidate_letter > current_letter)
+			{
+				selected_index_ = index;
+				rebuild_view();
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool SongBrowser::jump_to_previous_letter()
+	{
+		const int current_index = normalize_letter_navigation_index();
+		if (current_index < 0)
+			return false;
+
+		const char current_letter = entry_letter(entries_[current_index]);
+		int current_letter_start = current_index;
+		for (int index = current_index - 1; index >= 0; --index)
+		{
+			if (entries_[index].is_parent)
+				continue;
+
+			if (entry_letter(entries_[index]) != current_letter)
+				break;
+
+			current_letter_start = index;
+		}
+
+		if (current_index != current_letter_start)
+		{
+			selected_index_ = current_letter_start;
+			rebuild_view();
+			return true;
+		}
+
+		for (int index = current_letter_start - 1; index >= 0; --index)
+		{
+			if (entries_[index].is_parent)
+				continue;
+
+			const char previous_letter = entry_letter(entries_[index]);
+			if (current_letter != kNonAlphabeticGroup && previous_letter >= current_letter)
+				continue;
+
+			int previous_letter_start = index;
+			for (int scan = index - 1; scan >= 0; --scan)
+			{
+				if (entries_[scan].is_parent)
+					continue;
+
+				if (entry_letter(entries_[scan]) != previous_letter)
+					break;
+
+				previous_letter_start = scan;
+			}
+
+			selected_index_ = previous_letter_start;
+			rebuild_view();
+			return true;
+		}
+
+		return false;
 	}
 
 	bool SongBrowser::navigate_to_parent(std::string &error_message)
@@ -167,6 +251,7 @@ namespace rhythmreplugged
 			BrowserEntry parent_entry;
 			parent_entry.path = file_system_.parent_path(canonical_path);
 			parent_entry.name = "..";
+			parent_entry.sort_name = "..";
 			parent_entry.is_parent = true;
 			entries_.push_back(std::move(parent_entry));
 		}
@@ -176,6 +261,7 @@ namespace rhythmreplugged
 			BrowserEntry entry;
 			entry.path = folder.path;
 			entry.name = folder.name;
+			entry.sort_name = folder.name;
 			entry.is_folder = true;
 			entries_.push_back(std::move(entry));
 		}
@@ -184,7 +270,7 @@ namespace rhythmreplugged
 			entries_.push_back(make_song_entry(song));
 
 		current_path_ = canonical_path;
-		selected_index_ = entries_.empty() ? 0 : std::clamp(selected_index_, 0, static_cast<int>(entries_.size()) - 1);
+		selected_index_ = first_selectable_index();
 		status_message_.clear();
 		rebuild_view();
 		return true;
@@ -195,6 +281,7 @@ namespace rhythmreplugged
 		BrowserEntry entry;
 		entry.path = directory_entry.path;
 		entry.name = directory_entry.name;
+		entry.sort_name = directory_entry.name;
 		entry.is_song = true;
 
 		const SongIniParseResult parse_result = parse_song_ini(file_system_, directory_entry.path + "/song.ini");
@@ -261,6 +348,43 @@ namespace rhythmreplugged
 		}
 
 		return false;
+	}
+
+	int SongBrowser::first_selectable_index() const
+	{
+		if (entries_.empty())
+			return 0;
+
+		return entries_.front().is_parent && entries_.size() > 1 ? 1 : 0;
+	}
+
+	int SongBrowser::normalize_letter_navigation_index() const
+	{
+		if (entries_.empty())
+			return -1;
+
+		if (selected_index_ >= 0 && selected_index_ < static_cast<int>(entries_.size()) && !entries_[selected_index_].is_parent)
+			return selected_index_;
+
+		for (int index = 0; index < static_cast<int>(entries_.size()); ++index)
+		{
+			if (!entries_[index].is_parent)
+				return index;
+		}
+
+		return -1;
+	}
+
+	char SongBrowser::entry_letter(const BrowserEntry &entry)
+	{
+		for (char ch : entry.sort_name)
+		{
+			const unsigned char unsigned_ch = static_cast<unsigned char>(ch);
+			if (std::isalpha(unsigned_ch))
+				return static_cast<char>(std::toupper(unsigned_ch));
+		}
+
+		return kNonAlphabeticGroup;
 	}
 
 	void SongBrowser::rebuild_view()

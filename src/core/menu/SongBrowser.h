@@ -18,6 +18,8 @@ namespace rhythmreplugged
 		void clear_root(std::string status_message);
 		bool move_selection(int delta);
 		bool set_selected_index(int index);
+		bool jump_to_next_letter();
+		bool jump_to_previous_letter();
 		bool navigate_to_parent(std::string &error_message);
 		bool activate_selected(std::string &selected_song_path, std::string &error_message);
 		void clear_status_message();
@@ -30,6 +32,7 @@ namespace rhythmreplugged
 		{
 			std::string path;
 			std::string name;
+			std::string sort_name;
 			std::string subtitle;
 			std::string cover_art_path;
 			std::string error_message;
@@ -43,6 +46,9 @@ namespace rhythmreplugged
 		BrowserEntry make_song_entry(const RetroDirectoryEntry &directory_entry) const;
 		bool contains_supported_chart(const std::string &directory_path) const;
 		bool contains_supported_audio(const std::string &directory_path) const;
+		int first_selectable_index() const;
+		int normalize_letter_navigation_index() const;
+		static char entry_letter(const BrowserEntry &entry);
 		void rebuild_view();
 
 		IRetroFileSystem &file_system_;

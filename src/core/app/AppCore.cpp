@@ -291,21 +291,31 @@ namespace rhythmreplugged
 
 	void AppCore::run_song_browser(const RetroInputState &input_state)
 	{
+		if (pressed(input_state.b, previous_input_.b))
+		{
+			std::string error_message;
+			if (!song_browser_.navigate_to_parent(error_message) && !error_message.empty())
+				song_browser_.set_status_message(error_message);
+			return;
+		}
+
+		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.start, previous_input_.start))
+		{
+			activate_browser_selection_unlocked();
+			return;
+		}
+
 		if (pressed(input_state.up, previous_input_.up))
 			song_browser_.move_selection(-1);
 
 		if (pressed(input_state.down, previous_input_.down))
 			song_browser_.move_selection(1);
 
-		if (pressed(input_state.b, previous_input_.b))
-		{
-			std::string error_message;
-			if (!song_browser_.navigate_to_parent(error_message) && !error_message.empty())
-				song_browser_.set_status_message(error_message);
-		}
+		if (pressed(input_state.l, previous_input_.l))
+			song_browser_.jump_to_previous_letter();
 
-		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.start, previous_input_.start))
-			activate_browser_selection_unlocked();
+		if (pressed(input_state.r, previous_input_.r))
+			song_browser_.jump_to_next_letter();
 	}
 
 	void AppCore::run_prototype_player(const RetroInputState &input_state)

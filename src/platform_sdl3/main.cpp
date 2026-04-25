@@ -95,7 +95,7 @@ namespace
 
 int main(int argc, char *argv[])
 {
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD))
 	{
 		std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
 		return 1;
@@ -201,6 +201,7 @@ int main(int argc, char *argv[])
 
 	MiniaudioOutput audio_output;
 	RetroInputState held_input{};
+	std::unordered_map<SDL_JoystickID, SDL_Gamepad *> open_gamepads;
 	OpenGlCoverTextures cover_textures;
 	GameplayRendererGl gameplay_renderer;
 	std::string gameplay_renderer_error;
@@ -220,6 +221,34 @@ int main(int argc, char *argv[])
 	bool running = true;
 	Uint64 previous_counter = SDL_GetTicksNS();
 	Uint64 retro_time_accumulator = 0;
+	auto open_gamepad = [&](SDL_JoystickID instance_id)
+	{
+		if (open_gamepads.contains(instance_id))
+			return;
+
+		SDL_Gamepad *gamepad = SDL_OpenGamepad(instance_id);
+		if (gamepad != nullptr)
+			open_gamepads.emplace(instance_id, gamepad);
+	};
+	auto close_gamepad = [&](SDL_JoystickID instance_id)
+	{
+		const auto it = open_gamepads.find(instance_id);
+		if (it == open_gamepads.end())
+			return;
+
+		SDL_CloseGamepad(it->second);
+		open_gamepads.erase(it);
+	};
+
+	int gamepad_count = 0;
+	SDL_JoystickID *gamepad_ids = SDL_GetGamepads(&gamepad_count);
+	if (gamepad_ids != nullptr)
+	{
+		for (int index = 0; index < gamepad_count; ++index)
+			open_gamepad(gamepad_ids[index]);
+		SDL_free(gamepad_ids);
+	}
+
 	while (running)
 	{
 		const Uint64 current_counter = SDL_GetTicksNS();
@@ -237,6 +266,59 @@ int main(int argc, char *argv[])
 			if (event.type == SDL_EVENT_QUIT)
 			{
 				running = false;
+			}
+			else if (event.type == SDL_EVENT_GAMEPAD_ADDED)
+			{
+				open_gamepad(event.gdevice.which);
+			}
+			else if (event.type == SDL_EVENT_GAMEPAD_REMOVED)
+			{
+				close_gamepad(event.gdevice.which);
+			}
+			else if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || event.type == SDL_EVENT_GAMEPAD_BUTTON_UP)
+			{
+				const bool is_down = event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+				switch (static_cast<SDL_GamepadButton>(event.gbutton.button))
+				{
+				case SDL_GAMEPAD_BUTTON_DPAD_UP:
+					held_input.up = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+					held_input.down = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+					held_input.left = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+					held_input.right = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_SOUTH:
+					held_input.a = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_EAST:
+					held_input.b = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_WEST:
+					held_input.x = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_NORTH:
+					held_input.y = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_BACK:
+					held_input.select = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_START:
+					held_input.start = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
+					held_input.l = is_down;
+					break;
+				case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
+					held_input.r = is_down;
+					break;
+				default:
+					break;
+				}
 			}
 			else if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
 			{
@@ -258,6 +340,10 @@ int main(int argc, char *argv[])
 					held_input.x = is_down;
 				else if (scancode == SDL_SCANCODE_Y)
 					held_input.y = is_down;
+				else if (scancode == SDL_SCANCODE_LEFTBRACKET)
+					held_input.l = is_down;
+				else if (scancode == SDL_SCANCODE_RIGHTBRACKET)
+					held_input.r = is_down;
 				else if (scancode == SDL_SCANCODE_1)
 					held_input.lane_1 = is_down;
 				else if (scancode == SDL_SCANCODE_2)
@@ -323,6 +409,9 @@ int main(int argc, char *argv[])
 			SDL_DelayPrecise(remaining_ns);
 		}
 	}
+
+	for (const auto &[instance_id, gamepad] : open_gamepads)
+		SDL_CloseGamepad(gamepad);
 
 	gameplay_renderer.shutdown();
 	cover_textures.clear();
