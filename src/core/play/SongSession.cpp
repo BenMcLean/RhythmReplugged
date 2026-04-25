@@ -32,9 +32,25 @@ namespace rhythmreplugged::core
 		const GameplayOptions &options,
 		std::string &error_message)
 	{
+		return load_preloaded(file_system, song_directory, {}, options, error_message);
+	}
+
+	bool SongSession::load_preloaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+		const std::string &song_directory,
+		PrototypePlayer::PreloadedSongData preloaded_song_data,
+		const GameplayOptions &options,
+		std::string &error_message)
+	{
 		unload();
-		if (!prototype_player_.load(file_system, song_directory, error_message))
+		if (!preloaded_song_data.stems.empty())
+		{
+			if (!prototype_player_.load_preloaded(std::move(preloaded_song_data), error_message))
+				return false;
+		}
+		else if (!prototype_player_.load(file_system, song_directory, error_message))
+		{
 			return false;
+		}
 
 		std::string chart_error_message;
 		midi_chart_.load(file_system, song_directory, to_midi_chart_difficulty(options.difficulty()), chart_error_message);

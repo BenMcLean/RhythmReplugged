@@ -13,13 +13,15 @@ namespace rhythmreplugged::core
 	class BackgroundWorker
 	{
 	public:
+		static size_t automatic_thread_count(size_t job_count_hint = 0);
+
 		BackgroundWorker() = default;
 		~BackgroundWorker();
 
 		BackgroundWorker(const BackgroundWorker &) = delete;
 		BackgroundWorker &operator=(const BackgroundWorker &) = delete;
 
-		void start(size_t thread_count = 1);
+		void start(size_t thread_count = 0);
 		void stop();
 		void clear_pending();
 		bool enqueue(std::function<void()> job);

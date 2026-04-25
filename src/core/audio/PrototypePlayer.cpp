@@ -11,6 +11,7 @@ namespace rhythmreplugged::core
 	namespace
 	{
 		constexpr float kStemFadeDurationSeconds = 0.012f;
+		constexpr size_t kProgressReportBytes = 1024u * 1024u;
 
 		std::string folder_name_from_path(const std::string &path)
 		{
@@ -110,7 +111,23 @@ namespace rhythmreplugged::core
 
 	bool PrototypePlayer::load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
 	{
-		unload();
+		PreloadedSongData preloaded_song_data;
+		if (!preload(file_system, song_directory, preloaded_song_data, error_message))
+			return false;
+		return load_preloaded(std::move(preloaded_song_data), error_message);
+	}
+
+	bool PrototypePlayer::load_preloaded(PreloadedSongData preloaded_song_data, std::string &error_message)
+	{
+		return adopt_preloaded(std::move(preloaded_song_data), error_message);
+	}
+
+	bool PrototypePlayer::preload(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+		const std::string &song_directory,
+		PreloadedSongData &preloaded_song_data,
+		std::string &error_message)
+	{
+		preloaded_song_data = {};
 
 		const SongIniParseResult parse_result = parse_song_ini(file_system, song_directory + "/song.ini");
 		if (!parse_result.has_song_section || !parse_result.parsed_successfully)
@@ -119,12 +136,10 @@ namespace rhythmreplugged::core
 			return false;
 		}
 
-		metadata_ = make_song_metadata_view(parse_result.metadata, folder_name_from_path(song_directory));
+		preloaded_song_data.metadata = make_song_metadata_view(parse_result.metadata, folder_name_from_path(song_directory));
+		preloaded_song_data.stems.clear();
+		preloaded_song_data.stems.reserve(kPlayableStemNames.size());
 
-		stems_.clear();
-		stems_.reserve(kPlayableStemNames.size());
-
-		int session_sample_rate = 0;
 		for (std::string_view stem_name : kPlayableStemNames)
 		{
 			const std::string stem_path = song_directory + "/" + std::string(stem_name) + ".ogg";
@@ -132,41 +147,24 @@ namespace rhythmreplugged::core
 			if (!stem_bytes.has_value())
 				continue;
 
-			StemTrack track;
+			PreloadedStemTrack track;
 			track.stem_name = stem_name;
-			if (!decode_vorbis(*stem_bytes, track, error_message))
+			if (!decode_preloaded_stem(*stem_bytes, track, error_message))
 			{
 				error_message = "Failed to decode " + std::string(stem_name) + ".ogg: " + error_message;
-				unload();
+				preloaded_song_data = {};
 				return false;
 			}
 
-			if (track.channels != 1 && track.channels != 2)
-			{
-				error_message = std::string(stem_name) + ".ogg must be mono or stereo.";
-				unload();
-				return false;
-			}
-
-			if (session_sample_rate == 0)
-				session_sample_rate = track.sample_rate;
-			else if (track.sample_rate != session_sample_rate)
-			{
-				error_message = "All loaded OGG stems must share the same sample rate.";
-				unload();
-				return false;
-			}
-
-			stems_.push_back(std::move(track));
+			preloaded_song_data.stems.push_back(std::move(track));
 		}
 
-		if (stems_.empty())
+		if (preloaded_song_data.stems.empty())
 		{
 			error_message = "Could not find any supported .ogg stems.";
 			return false;
 		}
 
-		frame_index_ = 0;
 		return true;
 	}
 
@@ -272,7 +270,18 @@ namespace rhythmreplugged::core
 		return batch;
 	}
 
-	bool PrototypePlayer::decode_vorbis(const std::vector<std::uint8_t> &bytes, StemTrack &track, std::string &error_message)
+	bool PrototypePlayer::decode_preloaded_stem(const std::vector<std::uint8_t> &bytes,
+		PreloadedStemTrack &track,
+		std::string &error_message,
+		const DecodeProgressCallback &progress_callback)
+	{
+		return decode_vorbis(bytes, track, error_message, progress_callback);
+	}
+
+	bool PrototypePlayer::decode_vorbis(const std::vector<std::uint8_t> &bytes,
+		PreloadedStemTrack &track,
+		std::string &error_message,
+		const DecodeProgressCallback &progress_callback)
 	{
 		MemoryVorbisSource source{
 			.bytes = bytes.data(),
@@ -287,6 +296,7 @@ namespace rhythmreplugged::core
 		}
 
 		bool success = false;
+		size_t last_reported_offset = 0;
 		do
 		{
 			vorbis_info *info = ov_info(&vorbis_file, -1);
@@ -310,6 +320,8 @@ namespace rhythmreplugged::core
 				const long frames_read = ov_read_float(&vorbis_file, &pcm_channels, 4096, nullptr);
 				if (frames_read == 0)
 				{
+					if (progress_callback)
+						progress_callback(bytes.size(), bytes.size());
 					success = true;
 					break;
 				}
@@ -331,6 +343,12 @@ namespace rhythmreplugged::core
 							pcm_channels[channel][frame];
 					}
 				}
+
+				if (progress_callback && (source.offset >= last_reported_offset + kProgressReportBytes || source.offset == bytes.size()))
+				{
+					last_reported_offset = source.offset;
+					progress_callback(source.offset, bytes.size());
+				}
 			}
 		}
 		while (false);
@@ -338,6 +356,51 @@ namespace rhythmreplugged::core
 		ov_clear(&vorbis_file);
 		track.frame_count = track.channels > 0 ? track.samples.size() / static_cast<size_t>(track.channels) : 0;
 		return success;
+	}
+
+	bool PrototypePlayer::adopt_preloaded(PreloadedSongData preloaded_song_data, std::string &error_message)
+	{
+		unload();
+		metadata_ = std::move(preloaded_song_data.metadata);
+		stems_.clear();
+		stems_.reserve(preloaded_song_data.stems.size());
+
+		int session_sample_rate = 0;
+		for (PreloadedStemTrack &preloaded_track : preloaded_song_data.stems)
+		{
+			if (preloaded_track.channels != 1 && preloaded_track.channels != 2)
+			{
+				error_message = preloaded_track.stem_name + ".ogg must be mono or stereo.";
+				unload();
+				return false;
+			}
+
+			if (session_sample_rate == 0)
+				session_sample_rate = preloaded_track.sample_rate;
+			else if (preloaded_track.sample_rate != session_sample_rate)
+			{
+				error_message = "All loaded OGG stems must share the same sample rate.";
+				unload();
+				return false;
+			}
+
+			StemTrack track;
+			track.stem_name = std::move(preloaded_track.stem_name);
+			track.samples = std::move(preloaded_track.samples);
+			track.channels = preloaded_track.channels;
+			track.sample_rate = preloaded_track.sample_rate;
+			track.frame_count = preloaded_track.frame_count;
+			stems_.push_back(std::move(track));
+		}
+
+		if (stems_.empty())
+		{
+			error_message = "Could not find any supported .ogg stems.";
+			return false;
+		}
+
+		frame_index_ = 0;
+		return true;
 	}
 
 	PrototypePlayer::StemTrack *PrototypePlayer::find_stem(std::string_view stem_name)

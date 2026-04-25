@@ -4,6 +4,22 @@
 
 namespace rhythmreplugged::core
 {
+	size_t BackgroundWorker::automatic_thread_count(size_t job_count_hint)
+	{
+		size_t thread_count = std::thread::hardware_concurrency();
+		if (thread_count == 0)
+			thread_count = 1;
+
+		if (thread_count > 2)
+			--thread_count;
+
+		thread_count = std::min(thread_count, static_cast<size_t>(4));
+		if (job_count_hint > 0)
+			thread_count = std::min(thread_count, job_count_hint);
+
+		return std::max(thread_count, static_cast<size_t>(1));
+	}
+
 	BackgroundWorker::~BackgroundWorker()
 	{
 		stop();
@@ -12,7 +28,7 @@ namespace rhythmreplugged::core
 	void BackgroundWorker::start(size_t thread_count)
 	{
 		if (thread_count == 0)
-			thread_count = 1;
+			thread_count = automatic_thread_count();
 
 		std::scoped_lock lock(mutex_);
 		if (!threads_.empty())

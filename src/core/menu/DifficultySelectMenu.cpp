@@ -7,6 +7,8 @@ namespace rhythmreplugged::core
 {
 	namespace
 	{
+		constexpr size_t kBytesPerMegabyte = 1024u * 1024u;
+
 		struct DifficultyDefinition
 		{
 			DifficultyOption difficulty;
@@ -58,6 +60,26 @@ namespace rhythmreplugged::core
 	{
 		status_message_ = std::move(message);
 		rebuild_view();
+	}
+
+	void DifficultySelectMenu::set_preload_progress(
+		bool preload_in_progress,
+		bool preload_ready,
+		bool show_loading_modal,
+		float preload_progress,
+		size_t preload_processed_bytes,
+		size_t preload_total_bytes,
+		size_t completed_stem_count,
+		size_t total_stem_count)
+	{
+		cached_view_.preload_in_progress = preload_in_progress;
+		cached_view_.preload_ready = preload_ready;
+		cached_view_.show_loading_modal = show_loading_modal;
+		cached_view_.preload_progress = preload_progress;
+		cached_view_.preload_processed_megabytes = preload_processed_bytes / kBytesPerMegabyte;
+		cached_view_.preload_total_megabytes = (preload_total_bytes + kBytesPerMegabyte - 1) / kBytesPerMegabyte;
+		cached_view_.completed_stem_count = completed_stem_count;
+		cached_view_.total_stem_count = total_stem_count;
 	}
 
 	void DifficultySelectMenu::apply_to(GameplayOptions &options) const

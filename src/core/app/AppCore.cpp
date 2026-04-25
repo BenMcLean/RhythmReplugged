@@ -8,7 +8,8 @@ namespace rhythmreplugged::core
 {
 	AppCore::AppCore(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system)
 		: file_system_(file_system),
-		  song_browser_(file_system)
+		  song_browser_(file_system),
+		  song_preloader_(file_system)
 	{
 	}
 
@@ -30,6 +31,8 @@ namespace rhythmreplugged::core
 		player_status_message_.clear();
 		pending_song_path_.clear();
 		pending_gameplay_options_ = GameplayOptions{};
+		waiting_for_song_preload_ = false;
+		song_preloader_.cancel();
 		if (launch_request.songs_root_path.empty())
 		{
 			song_browser_.clear_root("No songs root is configured. Load a folder or song file from your library.");
@@ -62,6 +65,7 @@ namespace rhythmreplugged::core
 		switch (mode_)
 		{
 		case AppMode::Menu:
+			refresh_difficulty_preload_state();
 			run_menu(input_state);
 			break;
 		case AppMode::Gameplay:
@@ -86,6 +90,8 @@ namespace rhythmreplugged::core
 		player_status_message_.clear();
 		pending_song_path_.clear();
 		pending_gameplay_options_ = GameplayOptions{};
+		waiting_for_song_preload_ = false;
+		song_preloader_.cancel();
 	}
 
 	void AppCore::set_audio_batch_enabled(bool enabled)
@@ -147,17 +153,46 @@ namespace rhythmreplugged::core
 
 		std::string error_message;
 		difficulty_select_menu_.apply_to(pending_gameplay_options_);
-		if (song_session_.load(file_system_, pending_song_path_, pending_gameplay_options_, error_message))
+		if (!try_finish_song_preload(error_message))
 		{
-			mode_ = AppMode::Gameplay;
-			session_unload_pending_ = false;
-			player_status_message_.clear();
-			difficulty_select_menu_.clear_status_message();
-			return true;
+			if (error_message.empty())
+			{
+				waiting_for_song_preload_ = true;
+				refresh_difficulty_preload_state();
+				return true;
+			}
+
+			difficulty_select_menu_.set_status_message(error_message);
+			refresh_difficulty_preload_state();
+			return false;
 		}
 
-		difficulty_select_menu_.set_status_message(error_message);
-		return false;
+		waiting_for_song_preload_ = false;
+		mode_ = AppMode::Gameplay;
+		session_unload_pending_ = false;
+		player_status_message_.clear();
+		difficulty_select_menu_.clear_status_message();
+		refresh_difficulty_preload_state();
+		return true;
+	}
+
+	bool AppCore::try_finish_song_preload(std::string &error_message)
+	{
+		error_message.clear();
+		PrototypePlayer::PreloadedSongData preloaded_song_data;
+		std::string preloaded_song_path;
+		if (!song_preloader_.try_take_ready_data(preloaded_song_path, preloaded_song_data))
+		{
+			const SongPreloadStatus preload_status = song_preloader_.status();
+			if (preload_status.failed)
+				error_message = preload_status.error_message.empty() ? "Song preload failed." : preload_status.error_message;
+			return false;
+		}
+
+		if (preloaded_song_path != pending_song_path_)
+			return false;
+
+		return song_session_.load_preloaded(file_system_, pending_song_path_, std::move(preloaded_song_data), pending_gameplay_options_, error_message);
 	}
 
 	bool AppCore::begin_song_activation(const std::string &selected_song_path)
@@ -169,12 +204,34 @@ namespace rhythmreplugged::core
 
 		pending_song_path_ = selected_song_path;
 		pending_gameplay_options_ = GameplayOptions{};
+		waiting_for_song_preload_ = false;
+		song_preloader_.begin(selected_song_path);
 		menu_screen_ = MenuScreen::DifficultySelect;
 		difficulty_select_menu_.open(
 			selected_entry != nullptr ? selected_entry->label : std::string(),
 			selected_entry != nullptr ? selected_entry->subtitle : std::string(),
 			pending_gameplay_options_);
+		refresh_difficulty_preload_state();
 		return true;
+	}
+
+	void AppCore::refresh_difficulty_preload_state()
+	{
+		const SongPreloadStatus preload_status = song_preloader_.status();
+		const float preload_progress = preload_status.total_bytes == 0
+			? 0.0f
+			: static_cast<float>(preload_status.processed_bytes) / static_cast<float>(preload_status.total_bytes);
+		difficulty_select_menu_.set_preload_progress(
+			preload_status.active,
+			preload_status.ready,
+			waiting_for_song_preload_,
+			std::clamp(preload_progress, 0.0f, 1.0f),
+			preload_status.processed_bytes,
+			preload_status.total_bytes,
+			preload_status.completed_stem_count,
+			preload_status.total_stem_count);
+		if (preload_status.failed && !preload_status.error_message.empty())
+			difficulty_select_menu_.set_status_message(preload_status.error_message);
 	}
 
 	void AppCore::return_to_browser()
@@ -189,6 +246,8 @@ namespace rhythmreplugged::core
 		session_unload_pending_ = true;
 		player_status_message_.clear();
 		pending_song_path_.clear();
+		waiting_for_song_preload_ = false;
+		song_preloader_.cancel();
 	}
 
 	void AppCore::toggle_player_guitar_mute()
@@ -392,9 +451,40 @@ namespace rhythmreplugged::core
 	{
 		if (pressed(input_state.b, previous_input_.b))
 		{
+			if (waiting_for_song_preload_)
+			{
+				waiting_for_song_preload_ = false;
+				refresh_difficulty_preload_state();
+				return;
+			}
+
 			menu_screen_ = MenuScreen::SongBrowser;
 			pending_song_path_.clear();
+			waiting_for_song_preload_ = false;
+			song_preloader_.cancel();
 			difficulty_select_menu_.clear_status_message();
+			refresh_difficulty_preload_state();
+			return;
+		}
+
+		if (waiting_for_song_preload_)
+		{
+			std::string error_message;
+			if (try_finish_song_preload(error_message))
+			{
+				waiting_for_song_preload_ = false;
+				mode_ = AppMode::Gameplay;
+				session_unload_pending_ = false;
+				player_status_message_.clear();
+				difficulty_select_menu_.clear_status_message();
+			}
+			else if (!error_message.empty())
+			{
+				waiting_for_song_preload_ = false;
+				difficulty_select_menu_.set_status_message(error_message);
+			}
+
+			refresh_difficulty_preload_state();
 			return;
 		}
 

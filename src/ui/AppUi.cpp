@@ -31,6 +31,33 @@ namespace
 			IM_COL32(235, 239, 246, 255),
 			text);
 	}
+
+	void render_preload_progress_overlay(const DifficultySelectView &menu, ImVec2 window_size, float ui_scale)
+	{
+		if (!menu.preload_in_progress && !menu.preload_ready)
+			return;
+
+		const ImVec2 overlay_size(320.0f * ui_scale, 92.0f * ui_scale);
+		ImGui::SetNextWindowPos(
+			ImVec2(window_size.x - overlay_size.x - 24.0f * ui_scale, window_size.y - overlay_size.y - 24.0f * ui_scale),
+			ImGuiCond_Always);
+		ImGui::SetNextWindowSize(overlay_size, ImGuiCond_Always);
+		ImGui::Begin("Stem Preload Overlay", nullptr,
+			ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse |
+			ImGuiWindowFlags_NoTitleBar);
+
+		ImGui::TextUnformatted(menu.preload_ready ? "Song Ready" : "Loading Stems");
+		ImGui::ProgressBar(menu.preload_progress, ImVec2(-1.0f, 0.0f));
+		ImGui::TextDisabled(
+			"%zu / %zu stems   %zu / %zu MiB",
+			menu.completed_stem_count,
+			menu.total_stem_count,
+			menu.preload_processed_megabytes,
+			menu.preload_total_megabytes);
+		ImGui::End();
+	}
 }
 
 namespace rhythmreplugged::ui
@@ -286,6 +313,29 @@ namespace rhythmreplugged::ui
 		ImGui::Spacing();
 		ImGui::TextDisabled("B: Back    A / Start: Confirm");
 		ImGui::End();
+
+		render_preload_progress_overlay(menu, window_size, ui_scale);
+
+		if (menu.show_loading_modal)
+		{
+			ImGui::OpenPopup("Get ready to rock!");
+			ImGui::SetNextWindowPos(ImVec2(window_size.x * 0.5f, window_size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+			if (ImGui::BeginPopupModal("Get ready to rock!", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::TextUnformatted("Get ready to rock!");
+				ImGui::Spacing();
+				ImGui::ProgressBar(menu.preload_progress, ImVec2(360.0f * ui_scale, 0.0f));
+				ImGui::TextDisabled(
+					"%zu / %zu stems   %zu / %zu MiB",
+					menu.completed_stem_count,
+					menu.total_stem_count,
+					menu.preload_processed_megabytes,
+					menu.preload_total_megabytes);
+				ImGui::Spacing();
+				ImGui::TextDisabled("Press B to cancel.");
+				ImGui::EndPopup();
+			}
+		}
 
 		if (pending_selected_index >= 0 &&
 			actions.set_selected_index != nullptr)

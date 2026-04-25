@@ -14,6 +14,15 @@ namespace rhythmreplugged::core
 		bool set_selected_index(int index);
 		void clear_status_message();
 		void set_status_message(std::string message);
+		void set_preload_progress(
+			bool preload_in_progress,
+			bool preload_ready,
+			bool show_loading_modal,
+			float preload_progress,
+			size_t preload_processed_bytes,
+			size_t preload_total_bytes,
+			size_t completed_stem_count,
+			size_t total_stem_count);
 		void apply_to(GameplayOptions &options) const;
 		const DifficultySelectView &view() const;
 

@@ -92,6 +92,8 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/play/AudioMixer.h
 	${RR_SRC_DIR}/core/play/GameplayOptions.cpp
 	${RR_SRC_DIR}/core/play/GameplayOptions.h
+	${RR_SRC_DIR}/core/play/SongPreloader.cpp
+	${RR_SRC_DIR}/core/play/SongPreloader.h
 	${RR_SRC_DIR}/core/play/SongSession.cpp
 	${RR_SRC_DIR}/core/play/SongSession.h
 	${RR_SRC_DIR}/core/play/Transport.cpp
