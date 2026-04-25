@@ -162,7 +162,8 @@ namespace rhythmreplugged
 		if (root_path_.empty() || current_path_.empty() || current_path_ == root_path_)
 			return false;
 
-		return load_directory(file_system_.parent_path(current_path_), error_message);
+		const std::string previous_path = current_path_;
+		return load_directory(file_system_.parent_path(current_path_), error_message, &previous_path);
 	}
 
 	bool SongBrowser::activate_selected(std::string &selected_song_path, std::string &error_message)
@@ -209,7 +210,7 @@ namespace rhythmreplugged
 		return cached_view_;
 	}
 
-	bool SongBrowser::load_directory(const std::string &path, std::string &error_message)
+	bool SongBrowser::load_directory(const std::string &path, std::string &error_message, const std::string *preferred_selected_path)
 	{
 		const std::string canonical_path = file_system_.canonicalize_path(path);
 		if (canonical_path.empty() || !file_system_.path_is_directory(canonical_path))
@@ -271,6 +272,12 @@ namespace rhythmreplugged
 
 		current_path_ = canonical_path;
 		selected_index_ = first_selectable_index();
+		if (preferred_selected_path != nullptr && !preferred_selected_path->empty())
+		{
+			const int preferred_index = find_entry_index_by_path(*preferred_selected_path);
+			if (preferred_index >= 0)
+				selected_index_ = preferred_index;
+		}
 		status_message_.clear();
 		rebuild_view();
 		return true;
@@ -356,6 +363,21 @@ namespace rhythmreplugged
 			return 0;
 
 		return entries_.front().is_parent && entries_.size() > 1 ? 1 : 0;
+	}
+
+	int SongBrowser::find_entry_index_by_path(const std::string &path) const
+	{
+		const std::string canonical_path = file_system_.canonicalize_path(path);
+		if (canonical_path.empty())
+			return -1;
+
+		for (int index = 0; index < static_cast<int>(entries_.size()); ++index)
+		{
+			if (entries_[index].path == canonical_path)
+				return index;
+		}
+
+		return -1;
 	}
 
 	int SongBrowser::normalize_letter_navigation_index() const

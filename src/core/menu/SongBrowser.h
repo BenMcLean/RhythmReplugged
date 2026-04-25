@@ -42,11 +42,12 @@ namespace rhythmreplugged
 			bool is_valid_song = false;
 		};
 
-		bool load_directory(const std::string &path, std::string &error_message);
+		bool load_directory(const std::string &path, std::string &error_message, const std::string *preferred_selected_path = nullptr);
 		BrowserEntry make_song_entry(const RetroDirectoryEntry &directory_entry) const;
 		bool contains_supported_chart(const std::string &directory_path) const;
 		bool contains_supported_audio(const std::string &directory_path) const;
 		int first_selectable_index() const;
+		int find_entry_index_by_path(const std::string &path) const;
 		int normalize_letter_navigation_index() const;
 		static char entry_letter(const BrowserEntry &entry);
 		void rebuild_view();
