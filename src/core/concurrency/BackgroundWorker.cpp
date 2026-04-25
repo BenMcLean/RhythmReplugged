@@ -49,6 +49,8 @@ namespace rhythmreplugged::core
 				return;
 
 			stop_requested_ = true;
+			std::queue<std::function<void()>> empty_high_priority_jobs;
+			high_priority_jobs_.swap(empty_high_priority_jobs);
 			std::queue<std::function<void()>> empty_jobs;
 			jobs_.swap(empty_jobs);
 			threads.swap(threads_);
@@ -68,11 +70,13 @@ namespace rhythmreplugged::core
 	void BackgroundWorker::clear_pending()
 	{
 		std::scoped_lock lock(mutex_);
+		std::queue<std::function<void()>> empty_high_priority_jobs;
+		high_priority_jobs_.swap(empty_high_priority_jobs);
 		std::queue<std::function<void()>> empty_jobs;
 		jobs_.swap(empty_jobs);
 	}
 
-	bool BackgroundWorker::enqueue(std::function<void()> job)
+	bool BackgroundWorker::enqueue(std::function<void()> job, JobPriority priority)
 	{
 		if (!job)
 			return false;
@@ -82,7 +86,10 @@ namespace rhythmreplugged::core
 			if (threads_.empty() || stop_requested_)
 				return false;
 
-			jobs_.push(std::move(job));
+			if (priority == JobPriority::High)
+				high_priority_jobs_.push(std::move(job));
+			else
+				jobs_.push(std::move(job));
 		}
 
 		condition_.notify_one();
@@ -104,14 +111,22 @@ namespace rhythmreplugged::core
 				std::unique_lock lock(mutex_);
 				condition_.wait(lock, [this]()
 				{
-					return stop_requested_ || !jobs_.empty();
+					return stop_requested_ || !high_priority_jobs_.empty() || !jobs_.empty();
 				});
 
-				if (stop_requested_ && jobs_.empty())
+				if (stop_requested_ && high_priority_jobs_.empty() && jobs_.empty())
 					return;
 
-				job = std::move(jobs_.front());
-				jobs_.pop();
+				if (!high_priority_jobs_.empty())
+				{
+					job = std::move(high_priority_jobs_.front());
+					high_priority_jobs_.pop();
+				}
+				else
+				{
+					job = std::move(jobs_.front());
+					jobs_.pop();
+				}
 			}
 
 			job();

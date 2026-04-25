@@ -158,6 +158,7 @@ namespace rhythmreplugged::core
 			if (error_message.empty())
 			{
 				waiting_for_song_preload_ = true;
+				menu_screen_ = MenuScreen::Loading;
 				refresh_difficulty_preload_state();
 				return true;
 			}
@@ -218,18 +219,29 @@ namespace rhythmreplugged::core
 	void AppCore::refresh_difficulty_preload_state()
 	{
 		const SongPreloadStatus preload_status = song_preloader_.status();
-		const float preload_progress = preload_status.total_bytes == 0
-			? 0.0f
-			: static_cast<float>(preload_status.processed_bytes) / static_cast<float>(preload_status.total_bytes);
+		float preload_progress = 0.0f;
+		if (preload_status.phase == PreloadPhase::Reading)
+		{
+			preload_progress = preload_status.total_read_file_count == 0
+				? 0.0f
+				: static_cast<float>(preload_status.completed_read_file_count) / static_cast<float>(preload_status.total_read_file_count);
+		}
+		else if (preload_status.phase == PreloadPhase::Decoding || preload_status.phase == PreloadPhase::Ready)
+		{
+			preload_progress = preload_status.total_bytes == 0
+				? 0.0f
+				: static_cast<float>(preload_status.processed_bytes) / static_cast<float>(preload_status.total_bytes);
+		}
+
 		difficulty_select_menu_.set_preload_progress(
-			preload_status.active,
-			preload_status.ready,
-			waiting_for_song_preload_,
+			preload_status.phase,
 			std::clamp(preload_progress, 0.0f, 1.0f),
 			preload_status.processed_bytes,
 			preload_status.total_bytes,
 			preload_status.completed_stem_count,
-			preload_status.total_stem_count);
+			preload_status.total_stem_count,
+			preload_status.completed_read_file_count,
+			preload_status.total_read_file_count);
 		if (preload_status.failed && !preload_status.error_message.empty())
 			difficulty_select_menu_.set_status_message(preload_status.error_message);
 	}
@@ -415,6 +427,9 @@ namespace rhythmreplugged::core
 		case MenuScreen::DifficultySelect:
 			run_difficulty_select_menu(input_state);
 			break;
+		case MenuScreen::Loading:
+			run_loading_menu(input_state);
+			break;
 		}
 	}
 
@@ -451,13 +466,6 @@ namespace rhythmreplugged::core
 	{
 		if (pressed(input_state.b, previous_input_.b))
 		{
-			if (waiting_for_song_preload_)
-			{
-				waiting_for_song_preload_ = false;
-				refresh_difficulty_preload_state();
-				return;
-			}
-
 			menu_screen_ = MenuScreen::SongBrowser;
 			pending_song_path_.clear();
 			waiting_for_song_preload_ = false;
@@ -499,6 +507,37 @@ namespace rhythmreplugged::core
 
 		if (pressed(input_state.down, previous_input_.down))
 			difficulty_select_menu_.move_selection(1);
+	}
+
+	void AppCore::run_loading_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
+	{
+		if (pressed(input_state.b, previous_input_.b))
+		{
+			waiting_for_song_preload_ = false;
+			menu_screen_ = MenuScreen::DifficultySelect;
+			refresh_difficulty_preload_state();
+			return;
+		}
+
+		std::string error_message;
+		if (try_finish_song_preload(error_message))
+		{
+			waiting_for_song_preload_ = false;
+			mode_ = AppMode::Gameplay;
+			session_unload_pending_ = false;
+			player_status_message_.clear();
+			difficulty_select_menu_.clear_status_message();
+			refresh_difficulty_preload_state();
+			return;
+		}
+
+		if (!error_message.empty())
+		{
+			waiting_for_song_preload_ = false;
+			menu_screen_ = MenuScreen::DifficultySelect;
+			difficulty_select_menu_.set_status_message(error_message);
+			refresh_difficulty_preload_state();
+		}
 	}
 
 	void AppCore::run_gameplay(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)

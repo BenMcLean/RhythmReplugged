@@ -57,6 +57,7 @@ namespace rhythmreplugged::core
 		void run_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 		void run_song_browser_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 		void run_difficulty_select_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
+		void run_loading_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 		void run_gameplay(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 
 		::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system_;

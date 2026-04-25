@@ -37,6 +37,13 @@ namespace rhythmreplugged::ui
 				return;
 			}
 
+			if (app.menu_screen() == MenuScreen::Loading)
+			{
+				cover_textures.stop_song_browser_loading();
+				render_song_loading_ui(app.difficulty_select_view(), window_size, ui_scale);
+				return;
+			}
+
 			cover_textures.stop_song_browser_loading();
 			DifficultySelectUiActions actions;
 			actions.set_selected_index = [&](int index) { app.set_difficulty_selected_index(index); };

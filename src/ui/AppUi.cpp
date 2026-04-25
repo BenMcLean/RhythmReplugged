@@ -34,7 +34,7 @@ namespace
 
 	void render_preload_progress_overlay(const DifficultySelectView &menu, ImVec2 window_size, float ui_scale)
 	{
-		if (!menu.preload_in_progress && !menu.preload_ready)
+		if (menu.preload_phase == PreloadPhase::Idle)
 			return;
 
 		const ImVec2 overlay_size(320.0f * ui_scale, 92.0f * ui_scale);
@@ -42,20 +42,57 @@ namespace
 			ImVec2(window_size.x - overlay_size.x - 24.0f * ui_scale, window_size.y - overlay_size.y - 24.0f * ui_scale),
 			ImGuiCond_Always);
 		ImGui::SetNextWindowSize(overlay_size, ImGuiCond_Always);
+		ImGui::SetNextWindowFocus();
 		ImGui::Begin("Stem Preload Overlay", nullptr,
 			ImGuiWindowFlags_NoResize |
 			ImGuiWindowFlags_NoMove |
 			ImGuiWindowFlags_NoCollapse |
-			ImGuiWindowFlags_NoTitleBar);
+			ImGuiWindowFlags_NoTitleBar |
+			ImGuiWindowFlags_NoInputs |
+			ImGuiWindowFlags_NoNavFocus);
 
-		ImGui::TextUnformatted(menu.preload_ready ? "Song Ready" : "Loading Stems");
+		ImVec4 progress_color = ImVec4(0.28f, 0.72f, 0.32f, 1.0f);
+		const char *title = "Song Ready";
+		const char *detail = "";
+		if (menu.preload_phase == PreloadPhase::Reading)
+		{
+			title = "Reading Stems";
+			detail = "files";
+			progress_color = ImVec4(0.92f, 0.78f, 0.20f, 1.0f);
+		}
+		else if (menu.preload_phase == PreloadPhase::Decoding)
+		{
+			title = "Decoding Stems";
+			detail = "MiB";
+		}
+		else if (menu.preload_phase == PreloadPhase::Failed)
+		{
+			title = "Load Failed";
+			detail = "";
+			progress_color = ImVec4(0.88f, 0.32f, 0.32f, 1.0f);
+		}
+
+		ImGui::TextUnformatted(title);
+		ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progress_color);
 		ImGui::ProgressBar(menu.preload_progress, ImVec2(-1.0f, 0.0f));
-		ImGui::TextDisabled(
-			"%zu / %zu stems   %zu / %zu MiB",
-			menu.completed_stem_count,
-			menu.total_stem_count,
-			menu.preload_processed_megabytes,
-			menu.preload_total_megabytes);
+		ImGui::PopStyleColor();
+		if (menu.preload_phase == PreloadPhase::Reading)
+		{
+			ImGui::TextDisabled(
+				"%zu / %zu files read",
+				menu.completed_read_file_count,
+				menu.total_read_file_count);
+		}
+		else
+		{
+			ImGui::TextDisabled(
+				"%zu / %zu stems   %zu / %zu %s",
+				menu.completed_stem_count,
+				menu.total_stem_count,
+				menu.preload_processed_megabytes,
+				menu.preload_total_megabytes,
+				detail);
+		}
 		ImGui::End();
 	}
 }
@@ -316,27 +353,6 @@ namespace rhythmreplugged::ui
 
 		render_preload_progress_overlay(menu, window_size, ui_scale);
 
-		if (menu.show_loading_modal)
-		{
-			ImGui::OpenPopup("Get ready to rock!");
-			ImGui::SetNextWindowPos(ImVec2(window_size.x * 0.5f, window_size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-			if (ImGui::BeginPopupModal("Get ready to rock!", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-			{
-				ImGui::TextUnformatted("Get ready to rock!");
-				ImGui::Spacing();
-				ImGui::ProgressBar(menu.preload_progress, ImVec2(360.0f * ui_scale, 0.0f));
-				ImGui::TextDisabled(
-					"%zu / %zu stems   %zu / %zu MiB",
-					menu.completed_stem_count,
-					menu.total_stem_count,
-					menu.preload_processed_megabytes,
-					menu.preload_total_megabytes);
-				ImGui::Spacing();
-				ImGui::TextDisabled("Press B to cancel.");
-				ImGui::EndPopup();
-			}
-		}
-
 		if (pending_selected_index >= 0 &&
 			actions.set_selected_index != nullptr)
 		{
@@ -348,6 +364,42 @@ namespace rhythmreplugged::ui
 		{
 			actions.activate_selection();
 		}
+	}
+
+	void render_song_loading_ui(
+		const DifficultySelectView &menu,
+		ImVec2 window_size,
+		float ui_scale)
+	{
+		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
+		ImGui::Begin("Song Loading", nullptr,
+			ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse |
+			ImGuiWindowFlags_NoTitleBar);
+
+		const ImVec2 content = ImGui::GetContentRegionAvail();
+		ImGui::Dummy(ImVec2(0.0f, content.y * 0.34f));
+		ImGui::SetCursorPosX((window_size.x - 420.0f * ui_scale) * 0.5f);
+		ImGui::TextUnformatted("Get ready to rock!");
+		if (!menu.song_title.empty())
+		{
+			ImGui::Spacing();
+			ImGui::SetCursorPosX((window_size.x - 520.0f * ui_scale) * 0.5f);
+			ImGui::TextWrapped("%s", menu.song_title.c_str());
+		}
+		if (!menu.song_subtitle.empty())
+		{
+			ImGui::SetCursorPosX((window_size.x - 520.0f * ui_scale) * 0.5f);
+			ImGui::TextDisabled("%s", menu.song_subtitle.c_str());
+		}
+		ImGui::Spacing();
+		ImGui::SetCursorPosX((window_size.x - 260.0f * ui_scale) * 0.5f);
+		ImGui::TextDisabled("Press B to go back.");
+		ImGui::End();
+
+		render_preload_progress_overlay(menu, window_size, ui_scale);
 	}
 
 	void render_prototype_player_ui(const PrototypePlayerView &player, ImVec2 window_size)

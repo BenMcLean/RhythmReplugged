@@ -32,6 +32,15 @@ namespace rhythmreplugged::platform_sdl3
 		return std::filesystem::is_directory(std::filesystem::path(path), error_code) && !error_code;
 	}
 
+	std::optional<std::uint64_t> FileSystem::file_size(const std::string &path) const
+	{
+		std::error_code error_code;
+		const auto size = std::filesystem::file_size(std::filesystem::path(path), error_code);
+		if (error_code)
+			return std::nullopt;
+		return static_cast<std::uint64_t>(size);
+	}
+
 	std::vector<::rhythmreplugged::frontend_contract::RetroDirectoryEntry> FileSystem::list_directory(const std::string &path) const
 	{
 		std::vector<::rhythmreplugged::frontend_contract::RetroDirectoryEntry> entries;

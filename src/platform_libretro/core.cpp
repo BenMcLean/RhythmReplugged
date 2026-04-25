@@ -392,6 +392,12 @@ RR_LIBRETRO_EXPORT void retro_set_environment(retro_environment_t cb)
 	if (g_environment != nullptr)
 	{
 		g_environment(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &g_log_callback);
+		retro_vfs_interface_info vfs_info{};
+		vfs_info.required_interface_version = 4;
+		if (g_environment(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_info) && vfs_info.iface != nullptr)
+			g_file_system.set_vfs_interface(vfs_info.iface);
+		else
+			g_file_system.set_vfs_interface(nullptr);
 		bool support_no_game = true;
 		g_environment(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME, &support_no_game);
 		g_environment(RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE, const_cast<retro_system_content_info_override *>(kContentInfoOverrides));
@@ -502,6 +508,11 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 {
 	if (!configure_hw_render())
 		return false;
+	if (!g_file_system.has_vfs_interface())
+	{
+		log_message(RETRO_LOG_ERROR, "Frontend did not provide the required libretro VFS interface.\n");
+		return false;
+	}
 
 	if (game == nullptr || game->path == nullptr)
 	{

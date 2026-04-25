@@ -23,6 +23,7 @@ namespace rhythmreplugged::frontend_contract
 		virtual std::string parent_path(const std::string &path) const = 0;
 		virtual bool path_exists(const std::string &path) const = 0;
 		virtual bool path_is_directory(const std::string &path) const = 0;
+		virtual std::optional<std::uint64_t> file_size(const std::string &path) const = 0;
 		virtual std::vector<RetroDirectoryEntry> list_directory(const std::string &path) const = 0;
 		virtual std::optional<std::string> read_text_file(const std::string &path) const = 0;
 		virtual std::optional<std::vector<std::uint8_t>> read_binary_file(const std::string &path) const = 0;

@@ -21,6 +21,16 @@ namespace rhythmreplugged::core
 	{
 		SongBrowser,
 		DifficultySelect,
+		Loading,
+	};
+
+	enum class PreloadPhase
+	{
+		Idle,
+		Reading,
+		Decoding,
+		Ready,
+		Failed,
 	};
 
 	struct SongListItem
@@ -57,14 +67,14 @@ namespace rhythmreplugged::core
 		std::string status_message;
 		std::vector<DifficultyListItem> entries;
 		int selected_index = 0;
-		bool preload_in_progress = false;
-		bool preload_ready = false;
-		bool show_loading_modal = false;
+		PreloadPhase preload_phase = PreloadPhase::Idle;
 		float preload_progress = 0.0f;
 		size_t preload_processed_megabytes = 0;
 		size_t preload_total_megabytes = 0;
 		size_t completed_stem_count = 0;
 		size_t total_stem_count = 0;
+		size_t completed_read_file_count = 0;
+		size_t total_read_file_count = 0;
 	};
 
 	struct PrototypePlayerView

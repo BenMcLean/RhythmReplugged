@@ -25,6 +25,7 @@ namespace rhythmreplugged::core
 
 	void DifficultySelectMenu::open(std::string song_title, std::string song_subtitle, const GameplayOptions &options)
 	{
+		cached_view_ = {};
 		song_title_ = std::move(song_title);
 		song_subtitle_ = std::move(song_subtitle);
 		status_message_.clear();
@@ -63,23 +64,23 @@ namespace rhythmreplugged::core
 	}
 
 	void DifficultySelectMenu::set_preload_progress(
-		bool preload_in_progress,
-		bool preload_ready,
-		bool show_loading_modal,
+		PreloadPhase preload_phase,
 		float preload_progress,
 		size_t preload_processed_bytes,
 		size_t preload_total_bytes,
 		size_t completed_stem_count,
-		size_t total_stem_count)
+		size_t total_stem_count,
+		size_t completed_read_file_count,
+		size_t total_read_file_count)
 	{
-		cached_view_.preload_in_progress = preload_in_progress;
-		cached_view_.preload_ready = preload_ready;
-		cached_view_.show_loading_modal = show_loading_modal;
+		cached_view_.preload_phase = preload_phase;
 		cached_view_.preload_progress = preload_progress;
 		cached_view_.preload_processed_megabytes = preload_processed_bytes / kBytesPerMegabyte;
 		cached_view_.preload_total_megabytes = (preload_total_bytes + kBytesPerMegabyte - 1) / kBytesPerMegabyte;
 		cached_view_.completed_stem_count = completed_stem_count;
 		cached_view_.total_stem_count = total_stem_count;
+		cached_view_.completed_read_file_count = completed_read_file_count;
+		cached_view_.total_read_file_count = total_read_file_count;
 	}
 
 	void DifficultySelectMenu::apply_to(GameplayOptions &options) const

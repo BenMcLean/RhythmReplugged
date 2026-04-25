@@ -34,5 +34,9 @@ namespace rhythmreplugged::ui
 		const DifficultySelectUiActions &actions,
 		ImVec2 window_size,
 		float ui_scale);
+	void render_song_loading_ui(
+		const core::DifficultySelectView &menu,
+		ImVec2 window_size,
+		float ui_scale);
 	void render_prototype_player_ui(const core::PrototypePlayerView &player, ImVec2 window_size);
 }
