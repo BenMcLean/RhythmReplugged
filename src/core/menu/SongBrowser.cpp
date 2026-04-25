@@ -175,7 +175,10 @@ namespace rhythmreplugged::core
 			return false;
 
 		const BrowserEntry &entry = entries_[selected_index_];
-		if (entry.is_parent || entry.is_folder)
+		if (entry.is_parent)
+			return navigate_to_parent(error_message);
+
+		if (entry.is_folder)
 		{
 			return load_directory(entry.path, error_message);
 		}
