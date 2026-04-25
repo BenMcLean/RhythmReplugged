@@ -1,6 +1,6 @@
 #pragma once
 
-namespace rhythmreplugged
+namespace rhythmreplugged::frontend_contract
 {
 	struct RetroInputState
 	{

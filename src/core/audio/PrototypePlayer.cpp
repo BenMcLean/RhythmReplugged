@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	namespace
 	{
@@ -108,7 +108,7 @@ namespace rhythmreplugged
 		return *this;
 	}
 
-	bool PrototypePlayer::load(IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
+	bool PrototypePlayer::load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
 	{
 		unload();
 
@@ -262,9 +262,9 @@ namespace rhythmreplugged
 		}
 	}
 
-	AudioBatch PrototypePlayer::generate_audio_batch(size_t frame_count)
+	::rhythmreplugged::frontend_contract::AudioBatch PrototypePlayer::generate_audio_batch(size_t frame_count)
 	{
-		AudioBatch batch;
+		::rhythmreplugged::frontend_contract::AudioBatch batch;
 		batch.sample_rate = sample_rate();
 		batch.channels = 2;
 		batch.samples.resize(frame_count * 2);

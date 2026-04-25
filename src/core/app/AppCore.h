@@ -4,22 +4,22 @@
 #include "core/app/AppTypes.h"
 #include "core/menu/SongBrowser.h"
 #include "core/play/SongSession.h"
-#include "libretro_contract/AudioTypes.h"
-#include "libretro_contract/RetroInput.h"
+#include "frontend_contract/AudioTypes.h"
+#include "frontend_contract/RetroInput.h"
 
 #include <atomic>
 #include <string>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
-	class AppCore : public IAudioStream
+	class AppCore : public ::rhythmreplugged::frontend_contract::IAudioStream
 	{
 	public:
-		explicit AppCore(IRetroFileSystem &file_system);
+		explicit AppCore(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system);
 
 		bool retro_init(const std::string &song_root_path, std::string &error_message);
 		bool retro_init(const AppLaunchRequest &launch_request, std::string &error_message);
-		void retro_run(const RetroInputState &input_state);
+		void retro_run(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 		void retro_deinit();
 		void set_audio_batch_enabled(bool enabled);
 		bool set_browser_selected_index(int index);
@@ -36,7 +36,7 @@ namespace rhythmreplugged
 		const SongBrowserView &song_browser_view() const;
 		PrototypePlayerView prototype_player_view() const;
 		GameplaySceneView gameplay_scene_view() const;
-		const AudioBatch &audio_batch() const;
+		const ::rhythmreplugged::frontend_contract::AudioBatch &audio_batch() const;
 
 	private:
 		bool activate_browser_selection_unlocked();
@@ -44,15 +44,15 @@ namespace rhythmreplugged
 		void toggle_player_guitar_mute_unlocked();
 		void update_player_status_message();
 		bool pressed(bool current, bool previous) const;
-		void run_song_browser(const RetroInputState &input_state);
-		void run_prototype_player(const RetroInputState &input_state);
+		void run_song_browser(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
+		void run_prototype_player(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 
-		IRetroFileSystem &file_system_;
+		::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system_;
 		SongBrowser song_browser_;
 		SongSession song_session_;
 		std::atomic<AppMode> mode_{AppMode::SongBrowser};
-		RetroInputState previous_input_{};
-		AudioBatch audio_batch_{};
+		::rhythmreplugged::frontend_contract::RetroInputState previous_input_{};
+		::rhythmreplugged::frontend_contract::AudioBatch audio_batch_{};
 		std::string player_status_message_;
 		bool session_unload_pending_ = false;
 		bool audio_batch_enabled_ = false;

@@ -1,6 +1,6 @@
 #include "platform_libretro/ImGuiLibretroPlatform.h"
 
-namespace rhythmreplugged
+namespace rhythmreplugged::platform_libretro
 {
 	namespace
 	{
@@ -18,7 +18,7 @@ namespace rhythmreplugged
 		io.BackendPlatformName = "rhythmreplugged_libretro";
 	}
 
-	void begin_imgui_libretro_frame(const RetroInputState &input, ImVec2 display_size, float delta_seconds)
+	void begin_imgui_libretro_frame(const ::rhythmreplugged::frontend_contract::RetroInputState &input, ImVec2 display_size, float delta_seconds)
 	{
 		ImGuiIO &io = ImGui::GetIO();
 		io.DisplaySize = display_size;

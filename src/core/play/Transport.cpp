@@ -1,6 +1,6 @@
 #include "core/play/Transport.h"
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	void Transport::reset()
 	{

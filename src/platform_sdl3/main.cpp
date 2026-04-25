@@ -1,7 +1,7 @@
 #include "core/app/AppCore.h"
 #include "core/app/AppLaunch.h"
 #include "platform_sdl3/MiniaudioOutput.h"
-#include "platform_sdl3/Sdl3FileSystem.h"
+#include "platform_sdl3/FileSystem.h"
 #include "render_gl/GameplayRendererGl.h"
 #include "ui/AppUiHost.h"
 
@@ -19,7 +19,10 @@
 
 namespace
 {
-	using namespace rhythmreplugged;
+	using namespace rhythmreplugged::core;
+	using namespace rhythmreplugged::render_gl;
+	using namespace rhythmreplugged::ui;
+	using namespace rhythmreplugged::platform_sdl3;
 
 	constexpr int kWindowWidth = 1280;
 	constexpr int kWindowHeight = 720;
@@ -177,7 +180,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	Sdl3FileSystem file_system;
+	FileSystem file_system;
 	AppCore app(file_system);
 	std::string init_error;
 	const SdlLaunchArguments launch_arguments = parse_launch_arguments(argc, argv);
@@ -200,7 +203,7 @@ int main(int argc, char *argv[])
 	}
 
 	MiniaudioOutput audio_output;
-	RetroInputState held_input{};
+	::rhythmreplugged::frontend_contract::RetroInputState held_input{};
 	std::unordered_map<SDL_JoystickID, SDL_Gamepad *> open_gamepads;
 	OpenGlCoverTextures cover_textures;
 	GameplayRendererGl gameplay_renderer;

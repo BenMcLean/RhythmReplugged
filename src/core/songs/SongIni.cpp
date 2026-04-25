@@ -4,7 +4,7 @@
 #include <charconv>
 #include <cctype>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	namespace
 	{
@@ -185,12 +185,12 @@ namespace rhythmreplugged
 			return false;
 		}
 
-		std::string find_matching_file_in_directory(const IRetroFileSystem &file_system,
+		std::string find_matching_file_in_directory(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 			const std::string &song_directory,
 			std::string_view target_file_name)
 		{
 			const std::string lowered_target = to_lower_copy(target_file_name);
-			for (const RetroDirectoryEntry &entry : file_system.list_directory(song_directory))
+			for (const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &entry : file_system.list_directory(song_directory))
 			{
 				if (entry.is_directory)
 					continue;
@@ -522,7 +522,7 @@ namespace rhythmreplugged
 		int64_pairs_[to_lower_copy(key)] = value;
 	}
 
-	SongIniParseResult parse_song_ini(const IRetroFileSystem &file_system, const std::string &song_ini_path)
+	SongIniParseResult parse_song_ini(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_ini_path)
 	{
 		SongIniParseResult result;
 
@@ -542,7 +542,7 @@ namespace rhythmreplugged
 		return result;
 	}
 
-	std::string resolve_cover_art_path(const IRetroFileSystem &file_system, const std::string &song_directory, const SongIniMetadata &metadata)
+	std::string resolve_cover_art_path(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, const SongIniMetadata &metadata)
 	{
 		const std::string *cover = nullptr;
 		if (metadata.try_get_string("cover", cover) && cover != nullptr && !cover->empty())
@@ -556,7 +556,7 @@ namespace rhythmreplugged
 				return matched_cover;
 		}
 
-		for (const RetroDirectoryEntry &entry : file_system.list_directory(song_directory))
+		for (const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &entry : file_system.list_directory(song_directory))
 		{
 			if (entry.is_directory || !has_supported_image_extension(entry.name))
 				continue;

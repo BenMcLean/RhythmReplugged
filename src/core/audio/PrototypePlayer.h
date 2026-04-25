@@ -2,8 +2,8 @@
 
 #include "core/audio/StemCatalog.h"
 #include "core/songs/SongIni.h"
-#include "libretro_contract/AudioTypes.h"
-#include "libretro_contract/RetroFileSystem.h"
+#include "frontend_contract/AudioTypes.h"
+#include "frontend_contract/RetroFileSystem.h"
 
 #include <atomic>
 #include <cstddef>
@@ -11,12 +11,12 @@
 #include <string>
 #include <vector>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	class PrototypePlayer
 	{
 	public:
-		bool load(IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message);
+		bool load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message);
 		void unload();
 		bool is_loaded() const;
 		void toggle_guitar_mute();
@@ -29,7 +29,7 @@ namespace rhythmreplugged
 		const SongMetadataView &metadata() const;
 		bool playback_finished() const;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
-		AudioBatch generate_audio_batch(size_t frame_count);
+		::rhythmreplugged::frontend_contract::AudioBatch generate_audio_batch(size_t frame_count);
 
 	private:
 		struct StemTrack

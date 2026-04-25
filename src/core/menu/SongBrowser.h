@@ -2,17 +2,17 @@
 
 #include "core/app/AppTypes.h"
 #include "core/songs/SongIni.h"
-#include "libretro_contract/RetroFileSystem.h"
+#include "frontend_contract/RetroFileSystem.h"
 
 #include <string>
 #include <vector>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	class SongBrowser
 	{
 	public:
-		explicit SongBrowser(IRetroFileSystem &file_system);
+		explicit SongBrowser(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system);
 
 		bool set_root(const std::string &root_path, std::string &error_message);
 		void clear_root(std::string status_message);
@@ -43,7 +43,7 @@ namespace rhythmreplugged
 		};
 
 		bool load_directory(const std::string &path, std::string &error_message, const std::string *preferred_selected_path = nullptr);
-		BrowserEntry make_song_entry(const RetroDirectoryEntry &directory_entry) const;
+		BrowserEntry make_song_entry(const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &directory_entry) const;
 		bool contains_supported_chart(const std::string &directory_path) const;
 		bool contains_supported_audio(const std::string &directory_path) const;
 		int first_selectable_index() const;
@@ -52,7 +52,7 @@ namespace rhythmreplugged
 		static char entry_letter(const BrowserEntry &entry);
 		void rebuild_view();
 
-		IRetroFileSystem &file_system_;
+		::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system_;
 		std::string root_path_;
 		std::string current_path_;
 		std::string status_message_;

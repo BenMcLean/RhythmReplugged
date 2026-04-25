@@ -5,10 +5,10 @@
 
 #include <imgui.h>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::ui
 {
 	inline constexpr float kDefaultUiScale = 2.0f;
 
 	void initialize_app_imgui(float ui_scale);
-	void render_app_ui(AppCore &app, ImVec2 window_size, float ui_scale, OpenGlCoverTextures &cover_textures);
+	void render_app_ui(core::AppCore &app, ImVec2 window_size, float ui_scale, OpenGlCoverTextures &cover_textures);
 }

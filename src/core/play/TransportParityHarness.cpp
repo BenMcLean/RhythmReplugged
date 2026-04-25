@@ -8,7 +8,7 @@
 
 namespace
 {
-	using namespace rhythmreplugged;
+	using namespace rhythmreplugged::core;
 
 	bool nearly_equal(double left, double right, double epsilon)
 	{

@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::frontend_contract
 {
 	class IAudioStream
 	{

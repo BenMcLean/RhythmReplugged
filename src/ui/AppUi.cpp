@@ -4,7 +4,8 @@
 
 namespace
 {
-	using namespace rhythmreplugged;
+	using namespace rhythmreplugged::core;
+	using namespace rhythmreplugged::ui;
 
 	constexpr ImU32 kLaneColors[5] = {
 		IM_COL32(90, 197, 92, 255),
@@ -32,8 +33,10 @@ namespace
 	}
 }
 
-namespace rhythmreplugged
+namespace rhythmreplugged::ui
 {
+	using namespace rhythmreplugged::core;
+
 	void apply_imgui_style(float ui_scale)
 	{
 		ImGuiStyle &style = ImGui::GetStyle();

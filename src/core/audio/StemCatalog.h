@@ -3,7 +3,7 @@
 #include <array>
 #include <string_view>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	inline constexpr std::array<std::string_view, 14> kKnownStemNames = {
 		"song", "guitar", "bass", "rhythm", "keys", "vocals", "vocals_1", "vocals_2",

@@ -3,14 +3,14 @@
 
 #include <algorithm>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::platform_sdl3
 {
 	MiniaudioOutput::~MiniaudioOutput()
 	{
 		shutdown();
 	}
 
-	bool MiniaudioOutput::initialize(IAudioStream *stream)
+	bool MiniaudioOutput::initialize(::rhythmreplugged::frontend_contract::IAudioStream *stream)
 	{
 		const int sample_rate = stream != nullptr ? stream->sample_rate() : 0;
 		if (sample_rate <= 0)
@@ -58,7 +58,7 @@ namespace rhythmreplugged
 		stream_.store(nullptr);
 	}
 
-	void MiniaudioOutput::set_stream(IAudioStream *stream)
+	void MiniaudioOutput::set_stream(::rhythmreplugged::frontend_contract::IAudioStream *stream)
 	{
 		stream_.store(stream);
 	}
@@ -75,7 +75,7 @@ namespace rhythmreplugged
 
 	void MiniaudioOutput::mix(std::int16_t *output, ma_uint32 frame_count)
 	{
-		IAudioStream *stream = stream_.load();
+		::rhythmreplugged::frontend_contract::IAudioStream *stream = stream_.load();
 		if (stream == nullptr)
 		{
 			std::fill(output, output + static_cast<size_t>(frame_count) * 2, static_cast<std::int16_t>(0));

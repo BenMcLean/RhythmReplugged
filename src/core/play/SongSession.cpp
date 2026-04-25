@@ -1,13 +1,13 @@
 #include "core/play/SongSession.h"
 
-	#include "libretro_contract/RetroFileSystem.h"
+#include "frontend_contract/RetroFileSystem.h"
 
-	#include <cmath>
-	#include <algorithm>
+#include <algorithm>
+#include <cmath>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
-	bool SongSession::load(IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
+	bool SongSession::load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
 	{
 		unload();
 		if (!prototype_player_.load(file_system, song_directory, error_message))
@@ -232,10 +232,10 @@ namespace rhythmreplugged
 		transport_.on_audio_rendered(frame_count);
 	}
 
-	AudioBatch SongSession::render_fixed_tick_audio(int ticks_per_second)
+	::rhythmreplugged::frontend_contract::AudioBatch SongSession::render_fixed_tick_audio(int ticks_per_second)
 	{
 		const size_t frame_count = transport_.frames_for_next_tick(ticks_per_second);
-		AudioBatch batch = audio_mixer_.render(frame_count);
+		::rhythmreplugged::frontend_contract::AudioBatch batch = audio_mixer_.render(frame_count);
 		transport_.on_audio_rendered(batch.frame_count());
 		return batch;
 	}

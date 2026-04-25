@@ -5,21 +5,19 @@
 #include "core/app/AppTypes.h"
 #include "core/play/AudioMixer.h"
 #include "core/play/Transport.h"
-#include "libretro_contract/AudioTypes.h"
+#include "frontend_contract/AudioTypes.h"
 
 #include <array>
 #include <atomic>
 #include <cstdint>
 #include <string>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
-	class IRetroFileSystem;
-
 	class SongSession
 	{
 	public:
-		bool load(IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message);
+		bool load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message);
 		void unload();
 		bool is_loaded() const;
 		void toggle_guitar_mute();
@@ -35,7 +33,7 @@ namespace rhythmreplugged
 		double timing_offset_seconds() const;
 		PrototypePlayerView view(const std::string &status_message) const;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
-		AudioBatch render_fixed_tick_audio(int ticks_per_second);
+		::rhythmreplugged::frontend_contract::AudioBatch render_fixed_tick_audio(int ticks_per_second);
 		double song_time_seconds() const;
 		double song_time_beats(double beats_per_minute) const;
 

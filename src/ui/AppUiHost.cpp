@@ -2,8 +2,10 @@
 
 #include "ui/AppUi.h"
 
-namespace rhythmreplugged
+namespace rhythmreplugged::ui
 {
+	using namespace rhythmreplugged::core;
+
 	void initialize_app_imgui(float ui_scale)
 	{
 		ImGui::StyleColorsDark();

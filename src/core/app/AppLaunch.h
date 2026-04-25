@@ -1,10 +1,10 @@
 #pragma once
 
-#include "libretro_contract/RetroFileSystem.h"
+#include "frontend_contract/RetroFileSystem.h"
 
 #include <string>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	struct AppLaunchInputs
 	{
@@ -21,6 +21,6 @@ namespace rhythmreplugged
 	};
 
 	AppLaunchRequest resolve_app_launch_request(
-		const IRetroFileSystem &file_system,
+		const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 		const AppLaunchInputs &inputs);
 }

@@ -3,7 +3,7 @@
 #include "core/app/AppCore.h"
 #include "core/app/AppLaunch.h"
 #include "platform_libretro/ImGuiLibretroPlatform.h"
-#include "platform_libretro/NativeFileSystem.h"
+#include "platform_libretro/FileSystem.h"
 #include "render_gl/GameplayRendererGl.h"
 #include "ui/AppUiHost.h"
 
@@ -25,7 +25,10 @@
 
 namespace
 {
-	using namespace rhythmreplugged;
+	using namespace rhythmreplugged::core;
+	using namespace rhythmreplugged::render_gl;
+	using namespace rhythmreplugged::ui;
+	using namespace rhythmreplugged::platform_libretro;
 
 	constexpr unsigned kFrameWidth = 1280;
 	constexpr unsigned kFrameHeight = 720;
@@ -49,11 +52,11 @@ namespace
 	retro_log_callback g_log_callback{};
 	retro_hw_render_callback g_hw_render{};
 
-	NativeFileSystem g_file_system;
+	FileSystem g_file_system;
 	AppCore g_app(g_file_system);
 	OpenGlCoverTextures g_cover_textures;
 	GameplayRendererGl g_gameplay_renderer;
-	RetroInputState g_previous_input{};
+	::rhythmreplugged::frontend_contract::RetroInputState g_previous_input{};
 	std::string g_root_path;
 	bool g_is_loaded = false;
 	bool g_gl_ready = false;
@@ -89,9 +92,9 @@ namespace
 		return current && !previous;
 	}
 
-	RetroInputState poll_input()
+	::rhythmreplugged::frontend_contract::RetroInputState poll_input()
 	{
-		RetroInputState input;
+		::rhythmreplugged::frontend_contract::RetroInputState input;
 		input.mouse_x = g_mouse_x;
 		input.mouse_y = g_mouse_y;
 		if (g_input_poll != nullptr)
@@ -609,7 +612,7 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 	if (!g_is_loaded || !g_gl_ready)
 		return;
 
-	const RetroInputState input = poll_input();
+	const ::rhythmreplugged::frontend_contract::RetroInputState input = poll_input();
 	if (g_app.mode() == AppMode::PrototypePlayer)
 	{
 		if (pressed(input.l, g_previous_input.l))

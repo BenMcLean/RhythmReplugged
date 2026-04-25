@@ -1,6 +1,6 @@
 #pragma once
 
-#include "libretro_contract/RetroFileSystem.h"
+#include "frontend_contract/RetroFileSystem.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	enum class MidiChartTrackType
 	{
@@ -284,7 +284,7 @@ namespace rhythmreplugged
 	class MidiChart
 	{
 	public:
-		bool load(const IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message);
+		bool load(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message);
 		void clear();
 		bool is_loaded() const;
 		std::string_view track_name() const;
@@ -310,7 +310,7 @@ namespace rhythmreplugged
 			double lookahead_seconds) const;
 
 	private:
-		static std::string find_case_insensitive_file(const IRetroFileSystem &file_system,
+		static std::string find_case_insensitive_file(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 			const std::string &directory_path,
 			std::string_view file_name);
 

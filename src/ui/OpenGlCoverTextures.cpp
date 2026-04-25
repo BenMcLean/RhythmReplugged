@@ -16,8 +16,10 @@
 #define GL_CLAMP_TO_EDGE 0x812F
 #endif
 
-namespace rhythmreplugged
+namespace rhythmreplugged::ui
 {
+	using namespace rhythmreplugged::core;
+
 	namespace
 	{
 		ImTextureRef make_imgui_texture_ref(GLuint texture)

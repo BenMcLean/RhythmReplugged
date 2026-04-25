@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	inline constexpr int kAppFramesPerSecond = 60;
 

@@ -14,10 +14,13 @@
 
 using GLuint = unsigned int;
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	struct SongBrowserView;
+}
 
+namespace rhythmreplugged::ui
+{
 	class OpenGlCoverTextures
 	{
 	public:
@@ -30,7 +33,7 @@ namespace rhythmreplugged
 
 		~OpenGlCoverTextures();
 
-		void sync_song_browser_directory(const SongBrowserView &browser);
+		void sync_song_browser_directory(const core::SongBrowserView &browser);
 		std::optional<ImTextureRef> get_texture_ref(const std::string &cover_path);
 		void stop_song_browser_loading();
 		void clear();
@@ -59,7 +62,7 @@ namespace rhythmreplugged
 
 		std::string cached_browser_path_;
 		std::uint64_t generation_ = 0;
-		BackgroundWorker decode_worker_;
+		core::BackgroundWorker decode_worker_;
 		std::mutex completed_mutex_;
 		std::deque<CompletedDecode> completed_decodes_;
 		std::unordered_map<std::string, TextureEntry> texture_entries_;

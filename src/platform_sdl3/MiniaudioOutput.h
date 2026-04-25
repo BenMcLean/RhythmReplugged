@@ -2,11 +2,11 @@
 
 #include <miniaudio.h>
 
-#include "libretro_contract/AudioTypes.h"
+#include "frontend_contract/AudioTypes.h"
 
 #include <atomic>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::platform_sdl3
 {
 	class MiniaudioOutput
 	{
@@ -17,9 +17,9 @@ namespace rhythmreplugged
 		MiniaudioOutput(const MiniaudioOutput &) = delete;
 		MiniaudioOutput &operator=(const MiniaudioOutput &) = delete;
 
-		bool initialize(IAudioStream *stream);
+		bool initialize(::rhythmreplugged::frontend_contract::IAudioStream *stream);
 		void shutdown();
-		void set_stream(IAudioStream *stream);
+		void set_stream(::rhythmreplugged::frontend_contract::IAudioStream *stream);
 
 	private:
 		static void data_callback(ma_device *device, void *output, const void *input, ma_uint32 frame_count);
@@ -28,6 +28,6 @@ namespace rhythmreplugged
 		ma_device device_{};
 		bool initialized_ = false;
 		int sample_rate_ = 0;
-		std::atomic<IAudioStream *> stream_{nullptr};
+		std::atomic<::rhythmreplugged::frontend_contract::IAudioStream *> stream_{nullptr};
 	};
 }

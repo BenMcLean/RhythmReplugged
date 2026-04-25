@@ -8,7 +8,7 @@
 #include <optional>
 #include <string>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::ui
 {
 	struct SongBrowserUiActions
 	{
@@ -19,9 +19,9 @@ namespace rhythmreplugged
 
 	void apply_imgui_style(float ui_scale);
 	void render_song_browser_ui(
-		const SongBrowserView &browser,
+		const core::SongBrowserView &browser,
 		const SongBrowserUiActions &actions,
 		ImVec2 window_size,
 		float ui_scale);
-	void render_prototype_player_ui(const PrototypePlayerView &player, ImVec2 window_size);
+	void render_prototype_player_ui(const core::PrototypePlayerView &player, ImVec2 window_size);
 }

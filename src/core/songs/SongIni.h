@@ -1,6 +1,6 @@
 #pragma once
 
-#include "libretro_contract/RetroFileSystem.h"
+#include "frontend_contract/RetroFileSystem.h"
 
 #include <cstdint>
 #include <optional>
@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	enum class SongIniFieldType
 	{
@@ -73,7 +73,7 @@ namespace rhythmreplugged
 		std::string cover_art_path;
 	};
 
-	SongIniParseResult parse_song_ini(const IRetroFileSystem &file_system, const std::string &song_ini_path);
+	SongIniParseResult parse_song_ini(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_ini_path);
 	SongMetadataView make_song_metadata_view(const SongIniMetadata &metadata, const std::string &folder_name);
-	std::string resolve_cover_art_path(const IRetroFileSystem &file_system, const std::string &song_directory, const SongIniMetadata &metadata);
+	std::string resolve_cover_art_path(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, const SongIniMetadata &metadata);
 }

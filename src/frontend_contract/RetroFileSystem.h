@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::frontend_contract
 {
 	struct RetroDirectoryEntry
 	{

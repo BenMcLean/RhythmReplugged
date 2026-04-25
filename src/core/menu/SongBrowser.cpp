@@ -5,7 +5,7 @@
 #include <array>
 #include <cctype>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	namespace
 	{
@@ -20,13 +20,13 @@ namespace rhythmreplugged
 			return lowered;
 		}
 
-		bool case_insensitive_name_less(const RetroDirectoryEntry &left, const RetroDirectoryEntry &right)
+		bool case_insensitive_name_less(const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &left, const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &right)
 		{
 			return to_lower_copy(left.name) < to_lower_copy(right.name);
 		}
 	}
 
-	SongBrowser::SongBrowser(IRetroFileSystem &file_system)
+	SongBrowser::SongBrowser(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system)
 		: file_system_(file_system)
 	{
 	}
@@ -230,9 +230,9 @@ namespace rhythmreplugged
 			}
 		}
 
-		std::vector<RetroDirectoryEntry> folders;
-		std::vector<RetroDirectoryEntry> songs;
-		for (const RetroDirectoryEntry &entry : file_system_.list_directory(canonical_path))
+		std::vector<::rhythmreplugged::frontend_contract::RetroDirectoryEntry> folders;
+		std::vector<::rhythmreplugged::frontend_contract::RetroDirectoryEntry> songs;
+		for (const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &entry : file_system_.list_directory(canonical_path))
 		{
 			if (!entry.is_directory)
 				continue;
@@ -257,7 +257,7 @@ namespace rhythmreplugged
 			entries_.push_back(std::move(parent_entry));
 		}
 
-		for (const RetroDirectoryEntry &folder : folders)
+		for (const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &folder : folders)
 		{
 			BrowserEntry entry;
 			entry.path = folder.path;
@@ -267,7 +267,7 @@ namespace rhythmreplugged
 			entries_.push_back(std::move(entry));
 		}
 
-		for (const RetroDirectoryEntry &song : songs)
+		for (const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &song : songs)
 			entries_.push_back(make_song_entry(song));
 
 		current_path_ = canonical_path;
@@ -283,7 +283,7 @@ namespace rhythmreplugged
 		return true;
 	}
 
-	SongBrowser::BrowserEntry SongBrowser::make_song_entry(const RetroDirectoryEntry &directory_entry) const
+	SongBrowser::BrowserEntry SongBrowser::make_song_entry(const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &directory_entry) const
 	{
 		BrowserEntry entry;
 		entry.path = directory_entry.path;

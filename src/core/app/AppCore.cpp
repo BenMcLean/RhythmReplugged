@@ -4,9 +4,9 @@
 #include <cmath>
 #include <sstream>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
-	AppCore::AppCore(IRetroFileSystem &file_system)
+	AppCore::AppCore(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system)
 		: file_system_(file_system),
 		  song_browser_(file_system)
 	{
@@ -51,7 +51,7 @@ namespace rhythmreplugged
 		return true;
 	}
 
-	void AppCore::retro_run(const RetroInputState &input_state)
+	void AppCore::retro_run(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
 	{
 		audio_batch_.clear();
 		audio_batch_.sample_rate = 0;
@@ -254,7 +254,7 @@ namespace rhythmreplugged
 		return scene;
 	}
 
-	const AudioBatch &AppCore::audio_batch() const
+	const ::rhythmreplugged::frontend_contract::AudioBatch &AppCore::audio_batch() const
 	{
 		return audio_batch_;
 	}
@@ -289,7 +289,7 @@ namespace rhythmreplugged
 		return current && !previous;
 	}
 
-	void AppCore::run_song_browser(const RetroInputState &input_state)
+	void AppCore::run_song_browser(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
 	{
 		if (pressed(input_state.b, previous_input_.b))
 		{
@@ -318,7 +318,7 @@ namespace rhythmreplugged
 			song_browser_.jump_to_next_letter();
 	}
 
-	void AppCore::run_prototype_player(const RetroInputState &input_state)
+	void AppCore::run_prototype_player(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
 	{
 		if (song_session_.playback_finished())
 		{

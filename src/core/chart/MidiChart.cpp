@@ -14,7 +14,7 @@
 #include <string>
 #include <utility>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	namespace
 	{
@@ -1765,7 +1765,7 @@ namespace rhythmreplugged
 		}
 	}
 
-	bool MidiChart::load(const IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
+	bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
 	{
 		clear();
 
@@ -2078,12 +2078,12 @@ namespace rhythmreplugged
 		return visible_measure_lines;
 	}
 
-	std::string MidiChart::find_case_insensitive_file(const IRetroFileSystem &file_system,
+	std::string MidiChart::find_case_insensitive_file(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 		const std::string &directory_path,
 		std::string_view file_name)
 	{
 		const std::string target_name = to_upper_copy(file_name);
-		for (const RetroDirectoryEntry &entry : file_system.list_directory(directory_path))
+		for (const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &entry : file_system.list_directory(directory_path))
 		{
 			if (entry.is_directory)
 				continue;

@@ -4,7 +4,7 @@
 #include <cctype>
 #include <vector>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	namespace
 	{
@@ -49,7 +49,7 @@ namespace rhythmreplugged
 			return joined;
 		}
 
-		std::string canonicalize_directory_if_valid(const IRetroFileSystem &file_system, const std::string &path)
+		std::string canonicalize_directory_if_valid(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &path)
 		{
 			if (path.empty())
 				return {};
@@ -62,7 +62,7 @@ namespace rhythmreplugged
 		}
 
 		std::string resolve_directory_path(
-			const IRetroFileSystem &file_system,
+			const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 			const std::string &path,
 			const std::string &base_path)
 		{
@@ -83,7 +83,7 @@ namespace rhythmreplugged
 		}
 
 		std::string resolve_path(
-			const IRetroFileSystem &file_system,
+			const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 			const std::string &path,
 			const std::string &base_path)
 		{
@@ -116,7 +116,7 @@ namespace rhythmreplugged
 			return next == '/' || next == '\\';
 		}
 
-		std::string derive_song_directory(const IRetroFileSystem &file_system, const std::string &content_path)
+		std::string derive_song_directory(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &content_path)
 		{
 			if (content_path.empty())
 				return {};
@@ -140,7 +140,7 @@ namespace rhythmreplugged
 	}
 
 	AppLaunchRequest resolve_app_launch_request(
-		const IRetroFileSystem &file_system,
+		const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 		const AppLaunchInputs &inputs)
 	{
 		AppLaunchRequest request;

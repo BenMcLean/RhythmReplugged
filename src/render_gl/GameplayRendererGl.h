@@ -4,7 +4,7 @@
 
 #include <string>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::render_gl
 {
 	class GameplayRendererGl
 	{
@@ -15,7 +15,7 @@ namespace rhythmreplugged
 		void on_context_lost();
 		void on_context_restored(std::string &error_message);
 
-		void render(const GameplaySceneView &scene, int framebuffer_width, int framebuffer_height);
+		void render(const core::GameplaySceneView &scene, int framebuffer_width, int framebuffer_height);
 
 	private:
 		bool create_device_objects(std::string &error_message);

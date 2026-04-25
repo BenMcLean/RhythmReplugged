@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	void AudioMixer::reset()
 	{
@@ -28,12 +28,12 @@ namespace rhythmreplugged
 		prototype_player_->render_interleaved_s16(output, frame_count);
 	}
 
-	AudioBatch AudioMixer::render(size_t frame_count) const
+	::rhythmreplugged::frontend_contract::AudioBatch AudioMixer::render(size_t frame_count) const
 	{
 		if (prototype_player_ == nullptr || !prototype_player_->is_loaded())
 			return {};
 
-		AudioBatch batch;
+		::rhythmreplugged::frontend_contract::AudioBatch batch;
 		batch.sample_rate = prototype_player_->sample_rate();
 		batch.channels = 2;
 		batch.samples.resize(frame_count * 2);

@@ -17,7 +17,8 @@
 
 namespace
 {
-	using namespace rhythmreplugged;
+	using namespace rhythmreplugged::core;
+	using namespace rhythmreplugged::render_gl;
 
 	constexpr float kPi = 3.1415926535f;
 
@@ -472,7 +473,7 @@ namespace
 	}
 }
 
-namespace rhythmreplugged
+namespace rhythmreplugged::render_gl
 {
 	bool GameplayRendererGl::initialize(std::string &error_message)
 	{

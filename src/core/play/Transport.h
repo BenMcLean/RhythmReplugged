@@ -3,7 +3,7 @@
 #include <atomic>
 #include <cstddef>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	class Transport
 	{

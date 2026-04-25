@@ -8,7 +8,7 @@
 #include <thread>
 #include <vector>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	class BackgroundWorker
 	{

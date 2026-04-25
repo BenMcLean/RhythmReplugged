@@ -55,8 +55,8 @@ list(GET RR_IMGUI_SDL3_BACKEND_SOURCES 0 RR_IMGUI_SDL3_BACKEND_SOURCE)
 list(GET RR_IMGUI_OPENGL3_BACKEND_SOURCES 0 RR_IMGUI_OPENGL3_BACKEND_SOURCE)
 get_filename_component(RR_IMGUI_BACKEND_INCLUDE_DIR "${RR_IMGUI_SDL3_BACKEND_SOURCE}" DIRECTORY)
 
-add_library(rr_libretro_contract INTERFACE)
-target_include_directories(rr_libretro_contract INTERFACE
+add_library(rr_frontend_contract INTERFACE)
+target_include_directories(rr_frontend_contract INTERFACE
 	${RR_SRC_DIR}
 )
 
@@ -82,6 +82,8 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/chart/MidiChart.h
 	${RR_SRC_DIR}/core/concurrency/BackgroundWorker.cpp
 	${RR_SRC_DIR}/core/concurrency/BackgroundWorker.h
+	${RR_SRC_DIR}/core/utils/TextDecoding.cpp
+	${RR_SRC_DIR}/core/utils/TextDecoding.h
 	${RR_SRC_DIR}/core/menu/SongBrowser.cpp
 	${RR_SRC_DIR}/core/menu/SongBrowser.h
 	${RR_SRC_DIR}/core/play/AudioMixer.cpp
@@ -92,9 +94,9 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/play/Transport.h
 	${RR_SRC_DIR}/core/songs/SongIni.cpp
 	${RR_SRC_DIR}/core/songs/SongIni.h
-	${RR_SRC_DIR}/libretro_contract/AudioTypes.h
-	${RR_SRC_DIR}/libretro_contract/RetroFileSystem.h
-	${RR_SRC_DIR}/libretro_contract/RetroInput.h
+	${RR_SRC_DIR}/frontend_contract/AudioTypes.h
+	${RR_SRC_DIR}/frontend_contract/RetroFileSystem.h
+	${RR_SRC_DIR}/frontend_contract/RetroInput.h
 )
 
 target_include_directories(rr_core PUBLIC
@@ -103,7 +105,7 @@ target_include_directories(rr_core PUBLIC
 )
 
 target_link_libraries(rr_core PUBLIC
-	rr_libretro_contract
+	rr_frontend_contract
 PRIVATE
 	midifile
 	Threads::Threads
@@ -151,8 +153,8 @@ PRIVATE
 add_executable(RhythmReplugged
 	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.cpp
 	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.h
-	${RR_SRC_DIR}/platform_sdl3/Sdl3FileSystem.cpp
-	${RR_SRC_DIR}/platform_sdl3/Sdl3FileSystem.h
+	${RR_SRC_DIR}/platform_sdl3/FileSystem.cpp
+	${RR_SRC_DIR}/platform_sdl3/FileSystem.h
 	${RR_SRC_DIR}/platform_sdl3/main.cpp
 	${RR_IMGUI_SDL3_BACKEND_SOURCE}
 	${RR_IMGUI_OPENGL3_BACKEND_SOURCE}
@@ -177,8 +179,8 @@ add_library(platform_libretro MODULE
 	${RR_SRC_DIR}/platform_libretro/core.cpp
 	${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.cpp
 	${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.h
-	${RR_SRC_DIR}/platform_libretro/NativeFileSystem.cpp
-	${RR_SRC_DIR}/platform_libretro/NativeFileSystem.h
+	${RR_SRC_DIR}/platform_libretro/FileSystem.cpp
+	${RR_SRC_DIR}/platform_libretro/FileSystem.h
 	${RR_IMGUI_OPENGL3_BACKEND_SOURCE}
 )
 

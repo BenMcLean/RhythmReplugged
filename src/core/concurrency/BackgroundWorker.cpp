@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace rhythmreplugged
+namespace rhythmreplugged::core
 {
 	BackgroundWorker::~BackgroundWorker()
 	{
