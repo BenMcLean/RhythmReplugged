@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/play/GameplayOptions.h"
+
 #include <array>
 #include <cstddef>
 #include <string>
@@ -11,8 +13,14 @@ namespace rhythmreplugged::core
 
 	enum class AppMode
 	{
+		Menu,
+		Gameplay,
+	};
+
+	enum class MenuScreen
+	{
 		SongBrowser,
-		PrototypePlayer,
+		DifficultySelect,
 	};
 
 	struct SongListItem
@@ -33,6 +41,21 @@ namespace rhythmreplugged::core
 		std::string current_path;
 		std::string status_message;
 		std::vector<SongListItem> entries;
+		int selected_index = 0;
+	};
+
+	struct DifficultyListItem
+	{
+		DifficultyOption difficulty = DifficultyOption::Medium;
+		std::string label;
+	};
+
+	struct DifficultySelectView
+	{
+		std::string song_title;
+		std::string song_subtitle;
+		std::string status_message;
+		std::vector<DifficultyListItem> entries;
 		int selected_index = 0;
 	};
 

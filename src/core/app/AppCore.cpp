@@ -21,12 +21,15 @@ namespace rhythmreplugged::core
 
 	bool AppCore::retro_init(const AppLaunchRequest &launch_request, std::string &error_message)
 	{
-		mode_ = AppMode::SongBrowser;
+		mode_ = AppMode::Menu;
+		menu_screen_ = MenuScreen::SongBrowser;
 		song_session_.unload();
 		session_unload_pending_ = false;
 		audio_batch_.clear();
 		audio_batch_.sample_rate = 0;
 		player_status_message_.clear();
+		pending_song_path_.clear();
+		pending_gameplay_options_ = GameplayOptions{};
 		if (launch_request.songs_root_path.empty())
 		{
 			song_browser_.clear_root("No songs root is configured. Load a folder or song file from your library.");
@@ -39,9 +42,9 @@ namespace rhythmreplugged::core
 		if (launch_request.startup_song_path.empty())
 			return true;
 
-		if (song_session_.load(file_system_, launch_request.startup_song_path, error_message))
+		if (song_session_.load(file_system_, launch_request.startup_song_path, pending_gameplay_options_, error_message))
 		{
-			mode_ = AppMode::PrototypePlayer;
+			mode_ = AppMode::Gameplay;
 			session_unload_pending_ = false;
 			player_status_message_.clear();
 			return true;
@@ -58,15 +61,15 @@ namespace rhythmreplugged::core
 
 		switch (mode_)
 		{
-		case AppMode::SongBrowser:
-			run_song_browser(input_state);
+		case AppMode::Menu:
+			run_menu(input_state);
 			break;
-		case AppMode::PrototypePlayer:
-			run_prototype_player(input_state);
+		case AppMode::Gameplay:
+			run_gameplay(input_state);
 			break;
 		}
 
-		if (audio_batch_enabled_ && mode_ == AppMode::PrototypePlayer)
+		if (audio_batch_enabled_ && mode_ == AppMode::Gameplay)
 			audio_batch_ = song_session_.render_fixed_tick_audio(kAppFramesPerSecond);
 
 		previous_input_ = input_state;
@@ -74,12 +77,15 @@ namespace rhythmreplugged::core
 
 	void AppCore::retro_deinit()
 	{
-		mode_ = AppMode::SongBrowser;
+		mode_ = AppMode::Menu;
+		menu_screen_ = MenuScreen::SongBrowser;
 		song_session_.unload();
 		session_unload_pending_ = false;
 		audio_batch_.clear();
 		audio_batch_.sample_rate = 0;
 		player_status_message_.clear();
+		pending_song_path_.clear();
+		pending_gameplay_options_ = GameplayOptions{};
 	}
 
 	void AppCore::set_audio_batch_enabled(bool enabled)
@@ -94,7 +100,7 @@ namespace rhythmreplugged::core
 
 	bool AppCore::set_browser_selected_index(int index)
 	{
-		if (mode_ != AppMode::SongBrowser)
+		if (mode_ != AppMode::Menu || menu_screen_ != MenuScreen::SongBrowser)
 			return false;
 
 		return song_browser_.set_selected_index(index);
@@ -107,29 +113,68 @@ namespace rhythmreplugged::core
 
 	bool AppCore::activate_browser_selection_unlocked()
 	{
-		if (mode_ != AppMode::SongBrowser)
+		if (mode_ != AppMode::Menu || menu_screen_ != MenuScreen::SongBrowser)
 			return false;
 
 		std::string selected_song_path;
 		std::string error_message;
 		if (song_browser_.activate_selected(selected_song_path, error_message) && !selected_song_path.empty())
-		{
-			if (song_session_.load(file_system_, selected_song_path, error_message))
-			{
-				mode_ = AppMode::PrototypePlayer;
-				session_unload_pending_ = false;
-				player_status_message_.clear();
-				return true;
-			}
-
-			song_browser_.set_status_message(error_message);
-			return false;
-		}
+			return begin_song_activation(selected_song_path);
 
 		if (!error_message.empty())
 			song_browser_.set_status_message(error_message);
 
 		return selected_song_path.empty();
+	}
+
+	bool AppCore::set_difficulty_selected_index(int index)
+	{
+		if (mode_ != AppMode::Menu || menu_screen_ != MenuScreen::DifficultySelect)
+			return false;
+
+		return difficulty_select_menu_.set_selected_index(index);
+	}
+
+	bool AppCore::activate_difficulty_selection()
+	{
+		return activate_difficulty_selection_unlocked();
+	}
+
+	bool AppCore::activate_difficulty_selection_unlocked()
+	{
+		if (mode_ != AppMode::Menu || menu_screen_ != MenuScreen::DifficultySelect || pending_song_path_.empty())
+			return false;
+
+		std::string error_message;
+		difficulty_select_menu_.apply_to(pending_gameplay_options_);
+		if (song_session_.load(file_system_, pending_song_path_, pending_gameplay_options_, error_message))
+		{
+			mode_ = AppMode::Gameplay;
+			session_unload_pending_ = false;
+			player_status_message_.clear();
+			difficulty_select_menu_.clear_status_message();
+			return true;
+		}
+
+		difficulty_select_menu_.set_status_message(error_message);
+		return false;
+	}
+
+	bool AppCore::begin_song_activation(const std::string &selected_song_path)
+	{
+		const SongBrowserView &browser = song_browser_.view();
+		const SongListItem *selected_entry = nullptr;
+		if (browser.selected_index >= 0 && browser.selected_index < static_cast<int>(browser.entries.size()))
+			selected_entry = &browser.entries[static_cast<size_t>(browser.selected_index)];
+
+		pending_song_path_ = selected_song_path;
+		pending_gameplay_options_ = GameplayOptions{};
+		menu_screen_ = MenuScreen::DifficultySelect;
+		difficulty_select_menu_.open(
+			selected_entry != nullptr ? selected_entry->label : std::string(),
+			selected_entry != nullptr ? selected_entry->subtitle : std::string(),
+			pending_gameplay_options_);
+		return true;
 	}
 
 	void AppCore::return_to_browser()
@@ -139,9 +184,11 @@ namespace rhythmreplugged::core
 
 	void AppCore::return_to_browser_unlocked()
 	{
-		mode_ = AppMode::SongBrowser;
+		mode_ = AppMode::Menu;
+		menu_screen_ = MenuScreen::SongBrowser;
 		session_unload_pending_ = true;
 		player_status_message_.clear();
+		pending_song_path_.clear();
 	}
 
 	void AppCore::toggle_player_guitar_mute()
@@ -151,7 +198,7 @@ namespace rhythmreplugged::core
 
 	void AppCore::toggle_player_guitar_mute_unlocked()
 	{
-		if (mode_ == AppMode::PrototypePlayer)
+		if (mode_ == AppMode::Gameplay)
 			song_session_.toggle_guitar_mute();
 	}
 
@@ -178,7 +225,7 @@ namespace rhythmreplugged::core
 
 	int AppCore::sample_rate() const
 	{
-		return mode_ == AppMode::PrototypePlayer ? song_session_.sample_rate() : 0;
+		return mode_ == AppMode::Gameplay ? song_session_.sample_rate() : 0;
 	}
 
 	AppMode AppCore::mode() const
@@ -186,9 +233,19 @@ namespace rhythmreplugged::core
 		return mode_;
 	}
 
+	MenuScreen AppCore::menu_screen() const
+	{
+		return menu_screen_;
+	}
+
 	const SongBrowserView &AppCore::song_browser_view() const
 	{
 		return song_browser_.view();
+	}
+
+	const DifficultySelectView &AppCore::difficulty_select_view() const
+	{
+		return difficulty_select_menu_.view();
 	}
 
 	PrototypePlayerView AppCore::prototype_player_view() const
@@ -201,7 +258,7 @@ namespace rhythmreplugged::core
 		GameplaySceneView scene;
 		scene.clear_color = {12.0f / 255.0f, 14.0f / 255.0f, 20.0f / 255.0f, 1.0f};
 
-		if (mode_ != AppMode::PrototypePlayer)
+		if (mode_ != AppMode::Gameplay)
 			return scene;
 
 		const PrototypePlayerView player = prototype_player_view();
@@ -264,7 +321,7 @@ namespace rhythmreplugged::core
 		if (output == nullptr)
 			return;
 
-		if (mode_ != AppMode::PrototypePlayer)
+		if (mode_ != AppMode::Gameplay)
 		{
 			std::fill(output, output + frame_count * 2, static_cast<std::int16_t>(0));
 			return;
@@ -289,7 +346,20 @@ namespace rhythmreplugged::core
 		return current && !previous;
 	}
 
-	void AppCore::run_song_browser(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
+	void AppCore::run_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
+	{
+		switch (menu_screen_)
+		{
+		case MenuScreen::SongBrowser:
+			run_song_browser_menu(input_state);
+			break;
+		case MenuScreen::DifficultySelect:
+			run_difficulty_select_menu(input_state);
+			break;
+		}
+	}
+
+	void AppCore::run_song_browser_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
 	{
 		if (pressed(input_state.b, previous_input_.b))
 		{
@@ -318,7 +388,30 @@ namespace rhythmreplugged::core
 			song_browser_.jump_to_next_letter();
 	}
 
-	void AppCore::run_prototype_player(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
+	void AppCore::run_difficulty_select_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
+	{
+		if (pressed(input_state.b, previous_input_.b))
+		{
+			menu_screen_ = MenuScreen::SongBrowser;
+			pending_song_path_.clear();
+			difficulty_select_menu_.clear_status_message();
+			return;
+		}
+
+		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.start, previous_input_.start))
+		{
+			activate_difficulty_selection_unlocked();
+			return;
+		}
+
+		if (pressed(input_state.up, previous_input_.up))
+			difficulty_select_menu_.move_selection(-1);
+
+		if (pressed(input_state.down, previous_input_.down))
+			difficulty_select_menu_.move_selection(1);
+	}
+
+	void AppCore::run_gameplay(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
 	{
 		if (song_session_.playback_finished())
 		{

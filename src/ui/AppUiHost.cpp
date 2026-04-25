@@ -19,19 +19,29 @@ namespace rhythmreplugged::ui
 
 	void render_app_ui(AppCore &app, ImVec2 window_size, float ui_scale, OpenGlCoverTextures &cover_textures)
 	{
-		if (app.mode() == AppMode::SongBrowser)
+		if (app.mode() == AppMode::Menu)
 		{
-			const SongBrowserView &browser_view = app.song_browser_view();
-			cover_textures.sync_song_browser_directory(browser_view);
-
-			SongBrowserUiActions actions;
-			actions.set_selected_index = [&](int index) { app.set_browser_selected_index(index); };
-			actions.activate_selection = [&]() { app.activate_browser_selection(); };
-			actions.get_cover_texture_ref = [&](const std::string &cover_path)
+			if (app.menu_screen() == MenuScreen::SongBrowser)
 			{
-				return cover_textures.get_texture_ref(cover_path);
-			};
-			render_song_browser_ui(browser_view, actions, window_size, ui_scale);
+				const SongBrowserView &browser_view = app.song_browser_view();
+				cover_textures.sync_song_browser_directory(browser_view);
+
+				SongBrowserUiActions actions;
+				actions.set_selected_index = [&](int index) { app.set_browser_selected_index(index); };
+				actions.activate_selection = [&]() { app.activate_browser_selection(); };
+				actions.get_cover_texture_ref = [&](const std::string &cover_path)
+				{
+					return cover_textures.get_texture_ref(cover_path);
+				};
+				render_song_browser_ui(browser_view, actions, window_size, ui_scale);
+				return;
+			}
+
+			cover_textures.stop_song_browser_loading();
+			DifficultySelectUiActions actions;
+			actions.set_selected_index = [&](int index) { app.set_difficulty_selected_index(index); };
+			actions.activate_selection = [&]() { app.activate_difficulty_selection(); };
+			render_difficulty_select_ui(app.difficulty_select_view(), actions, window_size, ui_scale);
 			return;
 		}
 

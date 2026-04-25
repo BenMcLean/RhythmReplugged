@@ -1260,6 +1260,33 @@ namespace rhythmreplugged::core
 				note_difficulty == target_difficulty;
 		}
 
+		std::vector<ParsedDifficultyPreference> build_preview_difficulty_order(MidiChartDifficulty preferred_difficulty)
+		{
+			std::vector<ParsedDifficultyPreference> order;
+			order.reserve(std::size(kPreferredDifficulties));
+
+			if (preferred_difficulty != MidiChartDifficulty::None)
+			{
+				for (const ParsedDifficultyPreference &preference : kPreferredDifficulties)
+				{
+					if (preference.difficulty == preferred_difficulty)
+					{
+						order.push_back(preference);
+						break;
+					}
+				}
+			}
+
+			for (const ParsedDifficultyPreference &preference : kPreferredDifficulties)
+			{
+				if (preference.difficulty == preferred_difficulty)
+					continue;
+				order.push_back(preference);
+			}
+
+			return order;
+		}
+
 		bool is_legacy_starpower_fixup_track(MidiChartTrackType type)
 		{
 			switch (type)
@@ -1765,7 +1792,10 @@ namespace rhythmreplugged::core
 		}
 	}
 
-	bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
+bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+	const std::string &song_directory,
+	MidiChartDifficulty preferred_difficulty,
+	std::string &error_message)
 	{
 		clear();
 
@@ -1905,7 +1935,7 @@ namespace rhythmreplugged::core
 		if (measure_lines_.empty())
 			generate_yarg_measure_lines(midi_file, time_signatures_, measure_lines_);
 
-		rebuild_preview_selection();
+		rebuild_preview_selection(preferred_difficulty);
 		if (notes_.empty())
 		{
 			error_message = "notes.mid loaded, but no supported 5-fret chart was found yet.";
@@ -2094,11 +2124,12 @@ namespace rhythmreplugged::core
 		return {};
 	}
 
-	void MidiChart::rebuild_preview_selection()
+	void MidiChart::rebuild_preview_selection(MidiChartDifficulty preferred_difficulty)
 	{
 		track_name_.clear();
 		difficulty_name_.clear();
 		notes_.clear();
+		const std::vector<ParsedDifficultyPreference> difficulty_order = build_preview_difficulty_order(preferred_difficulty);
 
 		for (const InstrumentTrackPreference &track_preference : kPreviewTrackPreferences)
 		{
@@ -2107,7 +2138,7 @@ namespace rhythmreplugged::core
 				if (track.type != track_preference.type)
 					continue;
 
-				for (const ParsedDifficultyPreference &difficulty_preference : kPreferredDifficulties)
+				for (const ParsedDifficultyPreference &difficulty_preference : difficulty_order)
 				{
 					std::vector<MidiChartNote> preview_notes;
 					for (const MidiChartParsedNote &note : track.parsed_notes)

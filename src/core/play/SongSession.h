@@ -17,7 +17,10 @@ namespace rhythmreplugged::core
 	class SongSession
 	{
 	public:
-		bool load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message);
+		bool load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+			const std::string &song_directory,
+			const GameplayOptions &options,
+			std::string &error_message);
 		void unload();
 		bool is_loaded() const;
 		void toggle_guitar_mute();

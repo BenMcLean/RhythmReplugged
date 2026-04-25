@@ -7,14 +7,37 @@
 
 namespace rhythmreplugged::core
 {
-	bool SongSession::load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
+	namespace
+	{
+		MidiChartDifficulty to_midi_chart_difficulty(DifficultyOption difficulty)
+		{
+			switch (difficulty)
+			{
+			case DifficultyOption::Easy:
+				return MidiChartDifficulty::Easy;
+			case DifficultyOption::Medium:
+				return MidiChartDifficulty::Medium;
+			case DifficultyOption::Hard:
+				return MidiChartDifficulty::Hard;
+			case DifficultyOption::Expert:
+				return MidiChartDifficulty::Expert;
+			}
+
+			return MidiChartDifficulty::Medium;
+		}
+	}
+
+	bool SongSession::load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+		const std::string &song_directory,
+		const GameplayOptions &options,
+		std::string &error_message)
 	{
 		unload();
 		if (!prototype_player_.load(file_system, song_directory, error_message))
 			return false;
 
 		std::string chart_error_message;
-		midi_chart_.load(file_system, song_directory, chart_error_message);
+		midi_chart_.load(file_system, song_directory, to_midi_chart_difficulty(options.difficulty()), chart_error_message);
 		chart_status_message_ = std::move(chart_error_message);
 
 		transport_.configure(prototype_player_.sample_rate());

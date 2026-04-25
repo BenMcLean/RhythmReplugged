@@ -84,10 +84,14 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/concurrency/BackgroundWorker.h
 	${RR_SRC_DIR}/core/utils/TextDecoding.cpp
 	${RR_SRC_DIR}/core/utils/TextDecoding.h
+	${RR_SRC_DIR}/core/menu/DifficultySelectMenu.cpp
+	${RR_SRC_DIR}/core/menu/DifficultySelectMenu.h
 	${RR_SRC_DIR}/core/menu/SongBrowser.cpp
 	${RR_SRC_DIR}/core/menu/SongBrowser.h
 	${RR_SRC_DIR}/core/play/AudioMixer.cpp
 	${RR_SRC_DIR}/core/play/AudioMixer.h
+	${RR_SRC_DIR}/core/play/GameplayOptions.cpp
+	${RR_SRC_DIR}/core/play/GameplayOptions.h
 	${RR_SRC_DIR}/core/play/SongSession.cpp
 	${RR_SRC_DIR}/core/play/SongSession.h
 	${RR_SRC_DIR}/core/play/Transport.cpp

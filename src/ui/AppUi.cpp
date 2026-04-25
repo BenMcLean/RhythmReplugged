@@ -233,7 +233,72 @@ namespace rhythmreplugged::ui
 
 		last_browser_path = browser.current_path;
 		last_selected_index = browser.selected_index;
+	}
+
+	void render_difficulty_select_ui(
+		const DifficultySelectView &menu,
+		const DifficultySelectUiActions &actions,
+		ImVec2 window_size,
+		float ui_scale)
+	{
+		int pending_selected_index = -1;
+		bool pending_activate_selection = false;
+
+		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
+		ImGui::Begin("Difficulty Select", nullptr,
+			ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse);
+
+		ImGui::TextUnformatted("Select Difficulty");
+		ImGui::Separator();
+		if (!menu.song_title.empty())
+			ImGui::TextWrapped("%s", menu.song_title.c_str());
+		if (!menu.song_subtitle.empty())
+			ImGui::TextDisabled("%s", menu.song_subtitle.c_str());
+		ImGui::Spacing();
+
+		for (int index = 0; index < static_cast<int>(menu.entries.size()); ++index)
+		{
+			const DifficultyListItem &entry = menu.entries[index];
+			const bool selected = index == menu.selected_index;
+			if (ImGui::Selectable(entry.label.c_str(), selected, 0, ImVec2(0.0f, 36.0f * ui_scale)) &&
+				actions.set_selected_index != nullptr)
+			{
+				pending_selected_index = index;
+			}
 		}
+
+		ImGui::Spacing();
+		if (ImGui::Button("Start Song", ImVec2(240.0f * ui_scale, 0.0f)) &&
+			actions.activate_selection != nullptr)
+		{
+			pending_activate_selection = true;
+		}
+
+		if (!menu.status_message.empty())
+		{
+			ImGui::Spacing();
+			ImGui::TextWrapped("%s", menu.status_message.c_str());
+		}
+
+		ImGui::Spacing();
+		ImGui::TextDisabled("B: Back    A / Start: Confirm");
+		ImGui::End();
+
+		if (pending_selected_index >= 0 &&
+			actions.set_selected_index != nullptr)
+		{
+			actions.set_selected_index(pending_selected_index);
+		}
+
+		if (pending_activate_selection &&
+			actions.activate_selection != nullptr)
+		{
+			actions.activate_selection();
+		}
+	}
 
 	void render_prototype_player_ui(const PrototypePlayerView &player, ImVec2 window_size)
 	{

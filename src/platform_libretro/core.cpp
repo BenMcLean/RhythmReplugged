@@ -309,7 +309,7 @@ namespace
 
 	void queue_audio_from_stream()
 	{
-		if (g_app.mode() != AppMode::PrototypePlayer)
+		if (g_app.mode() != AppMode::Gameplay)
 			return;
 
 		const int sample_rate = g_app.sample_rate();
@@ -613,7 +613,7 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 		return;
 
 	const ::rhythmreplugged::frontend_contract::RetroInputState input = poll_input();
-	if (g_app.mode() == AppMode::PrototypePlayer)
+	if (g_app.mode() == AppMode::Gameplay)
 	{
 		if (pressed(input.l, g_previous_input.l))
 			g_app.nudge_timing_offset_seconds(-0.005);
@@ -627,7 +627,7 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 	sync_frontend_sample_rate();
 	g_previous_input = input;
 	submit_audio();
-	if (g_app.mode() != AppMode::PrototypePlayer)
+	if (g_app.mode() != AppMode::Gameplay)
 		g_app.finalize_audio_stop();
 
 	ImGui_ImplOpenGL3_NewFrame();

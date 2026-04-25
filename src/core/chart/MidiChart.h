@@ -284,7 +284,10 @@ namespace rhythmreplugged::core
 	class MidiChart
 	{
 	public:
-		bool load(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message);
+		bool load(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+			const std::string &song_directory,
+			MidiChartDifficulty preferred_difficulty,
+			std::string &error_message);
 		void clear();
 		bool is_loaded() const;
 		std::string_view track_name() const;
@@ -314,7 +317,7 @@ namespace rhythmreplugged::core
 			const std::string &directory_path,
 			std::string_view file_name);
 
-		void rebuild_preview_selection();
+		void rebuild_preview_selection(MidiChartDifficulty preferred_difficulty);
 
 		int ticks_per_quarter_note_ = 480;
 		int star_power_note_override_ = -1;
