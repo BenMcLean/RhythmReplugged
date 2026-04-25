@@ -4,6 +4,7 @@
 	"dependencies": [
 		"sdl3",
 		"sdl3-image",
+		"stb",
 		"imgui",
 		"libvorbis",
 		"miniaudio",

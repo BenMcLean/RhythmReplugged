@@ -25,9 +25,10 @@ add_subdirectory(external/midifile)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(Threads REQUIRED)
 find_package(Vorbis CONFIG REQUIRED)
-find_package(ZLIB REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS "miniaudio.h")
+find_path(STB_INCLUDE_DIRS "stb_image.h" REQUIRED)
 find_path(IMGUI_INCLUDE_DIRS "imgui.h" REQUIRED)
 find_library(IMGUI_LIBRARY_RELEASE NAMES imgui REQUIRED)
 find_library(IMGUI_LIBRARY_DEBUG NAMES imguid imgui REQUIRED)
@@ -79,6 +80,8 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/audio/PrototypePlayer.h
 	${RR_SRC_DIR}/core/chart/MidiChart.cpp
 	${RR_SRC_DIR}/core/chart/MidiChart.h
+	${RR_SRC_DIR}/core/concurrency/BackgroundWorker.cpp
+	${RR_SRC_DIR}/core/concurrency/BackgroundWorker.h
 	${RR_SRC_DIR}/core/menu/SongBrowser.cpp
 	${RR_SRC_DIR}/core/menu/SongBrowser.h
 	${RR_SRC_DIR}/core/play/AudioMixer.cpp
@@ -103,6 +106,7 @@ target_link_libraries(rr_core PUBLIC
 	rr_libretro_contract
 PRIVATE
 	midifile
+	Threads::Threads
 	Vorbis::vorbisfile
 )
 
@@ -113,22 +117,12 @@ add_library(rr_ui
 	${RR_SRC_DIR}/ui/AppUiHost.h
 	${RR_SRC_DIR}/ui/OpenGlCoverTextures.cpp
 	${RR_SRC_DIR}/ui/OpenGlCoverTextures.h
-	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/formats/png/rpng.c
-	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/streams/trans_stream.c
-	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/streams/trans_stream_pipe.c
-	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/streams/trans_stream_zlib.c
 )
 
 target_include_directories(rr_ui PUBLIC
 	${RR_SRC_DIR}
-	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/include
+	${STB_INCLUDE_DIRS}
 	${RR_IMGUI_BACKEND_INCLUDE_DIR}
-PRIVATE
-	${ZLIB_INCLUDE_DIR}
-)
-
-target_compile_definitions(rr_ui PRIVATE
-	HAVE_ZLIB=1
 )
 
 target_link_libraries(rr_ui PUBLIC
@@ -136,7 +130,6 @@ target_link_libraries(rr_ui PUBLIC
 	rr_imgui_core
 PRIVATE
 	OpenGL::GL
-	ZLIB::ZLIB
 )
 
 add_library(rr_render_gl

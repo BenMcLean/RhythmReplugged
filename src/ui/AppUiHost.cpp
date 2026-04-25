@@ -33,6 +33,7 @@ namespace rhythmreplugged
 			return;
 		}
 
+		cover_textures.stop_song_browser_loading();
 		render_prototype_player_ui(app.prototype_player_view(), window_size);
 	}
 }
