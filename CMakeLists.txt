@@ -86,6 +86,8 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/utils/TextDecoding.h
 	${RR_SRC_DIR}/core/menu/DifficultySelectMenu.cpp
 	${RR_SRC_DIR}/core/menu/DifficultySelectMenu.h
+	${RR_SRC_DIR}/core/menu/InstrumentSelectMenu.cpp
+	${RR_SRC_DIR}/core/menu/InstrumentSelectMenu.h
 	${RR_SRC_DIR}/core/menu/SongBrowser.cpp
 	${RR_SRC_DIR}/core/menu/SongBrowser.h
 	${RR_SRC_DIR}/core/play/AudioMixer.cpp

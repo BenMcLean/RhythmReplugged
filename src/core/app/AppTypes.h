@@ -20,6 +20,7 @@ namespace rhythmreplugged::core
 	enum class MenuScreen
 	{
 		SongBrowser,
+		InstrumentSelect,
 		DifficultySelect,
 		Loading,
 	};
@@ -60,6 +61,29 @@ namespace rhythmreplugged::core
 		std::string label;
 	};
 
+	struct InstrumentListItem
+	{
+		InstrumentOption instrument = InstrumentOption::Guitar;
+		std::string label;
+	};
+
+	struct InstrumentSelectView
+	{
+		std::string song_title;
+		std::string song_subtitle;
+		std::string status_message;
+		std::vector<InstrumentListItem> entries;
+		int selected_index = 0;
+		PreloadPhase preload_phase = PreloadPhase::Idle;
+		float preload_progress = 0.0f;
+		size_t preload_processed_megabytes = 0;
+		size_t preload_total_megabytes = 0;
+		size_t completed_stem_count = 0;
+		size_t total_stem_count = 0;
+		size_t completed_read_file_count = 0;
+		size_t total_read_file_count = 0;
+	};
+
 	struct DifficultySelectView
 	{
 		std::string song_title;
@@ -96,8 +120,9 @@ namespace rhythmreplugged::core
 		std::string song_title;
 		std::string song_artist;
 		std::string status_message;
-		bool has_guitar = false;
-		bool guitar_muted = false;
+		bool has_playable_stem = false;
+		bool playable_stem_muted = false;
+		std::string playable_stem_label;
 		std::array<bool, 5> lane_held{};
 		std::array<bool, 5> lane_sustaining{};
 		size_t loaded_stem_count = 0;

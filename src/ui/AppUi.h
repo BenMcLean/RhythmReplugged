@@ -23,6 +23,12 @@ namespace rhythmreplugged::ui
 		std::function<void()> activate_selection;
 	};
 
+	struct InstrumentSelectUiActions
+	{
+		std::function<void(int)> set_selected_index;
+		std::function<void()> activate_selection;
+	};
+
 	void apply_imgui_style(float ui_scale);
 	void render_song_browser_ui(
 		const core::SongBrowserView &browser,
@@ -32,6 +38,11 @@ namespace rhythmreplugged::ui
 	void render_difficulty_select_ui(
 		const core::DifficultySelectView &menu,
 		const DifficultySelectUiActions &actions,
+		ImVec2 window_size,
+		float ui_scale);
+	void render_instrument_select_ui(
+		const core::InstrumentSelectView &menu,
+		const InstrumentSelectUiActions &actions,
 		ImVec2 window_size,
 		float ui_scale);
 	void render_song_loading_ui(

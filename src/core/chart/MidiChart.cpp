@@ -52,6 +52,28 @@ namespace rhythmreplugged::core
 			{MidiChartTrackType::FiveFretKeys, "Keys"},
 		};
 
+		bool is_supported_preview_track_type(MidiChartTrackType type)
+		{
+			for (const InstrumentTrackPreference &track_preference : kPreviewTrackPreferences)
+			{
+				if (track_preference.type == type)
+					return true;
+			}
+
+			return false;
+		}
+
+		std::string_view display_name_for_preview_track_type(MidiChartTrackType type)
+		{
+			for (const InstrumentTrackPreference &track_preference : kPreviewTrackPreferences)
+			{
+				if (track_preference.type == type)
+					return track_preference.display_name;
+			}
+
+			return {};
+		}
+
 		constexpr DifficultyNoteRange kFiveFretNoteRanges[] = {
 			{MidiChartDifficulty::Easy, 60, 5},
 			{MidiChartDifficulty::Medium, 72, 5},
@@ -1795,6 +1817,7 @@ namespace rhythmreplugged::core
 bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 	const std::string &song_directory,
 	MidiChartDifficulty preferred_difficulty,
+	MidiChartTrackType preferred_track_type,
 	std::string &error_message)
 	{
 		clear();
@@ -1935,7 +1958,7 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 		if (measure_lines_.empty())
 			generate_yarg_measure_lines(midi_file, time_signatures_, measure_lines_);
 
-		rebuild_preview_selection(preferred_difficulty);
+		rebuild_preview_selection(preferred_difficulty, preferred_track_type);
 		if (notes_.empty())
 		{
 			error_message = "notes.mid loaded, but no supported 5-fret chart was found yet.";
@@ -2016,6 +2039,32 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 	const std::vector<MidiChartTrack> &MidiChart::tracks() const
 	{
 		return tracks_;
+	}
+
+	std::vector<MidiChartTrackType> MidiChart::available_preview_track_types() const
+	{
+		std::vector<MidiChartTrackType> available_track_types;
+		for (const InstrumentTrackPreference &track_preference : kPreviewTrackPreferences)
+		{
+			for (const MidiChartTrack &track : tracks_)
+			{
+				if (track.type != track_preference.type)
+					continue;
+
+				const auto has_preview_notes = std::any_of(track.parsed_notes.begin(), track.parsed_notes.end(),
+					[](const MidiChartParsedNote &note)
+					{
+						return note.category == MidiChartNoteCategory::FiveFret &&
+							note.lane >= 1 &&
+							note.lane <= 5;
+					});
+				if (has_preview_notes)
+					available_track_types.push_back(track.type);
+				break;
+			}
+		}
+
+		return available_track_types;
 	}
 
 	int MidiChart::ticks_per_quarter_note() const
@@ -2124,18 +2173,26 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 		return {};
 	}
 
-	void MidiChart::rebuild_preview_selection(MidiChartDifficulty preferred_difficulty)
+	void MidiChart::rebuild_preview_selection(MidiChartDifficulty preferred_difficulty, MidiChartTrackType preferred_track_type)
 	{
 		track_name_.clear();
 		difficulty_name_.clear();
 		notes_.clear();
 		const std::vector<ParsedDifficultyPreference> difficulty_order = build_preview_difficulty_order(preferred_difficulty);
-
+		std::vector<MidiChartTrackType> track_order;
+		if (is_supported_preview_track_type(preferred_track_type))
+			track_order.push_back(preferred_track_type);
 		for (const InstrumentTrackPreference &track_preference : kPreviewTrackPreferences)
+		{
+			if (track_preference.type != preferred_track_type)
+				track_order.push_back(track_preference.type);
+		}
+
+		for (const MidiChartTrackType track_type : track_order)
 		{
 			for (const MidiChartTrack &track : tracks_)
 			{
-				if (track.type != track_preference.type)
+				if (track.type != track_type)
 					continue;
 
 				for (const ParsedDifficultyPreference &difficulty_preference : difficulty_order)
@@ -2162,7 +2219,7 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 					if (preview_notes.empty())
 						continue;
 
-					track_name_ = std::string(track_preference.display_name);
+					track_name_ = std::string(display_name_for_preview_track_type(track_type));
 					difficulty_name_ = std::string(difficulty_preference.name);
 					notes_ = std::move(preview_notes);
 					return;

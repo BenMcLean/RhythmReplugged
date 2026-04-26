@@ -54,6 +54,9 @@ namespace rhythmreplugged::core
 
 		static std::uint8_t lane_mask_from_state(const std::array<bool, 5> &lanes);
 		static bool held_mask_satisfies_expected(std::uint8_t held_mask, std::uint8_t expected_mask);
+		void set_selected_stem_target_gain(float gain);
+		float selected_stem_target_gain() const;
+		bool has_selected_stem() const;
 		size_t note_group_end_index(size_t start_index) const;
 		std::uint8_t note_group_lane_mask(size_t start_index, size_t end_index) const;
 		std::uint8_t imminent_note_lane_mask(double song_time_seconds) const;
@@ -68,6 +71,8 @@ namespace rhythmreplugged::core
 		Transport transport_;
 		AudioMixer audio_mixer_;
 		std::string chart_status_message_;
+		std::string selected_stem_name_ = "guitar";
+		std::string selected_instrument_label_ = "Guitar";
 		std::array<bool, 5> lane_held_{};
 		std::array<double, 5> lane_sustain_end_times_{};
 		std::array<double, 5> lane_sustain_release_times_{};

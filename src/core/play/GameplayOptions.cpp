@@ -11,4 +11,14 @@ namespace rhythmreplugged::core
 	{
 		difficulty_ = difficulty;
 	}
+
+	InstrumentOption GameplayOptions::instrument() const
+	{
+		return instrument_;
+	}
+
+	void GameplayOptions::set_instrument(InstrumentOption instrument)
+	{
+		instrument_ = instrument;
+	}
 }

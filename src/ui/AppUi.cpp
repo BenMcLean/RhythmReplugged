@@ -95,6 +95,70 @@ namespace
 		}
 		ImGui::End();
 	}
+
+	void render_preload_progress_overlay(const InstrumentSelectView &menu, ImVec2 window_size, float ui_scale)
+	{
+		if (menu.preload_phase == PreloadPhase::Idle)
+			return;
+
+		const ImVec2 overlay_size(320.0f * ui_scale, 92.0f * ui_scale);
+		ImGui::SetNextWindowPos(
+			ImVec2(window_size.x - overlay_size.x - 24.0f * ui_scale, window_size.y - overlay_size.y - 24.0f * ui_scale),
+			ImGuiCond_Always);
+		ImGui::SetNextWindowSize(overlay_size, ImGuiCond_Always);
+		ImGui::SetNextWindowFocus();
+		ImGui::Begin("Stem Preload Overlay", nullptr,
+			ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse |
+			ImGuiWindowFlags_NoTitleBar |
+			ImGuiWindowFlags_NoInputs |
+			ImGuiWindowFlags_NoNavFocus);
+
+		ImVec4 progress_color = ImVec4(0.28f, 0.72f, 0.32f, 1.0f);
+		const char *title = "Song Ready";
+		const char *detail = "";
+		if (menu.preload_phase == PreloadPhase::Reading)
+		{
+			title = "Reading Stems";
+			detail = "files";
+			progress_color = ImVec4(0.92f, 0.78f, 0.20f, 1.0f);
+		}
+		else if (menu.preload_phase == PreloadPhase::Decoding)
+		{
+			title = "Decoding Stems";
+			detail = "MiB";
+		}
+		else if (menu.preload_phase == PreloadPhase::Failed)
+		{
+			title = "Load Failed";
+			detail = "";
+			progress_color = ImVec4(0.88f, 0.32f, 0.32f, 1.0f);
+		}
+
+		ImGui::TextUnformatted(title);
+		ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progress_color);
+		ImGui::ProgressBar(menu.preload_progress, ImVec2(-1.0f, 0.0f));
+		ImGui::PopStyleColor();
+		if (menu.preload_phase == PreloadPhase::Reading)
+		{
+			ImGui::TextDisabled(
+				"%zu / %zu files read",
+				menu.completed_read_file_count,
+				menu.total_read_file_count);
+		}
+		else
+		{
+			ImGui::TextDisabled(
+				"%zu / %zu stems   %zu / %zu %s",
+				menu.completed_stem_count,
+				menu.total_stem_count,
+				menu.preload_processed_megabytes,
+				menu.preload_total_megabytes,
+				detail);
+		}
+		ImGui::End();
+	}
 }
 
 namespace rhythmreplugged::ui
@@ -377,6 +441,73 @@ namespace rhythmreplugged::ui
 		}
 	}
 
+	void render_instrument_select_ui(
+		const InstrumentSelectView &menu,
+		const InstrumentSelectUiActions &actions,
+		ImVec2 window_size,
+		float ui_scale)
+	{
+		int pending_selected_index = -1;
+		bool pending_activate_selection = false;
+
+		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
+		ImGui::Begin("Instrument Select", nullptr,
+			ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse);
+
+		ImGui::TextUnformatted("Select Instrument");
+		ImGui::Separator();
+		if (!menu.song_title.empty())
+			ImGui::TextWrapped("%s", menu.song_title.c_str());
+		if (!menu.song_subtitle.empty())
+			ImGui::TextDisabled("%s", menu.song_subtitle.c_str());
+		ImGui::Spacing();
+
+		for (int index = 0; index < static_cast<int>(menu.entries.size()); ++index)
+		{
+			const InstrumentListItem &entry = menu.entries[index];
+			const bool selected = index == menu.selected_index;
+			if (ImGui::Selectable(entry.label.c_str(), selected, 0, ImVec2(0.0f, 36.0f * ui_scale)) &&
+				actions.set_selected_index != nullptr)
+			{
+				pending_selected_index = index;
+			}
+		}
+
+		ImGui::Spacing();
+		if (ImGui::Button("Next", ImVec2(240.0f * ui_scale, 0.0f)) &&
+			actions.activate_selection != nullptr)
+		{
+			pending_activate_selection = true;
+		}
+
+		if (!menu.status_message.empty())
+		{
+			ImGui::Spacing();
+			ImGui::TextWrapped("%s", menu.status_message.c_str());
+		}
+
+		ImGui::Spacing();
+		ImGui::TextDisabled("B: Back    A / Start: Confirm");
+		ImGui::End();
+
+		if (pending_selected_index >= 0 &&
+			actions.set_selected_index != nullptr)
+		{
+			actions.set_selected_index(pending_selected_index);
+		}
+
+		if (pending_activate_selection &&
+			actions.activate_selection != nullptr)
+		{
+			actions.activate_selection();
+		}
+
+		render_preload_progress_overlay(menu, window_size, ui_scale);
+	}
+
 	void render_song_loading_ui(
 		const DifficultySelectView &menu,
 		ImVec2 window_size,
@@ -448,8 +579,11 @@ namespace rhythmreplugged::ui
 		if (!player.status_message.empty())
 			draw_status_pill("player_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + 76.0f), player.status_message.c_str(), IM_COL32(16, 20, 29, 210));
 
-		if (player.guitar_muted)
-			draw_status_pill("mute_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + window_size.y - 62.0f), "Guitar muted", IM_COL32(120, 18, 18, 210));
+		if (player.playable_stem_muted)
+		{
+			const std::string muted_label = (player.playable_stem_label.empty() ? std::string("Instrument") : player.playable_stem_label) + " muted";
+			draw_status_pill("mute_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + window_size.y - 62.0f), muted_label.c_str(), IM_COL32(120, 18, 18, 210));
+		}
 
 		const float indicator_y = canvas_pos.y + window_size.y - 54.0f;
 		for (int lane = 0; lane < 5; ++lane)

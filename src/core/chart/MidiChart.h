@@ -287,6 +287,7 @@ namespace rhythmreplugged::core
 		bool load(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 			const std::string &song_directory,
 			MidiChartDifficulty preferred_difficulty,
+			MidiChartTrackType preferred_track_type,
 			std::string &error_message);
 		void clear();
 		bool is_loaded() const;
@@ -300,6 +301,7 @@ namespace rhythmreplugged::core
 		const std::vector<MidiChartTextEvent> &sections() const;
 		const std::vector<MidiChartTextEvent> &lyrics() const;
 		const std::vector<MidiChartTrack> &tracks() const;
+		std::vector<MidiChartTrackType> available_preview_track_types() const;
 		int ticks_per_quarter_note() const;
 		int star_power_note_override() const;
 		MidiChartDrumsType detected_drums_type() const;
@@ -317,7 +319,7 @@ namespace rhythmreplugged::core
 			const std::string &directory_path,
 			std::string_view file_name);
 
-		void rebuild_preview_selection(MidiChartDifficulty preferred_difficulty);
+		void rebuild_preview_selection(MidiChartDifficulty preferred_difficulty, MidiChartTrackType preferred_track_type);
 
 		int ticks_per_quarter_note_ = 480;
 		int star_power_note_override_ = -1;

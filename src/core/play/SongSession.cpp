@@ -25,6 +25,63 @@ namespace rhythmreplugged::core
 
 			return MidiChartDifficulty::Medium;
 		}
+
+		MidiChartTrackType to_midi_chart_track_type(InstrumentOption instrument)
+		{
+			switch (instrument)
+			{
+			case InstrumentOption::Guitar:
+				return MidiChartTrackType::FiveFretGuitar;
+			case InstrumentOption::Bass:
+				return MidiChartTrackType::FiveFretBass;
+			case InstrumentOption::Rhythm:
+				return MidiChartTrackType::FiveFretRhythm;
+			case InstrumentOption::CoopGuitar:
+				return MidiChartTrackType::FiveFretCoop;
+			case InstrumentOption::Keys:
+				return MidiChartTrackType::FiveFretKeys;
+			}
+
+			return MidiChartTrackType::FiveFretGuitar;
+		}
+
+		std::string stem_name_for(InstrumentOption instrument)
+		{
+			switch (instrument)
+			{
+			case InstrumentOption::Guitar:
+				return "guitar";
+			case InstrumentOption::Bass:
+				return "bass";
+			case InstrumentOption::Rhythm:
+				return "rhythm";
+			case InstrumentOption::CoopGuitar:
+				return "guitar";
+			case InstrumentOption::Keys:
+				return "keys";
+			}
+
+			return "guitar";
+		}
+
+		std::string instrument_label_for(InstrumentOption instrument)
+		{
+			switch (instrument)
+			{
+			case InstrumentOption::Guitar:
+				return "Guitar";
+			case InstrumentOption::Bass:
+				return "Bass";
+			case InstrumentOption::Rhythm:
+				return "Rhythm";
+			case InstrumentOption::CoopGuitar:
+				return "Co-op Guitar";
+			case InstrumentOption::Keys:
+				return "Keys";
+			}
+
+			return "Guitar";
+		}
 	}
 
 	bool SongSession::load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
@@ -53,18 +110,27 @@ namespace rhythmreplugged::core
 		}
 
 		std::string chart_error_message;
-		midi_chart_.load(file_system, song_directory, to_midi_chart_difficulty(options.difficulty()), chart_error_message);
+		midi_chart_.load(
+			file_system,
+			song_directory,
+			to_midi_chart_difficulty(options.difficulty()),
+			to_midi_chart_track_type(options.instrument()),
+			chart_error_message);
 		chart_status_message_ = std::move(chart_error_message);
 
 		transport_.configure(prototype_player_.sample_rate());
 		audio_mixer_.set_prototype_player(&prototype_player_);
+		selected_stem_name_ = stem_name_for(options.instrument());
+		selected_instrument_label_ = instrument_label_for(options.instrument());
+		if (!prototype_player_.has_stem(selected_stem_name_) && prototype_player_.has_stem("guitar"))
+			selected_stem_name_ = "guitar";
 		lane_held_.fill(false);
 		lane_sustain_end_times_.fill(0.0);
 		lane_sustain_release_times_.fill(-1.0);
 		input_generation_ = 0;
 		consumed_input_generation_ = 0;
 		next_note_index_ = 0;
-		prototype_player_.set_stem_target_gain("guitar", 1.0f);
+		set_selected_stem_target_gain(1.0f);
 		loaded_.store(true);
 		return true;
 	}
@@ -75,6 +141,8 @@ namespace rhythmreplugged::core
 		transport_.reset();
 		midi_chart_.clear();
 		chart_status_message_.clear();
+		selected_stem_name_ = "guitar";
+		selected_instrument_label_ = "Guitar";
 		lane_held_.fill(false);
 		lane_sustain_end_times_.fill(0.0);
 		lane_sustain_release_times_.fill(-1.0);
@@ -93,7 +161,7 @@ namespace rhythmreplugged::core
 	void SongSession::toggle_guitar_mute()
 	{
 		if (is_loaded())
-			prototype_player_.toggle_guitar_mute();
+			set_selected_stem_target_gain(selected_stem_target_gain() > 0.5f ? 0.0f : 1.0f);
 	}
 
 	void SongSession::update_gameplay_input(const std::array<bool, 5> &lane_held, const std::array<bool, 5> &lane_pressed)
@@ -127,7 +195,7 @@ namespace rhythmreplugged::core
 				}
 				else
 				{
-					prototype_player_.set_stem_target_gain("guitar", 0.0f);
+					set_selected_stem_target_gain(0.0f);
 				}
 			}
 		}
@@ -156,14 +224,14 @@ namespace rhythmreplugged::core
 			const std::uint8_t imminent_note_mask = imminent_note_lane_mask(current_time_seconds);
 			const std::uint8_t required_sustain_mask = static_cast<std::uint8_t>(sustain_mask & ~imminent_note_mask);
 			if (required_sustain_mask == 0 || held_mask_satisfies_expected(held_mask, required_sustain_mask))
-				prototype_player_.set_stem_target_gain("guitar", 1.0f);
+				set_selected_stem_target_gain(1.0f);
 			else
-				prototype_player_.set_stem_target_gain("guitar", 0.0f);
+				set_selected_stem_target_gain(0.0f);
 			return;
 		}
 
 		if (resolved_note_hit || next_note_index_ >= midi_chart_.notes().size())
-			prototype_player_.set_stem_target_gain("guitar", 1.0f);
+			set_selected_stem_target_gain(1.0f);
 	}
 
 	bool SongSession::has_stem(std::string_view stem_name) const
@@ -220,8 +288,9 @@ namespace rhythmreplugged::core
 		player_view.status_message = status_message;
 		if (player_view.status_message.empty())
 			player_view.status_message = chart_status_message_;
-		player_view.has_guitar = prototype_player_.has_stem("guitar");
-		player_view.guitar_muted = prototype_player_.stem_target_gain("guitar") < 0.5f;
+		player_view.has_playable_stem = has_selected_stem();
+		player_view.playable_stem_muted = has_selected_stem() && selected_stem_target_gain() < 0.5f;
+		player_view.playable_stem_label = selected_instrument_label_;
 		player_view.lane_held = lane_held_;
 		player_view.loaded_stem_count = prototype_player_.loaded_stem_count();
 		player_view.song_time_seconds = song_time_seconds();
@@ -304,6 +373,21 @@ namespace rhythmreplugged::core
 	bool SongSession::held_mask_satisfies_expected(std::uint8_t held_mask, std::uint8_t expected_mask)
 	{
 		return expected_mask != 0 && (held_mask & expected_mask) == expected_mask;
+	}
+
+	void SongSession::set_selected_stem_target_gain(float gain)
+	{
+		prototype_player_.set_stem_target_gain(selected_stem_name_, gain);
+	}
+
+	float SongSession::selected_stem_target_gain() const
+	{
+		return prototype_player_.stem_target_gain(selected_stem_name_);
+	}
+
+	bool SongSession::has_selected_stem() const
+	{
+		return prototype_player_.has_stem(selected_stem_name_);
 	}
 
 	size_t SongSession::note_group_end_index(size_t start_index) const
@@ -442,7 +526,7 @@ namespace rhythmreplugged::core
 		}
 
 		if (missed_any_notes)
-			prototype_player_.set_stem_target_gain("guitar", 0.0f);
+			set_selected_stem_target_gain(0.0f);
 	}
 
 	double SongSession::adjusted_song_time_seconds() const
