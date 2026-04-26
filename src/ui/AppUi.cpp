@@ -229,16 +229,17 @@ namespace rhythmreplugged::ui
 		ImGui::SameLine();
 
 		ImGui::BeginGroup();
-		const float button_height = ImGui::GetFrameHeight();
 		const float button_spacing = ImGui::GetStyle().ItemSpacing.y;
 		const float status_height = browser.status_message.empty()
 			? 0.0f
 			: ImGui::GetTextLineHeightWithSpacing() * 3.0f + button_spacing;
-		const float action_row_height = button_height + button_spacing + status_height;
-		const float preview_height = (std::max)(0.0f, content_region.y - action_row_height);
-		ImGui::BeginChild("selection_preview", ImVec2(0.0f, preview_height), true);
-		ImGui::TextUnformatted("Selection");
-		ImGui::Separator();
+		const float preview_height = (std::max)(0.0f, content_region.y - status_height);
+		const float preview_width = (std::max)(0.0f, content_region.x - list_width - column_spacing);
+		ImGui::BeginChild(
+			"selection_preview",
+			ImVec2(preview_width, preview_height),
+			true,
+			ImGuiWindowFlags_NoScrollbar);
 
 		const SongListItem *selected_entry = nullptr;
 		if (!browser.entries.empty() &&
@@ -250,29 +251,39 @@ namespace rhythmreplugged::ui
 
 		if (selected_entry != nullptr)
 		{
+			const float preview_text_width = (std::max)(
+				1.0f,
+				preview_width - ImGui::GetStyle().WindowPadding.x * 2.0f);
+			ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + preview_text_width);
+			ImGui::TextUnformatted(selected_entry->label.c_str());
+			ImGui::PopTextWrapPos();
+			if (!selected_entry->subtitle.empty())
+			{
+				ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + preview_text_width);
+				ImGui::TextDisabled("%s", selected_entry->subtitle.c_str());
+				ImGui::PopTextWrapPos();
+			}
+			if (!selected_entry->error_message.empty())
+			{
+				ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + preview_text_width);
+				ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", selected_entry->error_message.c_str());
+				ImGui::PopTextWrapPos();
+			}
+
+			const float preview_image_top = ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y;
 			const std::optional<ImTextureRef> preview_cover_texture = actions.get_cover_texture_ref != nullptr
 				? actions.get_cover_texture_ref(selected_entry->cover_art_path)
 				: std::nullopt;
-			if (preview_cover_texture.has_value())
+			if (preview_cover_texture.has_value() && preview_image_top < preview_height)
 			{
 				const float cover_size = (std::min)(preview_cover_size, ImGui::GetContentRegionAvail().x);
+				const float cover_top = (std::max)(preview_image_top, preview_height - cover_size - ImGui::GetStyle().WindowPadding.y);
+				ImGui::SetCursorPosY(cover_top);
 				ImGui::Image(*preview_cover_texture, ImVec2(cover_size, cover_size));
 			}
-
-			ImGui::TextWrapped("%s", selected_entry->label.c_str());
-			if (!selected_entry->subtitle.empty())
-				ImGui::TextDisabled("%s", selected_entry->subtitle.c_str());
-			if (!selected_entry->error_message.empty())
-				ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", selected_entry->error_message.c_str());
 		}
 
 		ImGui::EndChild();
-
-		if (ImGui::Button("Open / Play", ImVec2(240.0f * ui_scale, 0.0f)) &&
-			actions.activate_selection != nullptr)
-		{
-			pending_activate_selection = true;
-		}
 
 		if (!browser.status_message.empty())
 		{
