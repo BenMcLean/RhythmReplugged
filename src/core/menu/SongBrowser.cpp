@@ -9,7 +9,16 @@ namespace rhythmreplugged::core
 {
 	namespace
 	{
+		constexpr char kFolderGroup = '!';
 		constexpr char kNonAlphabeticGroup = '#';
+
+		int letter_group_order(char group)
+		{
+			if (group == kFolderGroup)
+				return -1;
+
+			return group == kNonAlphabeticGroup ? 0 : (group - 'A' + 1);
+		}
 
 		std::string to_lower_copy(std::string_view text)
 		{
@@ -81,21 +90,34 @@ namespace rhythmreplugged::core
 			return false;
 
 		const char current_letter = entry_letter(entries_[current_index]);
+		int target_order = 0;
 		for (int index = current_index + 1; index < static_cast<int>(entries_.size()); ++index)
 		{
 			if (entries_[index].is_parent)
 				continue;
 
-			const char candidate_letter = entry_letter(entries_[index]);
-			if (candidate_letter == current_letter)
+			const int candidate_order = letter_group_order(entry_letter(entries_[index]));
+			if (candidate_order <= letter_group_order(current_letter))
 				continue;
 
-			if (current_letter == kNonAlphabeticGroup || candidate_letter > current_letter)
-			{
-				selected_index_ = index;
-				rebuild_view();
-				return true;
-			}
+			if (target_order == 0 || candidate_order < target_order)
+				target_order = candidate_order;
+		}
+
+		if (target_order == 0)
+			return false;
+
+		for (int index = current_index + 1; index < static_cast<int>(entries_.size()); ++index)
+		{
+			if (entries_[index].is_parent)
+				continue;
+
+			if (letter_group_order(entry_letter(entries_[index])) != target_order)
+				continue;
+
+			selected_index_ = index;
+			rebuild_view();
+			return true;
 		}
 
 		return false;
@@ -127,13 +149,29 @@ namespace rhythmreplugged::core
 			return true;
 		}
 
+		int target_order = -1;
 		for (int index = current_letter_start - 1; index >= 0; --index)
 		{
 			if (entries_[index].is_parent)
 				continue;
 
-			const char previous_letter = entry_letter(entries_[index]);
-			if (current_letter != kNonAlphabeticGroup && previous_letter >= current_letter)
+			const int candidate_order = letter_group_order(entry_letter(entries_[index]));
+			if (candidate_order >= letter_group_order(current_letter))
+				continue;
+
+			if (candidate_order > target_order)
+				target_order = candidate_order;
+		}
+
+		if (target_order < 0)
+			return false;
+
+		for (int index = current_letter_start - 1; index >= 0; --index)
+		{
+			if (entries_[index].is_parent)
+				continue;
+
+			if (letter_group_order(entry_letter(entries_[index])) != target_order)
 				continue;
 
 			int previous_letter_start = index;
@@ -142,7 +180,7 @@ namespace rhythmreplugged::core
 				if (entries_[scan].is_parent)
 					continue;
 
-				if (entry_letter(entries_[scan]) != previous_letter)
+				if (letter_group_order(entry_letter(entries_[scan])) != target_order)
 					break;
 
 				previous_letter_start = scan;
@@ -402,11 +440,19 @@ namespace rhythmreplugged::core
 
 	char SongBrowser::entry_letter(const BrowserEntry &entry)
 	{
+		if (entry.is_folder)
+			return kFolderGroup;
+
 		for (char ch : entry.sort_name)
 		{
 			const unsigned char unsigned_ch = static_cast<unsigned char>(ch);
+			if (std::isspace(unsigned_ch))
+				continue;
+
 			if (std::isalpha(unsigned_ch))
 				return static_cast<char>(std::toupper(unsigned_ch));
+
+			return kNonAlphabeticGroup;
 		}
 
 		return kNonAlphabeticGroup;
