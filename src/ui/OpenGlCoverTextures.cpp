@@ -2,6 +2,8 @@
 
 #include "core/app/AppTypes.h"
 
+#include <algorithm>
+#include <cstdlib>
 #include <imgui_impl_opengl3_loader.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -22,6 +24,15 @@ namespace rhythmreplugged::ui
 
 	namespace
 	{
+		int wrapped_index_distance(int from_index, int to_index, int entry_count)
+		{
+			if (entry_count <= 0)
+				return 0;
+
+			const int direct_distance = std::abs(from_index - to_index);
+			return (std::min)(direct_distance, entry_count - direct_distance);
+		}
+
 		ImTextureRef make_imgui_texture_ref(GLuint texture)
 		{
 			return ImTextureRef(static_cast<ImTextureID>(static_cast<uintptr_t>(texture)));
@@ -105,25 +116,28 @@ namespace rhythmreplugged::ui
 
 	void OpenGlCoverTextures::sync_song_browser_directory(const SongBrowserView &browser)
 	{
-		start_song_browser_loading();
+		start_song_browser_loading(browser.entries.size());
 		upload_ready_textures();
 
-		if (cached_browser_path_ == browser.current_path)
-			return;
+		const bool directory_changed = cached_browser_path_ != browser.current_path;
+		const bool selected_index_changed = cached_selected_index_ != browser.selected_index;
 
-		reset_browser_cache();
-		cached_browser_path_ = browser.current_path;
-		++generation_;
-
-		if (!browser.entries.empty() &&
-			browser.selected_index >= 0 &&
-			browser.selected_index < static_cast<int>(browser.entries.size()))
+		if (directory_changed)
 		{
-			queue_cover_decode(browser.entries[browser.selected_index].cover_art_path);
+			reset_browser_cache();
+			cached_browser_path_ = browser.current_path;
+			++generation_;
+			queue_browser_cover_decodes(browser);
+			reprioritize_pending_decodes(browser);
+		}
+		else
+		{
+			queue_browser_cover_decodes(browser);
+			if (selected_index_changed)
+				reprioritize_pending_decodes(browser);
 		}
 
-		for (const SongListItem &entry : browser.entries)
-			queue_cover_decode(entry.cover_art_path);
+		cached_selected_index_ = browser.selected_index;
 	}
 
 	std::optional<ImTextureRef> OpenGlCoverTextures::get_texture_ref(const std::string &cover_path)
@@ -153,7 +167,10 @@ namespace rhythmreplugged::ui
 
 	void OpenGlCoverTextures::clear()
 	{
+		reset_browser_cache();
 		decode_worker_.stop();
+		decode_thread_count_ = 0;
+		cached_selected_index_ = -1;
 		clear_cached_textures();
 		cached_browser_path_.clear();
 	}
@@ -173,10 +190,14 @@ namespace rhythmreplugged::ui
 		completed_decodes_.clear();
 	}
 
-	void OpenGlCoverTextures::start_song_browser_loading()
+	void OpenGlCoverTextures::start_song_browser_loading(size_t job_count_hint)
 	{
+		(void)job_count_hint;
 		if (!decode_worker_.running())
-			decode_worker_.start(1);
+		{
+			decode_thread_count_ = BackgroundWorker::automatic_thread_count();
+			decode_worker_.start(decode_thread_count_);
+		}
 	}
 
 	void OpenGlCoverTextures::queue_cover_decode(const std::string &cover_path)
@@ -189,20 +210,101 @@ namespace rhythmreplugged::ui
 			return;
 
 		entry.requested = true;
-		const std::uint64_t generation = generation_;
-		if (!decode_worker_.enqueue([this, generation, cover_path]()
 		{
+			std::scoped_lock lock(pending_mutex_);
+			pending_decodes_.push_back({cover_path, generation_});
+		}
+
+		launch_pending_decode_loops();
+	}
+
+	void OpenGlCoverTextures::queue_browser_cover_decodes(const SongBrowserView &browser)
+	{
+		for (const SongListItem &entry : browser.entries)
+			queue_cover_decode(entry.cover_art_path);
+	}
+
+	void OpenGlCoverTextures::reprioritize_pending_decodes(const SongBrowserView &browser)
+	{
+		std::unordered_map<std::string, std::pair<int, int>> priorities;
+		priorities.reserve(browser.entries.size());
+
+		const bool has_selected_index =
+			browser.selected_index >= 0 &&
+			browser.selected_index < static_cast<int>(browser.entries.size());
+		const int fallback_distance = static_cast<int>(browser.entries.size()) + 1;
+
+		for (int index = 0; index < static_cast<int>(browser.entries.size()); ++index)
+		{
+			const std::string &cover_path = browser.entries[index].cover_art_path;
+			if (cover_path.empty())
+				continue;
+
+			const int distance = has_selected_index
+				? wrapped_index_distance(index, browser.selected_index, static_cast<int>(browser.entries.size()))
+				: fallback_distance;
+			const auto [it, inserted] = priorities.emplace(cover_path, std::make_pair(distance, index));
+			if (!inserted && std::make_pair(distance, index) < it->second)
+				it->second = std::make_pair(distance, index);
+		}
+
+		{
+			std::scoped_lock lock(pending_mutex_);
+			std::stable_sort(pending_decodes_.begin(), pending_decodes_.end(),
+				[&](const PendingDecode &left, const PendingDecode &right)
+				{
+					const auto left_it = priorities.find(left.cover_path);
+					const auto right_it = priorities.find(right.cover_path);
+					const std::pair<int, int> left_priority = left_it != priorities.end()
+						? left_it->second
+						: std::make_pair(fallback_distance, fallback_distance);
+					const std::pair<int, int> right_priority = right_it != priorities.end()
+						? right_it->second
+						: std::make_pair(fallback_distance, fallback_distance);
+					return left_priority < right_priority;
+				});
+		}
+
+		launch_pending_decode_loops();
+	}
+
+	void OpenGlCoverTextures::launch_pending_decode_loops()
+	{
+		std::scoped_lock lock(pending_mutex_);
+		while (active_decode_loops_ < decode_thread_count_ && active_decode_loops_ < pending_decodes_.size())
+		{
+			if (!decode_worker_.enqueue([this]() { process_pending_decode_loop(); }))
+				return;
+
+			++active_decode_loops_;
+		}
+	}
+
+	void OpenGlCoverTextures::process_pending_decode_loop()
+	{
+		for (;;)
+		{
+			PendingDecode pending;
+			{
+				std::scoped_lock lock(pending_mutex_);
+				if (pending_decodes_.empty())
+				{
+					if (active_decode_loops_ > 0)
+						--active_decode_loops_;
+					return;
+				}
+
+				pending = std::move(pending_decodes_.front());
+				pending_decodes_.pop_front();
+			}
+
 			CompletedDecode completed;
-			completed.cover_path = cover_path;
-			completed.generation = generation;
-			completed.success = decode_cover_file(cover_path, completed.image);
+			completed.cover_path = std::move(pending.cover_path);
+			completed.generation = pending.generation;
+			completed.success = decode_cover_file(completed.cover_path, completed.image);
 
 			std::scoped_lock lock(completed_mutex_);
 			completed_decodes_.push_back(std::move(completed));
-		}))
-		{
-			entry.requested = false;
-			entry.failed = true;
 		}
 	}
 
@@ -247,7 +349,11 @@ namespace rhythmreplugged::ui
 
 	void OpenGlCoverTextures::reset_browser_cache()
 	{
+		{
+			std::scoped_lock lock(pending_mutex_);
+			pending_decodes_.clear();
+		}
+
 		clear_cached_textures();
-		decode_worker_.clear_pending();
 	}
 }
