@@ -18,6 +18,7 @@ namespace rhythmreplugged::core
 		void clear_root(std::string status_message);
 		bool move_selection(int delta);
 		bool set_selected_index(int index);
+		bool jump_to_letter(char letter);
 		bool jump_to_next_letter();
 		bool jump_to_previous_letter();
 		bool navigate_to_parent(std::string &error_message);

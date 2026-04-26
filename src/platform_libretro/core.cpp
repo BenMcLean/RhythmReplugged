@@ -135,6 +135,8 @@ namespace
 		input.lane_3 = keyboard_pressed(RETROK_3);
 		input.lane_4 = keyboard_pressed(RETROK_4);
 		input.lane_5 = keyboard_pressed(RETROK_5);
+		for (unsigned index = 0; index < input.letter_keys.size(); ++index)
+			input.letter_keys[index] = keyboard_pressed(RETROK_a + index);
 
 		const int mouse_delta_x = g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
 		const int mouse_delta_y = g_input_state(0, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);

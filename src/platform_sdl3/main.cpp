@@ -327,6 +327,9 @@ int main(int argc, char *argv[])
 			{
 				const bool is_down = event.type == SDL_EVENT_KEY_DOWN;
 				const SDL_Scancode scancode = event.key.scancode;
+				if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z)
+					held_input.letter_keys[static_cast<size_t>(scancode - SDL_SCANCODE_A)] = is_down;
+
 				if (scancode == SDL_SCANCODE_UP)
 					held_input.up = is_down;
 				else if (scancode == SDL_SCANCODE_DOWN)

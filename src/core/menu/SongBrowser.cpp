@@ -68,7 +68,15 @@ namespace rhythmreplugged::core
 		if (entries_.empty())
 			return false;
 
-		selected_index_ = std::clamp(selected_index_ + delta, 0, static_cast<int>(entries_.size()) - 1);
+		const int entry_count = static_cast<int>(entries_.size());
+		if (entry_count == 1)
+			return true;
+
+		int next_index = (selected_index_ + delta) % entry_count;
+		if (next_index < 0)
+			next_index += entry_count;
+
+		selected_index_ = next_index;
 		rebuild_view();
 		return true;
 	}
@@ -81,6 +89,29 @@ namespace rhythmreplugged::core
 		selected_index_ = index;
 		rebuild_view();
 		return true;
+	}
+
+	bool SongBrowser::jump_to_letter(char letter)
+	{
+		const unsigned char unsigned_letter = static_cast<unsigned char>(letter);
+		if (!std::isalpha(unsigned_letter))
+			return false;
+
+		const char target_letter = static_cast<char>(std::toupper(unsigned_letter));
+		for (int index = 0; index < static_cast<int>(entries_.size()); ++index)
+		{
+			if (!entries_[index].is_song)
+				continue;
+
+			if (entry_letter(entries_[index]) != target_letter)
+				continue;
+
+			selected_index_ = index;
+			rebuild_view();
+			return true;
+		}
+
+		return false;
 	}
 
 	bool SongBrowser::jump_to_next_letter()

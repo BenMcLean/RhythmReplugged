@@ -455,6 +455,15 @@ namespace rhythmreplugged::core
 		if (pressed(input_state.down, previous_input_.down))
 			song_browser_.move_selection(1);
 
+		for (size_t index = 0; index < input_state.letter_keys.size(); ++index)
+		{
+			if (!pressed(input_state.letter_keys[index], previous_input_.letter_keys[index]))
+				continue;
+
+			song_browser_.jump_to_letter(static_cast<char>('A' + index));
+			break;
+		}
+
 		if (pressed(input_state.l, previous_input_.l))
 			song_browser_.jump_to_previous_letter();
 

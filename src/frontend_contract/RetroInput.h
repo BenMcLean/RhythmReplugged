@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 namespace rhythmreplugged::frontend_contract
 {
 	struct RetroInputState
@@ -21,6 +23,7 @@ namespace rhythmreplugged::frontend_contract
 		bool lane_3 = false;
 		bool lane_4 = false;
 		bool lane_5 = false;
+		std::array<bool, 26> letter_keys{};
 		bool mouse_active = false;
 		float mouse_x = 0.0f;
 		float mouse_y = 0.0f;
