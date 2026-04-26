@@ -471,10 +471,81 @@ namespace
 		glGetProgramInfoLog(program, log_length, nullptr, log.data());
 		return log;
 	}
+
+	const char *gameplay_vertex_shader_source(GameplayRendererGl::GraphicsApi api)
+	{
+		switch (api)
+		{
+		case GameplayRendererGl::GraphicsApi::OpenGlEs3:
+			return R"(#version 300 es
+precision highp float;
+layout (location = 0) in vec3 a_position;
+layout (location = 1) in vec4 a_color;
+layout (location = 2) in float a_fade;
+uniform mat4 u_mvp;
+uniform int u_use_vertex_fade;
+out vec4 v_color;
+void main()
+{
+	gl_Position = u_mvp * vec4(a_position, 1.0);
+	float fade = u_use_vertex_fade != 0 ? a_fade : 1.0;
+	v_color = vec4(a_color.rgb, a_color.a * fade);
+}
+)";
+		case GameplayRendererGl::GraphicsApi::DesktopOpenGl:
+		default:
+			return R"(#version 130
+in vec3 a_position;
+in vec4 a_color;
+in float a_fade;
+uniform mat4 u_mvp;
+uniform int u_use_vertex_fade;
+out vec4 v_color;
+void main()
+{
+	gl_Position = u_mvp * vec4(a_position, 1.0);
+	float fade = u_use_vertex_fade != 0 ? a_fade : 1.0;
+	v_color = vec4(a_color.rgb, a_color.a * fade);
+}
+)";
+		}
+	}
+
+	const char *gameplay_fragment_shader_source(GameplayRendererGl::GraphicsApi api)
+	{
+		switch (api)
+		{
+		case GameplayRendererGl::GraphicsApi::OpenGlEs3:
+			return R"(#version 300 es
+precision mediump float;
+in vec4 v_color;
+layout (location = 0) out vec4 o_color;
+void main()
+{
+	o_color = v_color;
+}
+)";
+		case GameplayRendererGl::GraphicsApi::DesktopOpenGl:
+		default:
+			return R"(#version 130
+in vec4 v_color;
+out vec4 o_color;
+void main()
+{
+	o_color = v_color;
+}
+)";
+		}
+	}
 }
 
 namespace rhythmreplugged::render_gl
 {
+	void GameplayRendererGl::set_graphics_api(GraphicsApi api)
+	{
+		graphics_api_ = api;
+	}
+
 	bool GameplayRendererGl::initialize(std::string &error_message)
 	{
 		if (initialized_)
@@ -507,29 +578,8 @@ namespace rhythmreplugged::render_gl
 
 	bool GameplayRendererGl::create_device_objects(std::string &error_message)
 	{
-		static constexpr const char *kVertexShaderSource = R"(#version 130
-in vec3 a_position;
-in vec4 a_color;
-in float a_fade;
-uniform mat4 u_mvp;
-uniform int u_use_vertex_fade;
-out vec4 v_color;
-void main()
-{
-	gl_Position = u_mvp * vec4(a_position, 1.0);
-	float fade = u_use_vertex_fade != 0 ? a_fade : 1.0;
-	v_color = vec4(a_color.rgb, a_color.a * fade);
-}
-)";
-
-		static constexpr const char *kFragmentShaderSource = R"(#version 130
-in vec4 v_color;
-out vec4 o_color;
-void main()
-{
-	o_color = v_color;
-}
-)";
+		const char *vertex_shader_source = gameplay_vertex_shader_source(graphics_api_);
+		const char *fragment_shader_source = gameplay_fragment_shader_source(graphics_api_);
 
 		if (imgl3wInit() != 0)
 		{
@@ -547,7 +597,7 @@ void main()
 			return false;
 		}
 
-		glShaderSource(vertex_shader_, 1, &kVertexShaderSource, nullptr);
+		glShaderSource(vertex_shader_, 1, &vertex_shader_source, nullptr);
 		glCompileShader(vertex_shader_);
 		GLint compiled = GL_FALSE;
 		glGetShaderiv(vertex_shader_, GL_COMPILE_STATUS, &compiled);
@@ -558,7 +608,7 @@ void main()
 			return false;
 		}
 
-		glShaderSource(fragment_shader_, 1, &kFragmentShaderSource, nullptr);
+		glShaderSource(fragment_shader_, 1, &fragment_shader_source, nullptr);
 		glCompileShader(fragment_shader_);
 		glGetShaderiv(fragment_shader_, GL_COMPILE_STATUS, &compiled);
 		if (compiled != GL_TRUE)

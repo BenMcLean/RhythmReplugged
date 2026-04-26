@@ -12,7 +12,7 @@
 	],
 	"features": {
 		"sdl3-frontend": {
-			"description": "Build the SDL3 desktop frontend and its audio/image dependencies.",
+			"description": "Build the SDL3 desktop frontend.",
 			"dependencies": [
 				"sdl3",
 				"miniaudio"

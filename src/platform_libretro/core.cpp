@@ -32,7 +32,6 @@ namespace
 
 	constexpr unsigned kFrameWidth = 1280;
 	constexpr unsigned kFrameHeight = 720;
-	constexpr char kOpenGlGlslVersion[] = "#version 130";
 	constexpr retro_usec_t kNominalFrameTimeUsec = 1000000 / kAppFramesPerSecond;
 	constexpr retro_usec_t kMinimumFrameTimeUsec = kNominalFrameTimeUsec / 2;
 	constexpr retro_usec_t kMaximumFrameTimeUsec = kNominalFrameTimeUsec * 2;
@@ -51,6 +50,7 @@ namespace
 	retro_input_state_t g_input_state = nullptr;
 	retro_log_callback g_log_callback{};
 	retro_hw_render_callback g_hw_render{};
+	GameplayRendererGl::GraphicsApi g_graphics_api = GameplayRendererGl::GraphicsApi::DesktopOpenGl;
 
 	FileSystem g_file_system;
 	AppCore g_app(g_file_system);
@@ -85,6 +85,18 @@ namespace
 		vsnprintf(buffer, sizeof(buffer), format, args);
 		va_end(args);
 		g_log_callback.log(level, "%s", buffer);
+	}
+
+	const char *glsl_version_for_api(GameplayRendererGl::GraphicsApi api)
+	{
+		switch (api)
+		{
+		case GameplayRendererGl::GraphicsApi::OpenGlEs3:
+			return "#version 300 es";
+		case GameplayRendererGl::GraphicsApi::DesktopOpenGl:
+		default:
+			return "#version 130";
+		}
 	}
 
 	bool pressed(bool current, bool previous)
@@ -279,7 +291,8 @@ namespace
 			}
 		}
 
-		if (!ImGui_ImplOpenGL3_Init(kOpenGlGlslVersion))
+		g_gameplay_renderer.set_graphics_api(g_graphics_api);
+		if (!ImGui_ImplOpenGL3_Init(glsl_version_for_api(g_graphics_api)))
 		{
 			log_message(RETRO_LOG_ERROR, "ImGui OpenGL init failed.\n");
 			return;
@@ -362,24 +375,77 @@ namespace
 
 	bool configure_hw_render()
 	{
-		g_hw_render = {};
-		g_hw_render.context_type = RETRO_HW_CONTEXT_OPENGL;
-		g_hw_render.context_reset = context_reset;
-		g_hw_render.context_destroy = context_destroy;
-		g_hw_render.depth = true;
-		g_hw_render.stencil = true;
-		g_hw_render.bottom_left_origin = true;
-		g_hw_render.version_major = 3;
-		g_hw_render.version_minor = 0;
-		g_hw_render.cache_context = false;
-		g_hw_render.debug_context = false;
-		if (g_environment == nullptr || !g_environment(RETRO_ENVIRONMENT_SET_HW_RENDER, &g_hw_render))
+		if (g_environment == nullptr)
 		{
-			log_message(RETRO_LOG_ERROR, "Frontend rejected OpenGL hardware rendering.\n");
+			log_message(RETRO_LOG_ERROR, "No libretro environment callback is available.\n");
 			return false;
 		}
 
-		return true;
+		retro_hw_context_type preferred_context = RETRO_HW_CONTEXT_OPENGL;
+		const bool can_fallback_context = g_environment(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER, &preferred_context);
+
+		struct ContextCandidate
+		{
+			retro_hw_context_type context_type;
+			GameplayRendererGl::GraphicsApi graphics_api;
+			const char *label;
+		};
+
+		std::vector<ContextCandidate> candidates;
+		auto append_candidate = [&](retro_hw_context_type context_type,
+			GameplayRendererGl::GraphicsApi graphics_api,
+			const char *label)
+		{
+			for (const ContextCandidate &candidate : candidates)
+			{
+				if (candidate.context_type == context_type)
+					return;
+			}
+
+			candidates.push_back({context_type, graphics_api, label});
+		};
+
+		switch (preferred_context)
+		{
+		case RETRO_HW_CONTEXT_OPENGLES3:
+		case RETRO_HW_CONTEXT_OPENGLES2:
+		case RETRO_HW_CONTEXT_OPENGLES_VERSION:
+			append_candidate(RETRO_HW_CONTEXT_OPENGLES3, GameplayRendererGl::GraphicsApi::OpenGlEs3, "OpenGL ES 3");
+			if (can_fallback_context)
+				append_candidate(RETRO_HW_CONTEXT_OPENGL, GameplayRendererGl::GraphicsApi::DesktopOpenGl, "OpenGL");
+			break;
+		case RETRO_HW_CONTEXT_OPENGL:
+		case RETRO_HW_CONTEXT_OPENGL_CORE:
+		default:
+			append_candidate(RETRO_HW_CONTEXT_OPENGL, GameplayRendererGl::GraphicsApi::DesktopOpenGl, "OpenGL");
+			if (can_fallback_context)
+				append_candidate(RETRO_HW_CONTEXT_OPENGLES3, GameplayRendererGl::GraphicsApi::OpenGlEs3, "OpenGL ES 3");
+			break;
+		}
+
+		for (const ContextCandidate &candidate : candidates)
+		{
+			g_hw_render = {};
+			g_hw_render.context_type = candidate.context_type;
+			g_hw_render.context_reset = context_reset;
+			g_hw_render.context_destroy = context_destroy;
+			g_hw_render.depth = true;
+			g_hw_render.stencil = true;
+			g_hw_render.bottom_left_origin = true;
+			g_hw_render.version_major = 3;
+			g_hw_render.version_minor = 0;
+			g_hw_render.cache_context = false;
+			g_hw_render.debug_context = false;
+			if (g_environment(RETRO_ENVIRONMENT_SET_HW_RENDER, &g_hw_render))
+			{
+				g_graphics_api = candidate.graphics_api;
+				log_message(RETRO_LOG_INFO, "Configured libretro hardware rendering with %s.\n", candidate.label);
+				return true;
+			}
+		}
+
+		log_message(RETRO_LOG_ERROR, "Frontend rejected all supported hardware rendering APIs (OpenGL ES 3, OpenGL).\n");
+		return false;
 	}
 }
 

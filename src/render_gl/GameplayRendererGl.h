@@ -9,6 +9,13 @@ namespace rhythmreplugged::render_gl
 	class GameplayRendererGl
 	{
 	public:
+		enum class GraphicsApi
+		{
+			DesktopOpenGl,
+			OpenGlEs3,
+		};
+
+		void set_graphics_api(GraphicsApi api);
 		bool initialize(std::string &error_message);
 		void shutdown();
 
@@ -29,6 +36,7 @@ namespace rhythmreplugged::render_gl
 		unsigned int ebo_ = 0;
 		int u_mvp_location_ = -1;
 		int u_use_vertex_fade_location_ = -1;
+		GraphicsApi graphics_api_ = GraphicsApi::DesktopOpenGl;
 		bool initialized_ = false;
 	};
 }
