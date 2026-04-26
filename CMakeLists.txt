@@ -19,19 +19,23 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(RR_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+option(RR_BUILD_SDL3_FRONTEND "Build the SDL3 desktop frontend." ON)
+option(RR_BUILD_LIBRETRO_CORE "Build the libretro core." ON)
 
 add_subdirectory(external/midifile)
 
-find_package(SDL3 CONFIG REQUIRED)
-find_package(SDL3_image CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(Vorbis CONFIG REQUIRED)
-find_path(MINIAUDIO_INCLUDE_DIRS "miniaudio.h")
 find_path(STB_INCLUDE_DIRS "stb_image.h" REQUIRED)
 find_path(IMGUI_INCLUDE_DIRS "imgui.h" REQUIRED)
 find_library(IMGUI_LIBRARY_RELEASE NAMES imgui REQUIRED)
 find_library(IMGUI_LIBRARY_DEBUG NAMES imguid imgui REQUIRED)
+
+if(RR_BUILD_SDL3_FRONTEND)
+	find_package(SDL3 CONFIG REQUIRED)
+	find_path(MINIAUDIO_INCLUDE_DIRS "miniaudio.h" REQUIRED)
+endif()
 
 set(RR_VCPKG_ROOT "")
 if(CMAKE_TOOLCHAIN_FILE MATCHES [[^(.*)[/\\]scripts[/\\]buildsystems[/\\]vcpkg\.cmake$]])
@@ -47,13 +51,18 @@ file(GLOB RR_IMGUI_OPENGL3_BACKEND_SOURCES
 
 list(LENGTH RR_IMGUI_SDL3_BACKEND_SOURCES RR_IMGUI_SDL3_BACKEND_SOURCE_COUNT)
 list(LENGTH RR_IMGUI_OPENGL3_BACKEND_SOURCES RR_IMGUI_OPENGL3_BACKEND_SOURCE_COUNT)
-if(RR_IMGUI_SDL3_BACKEND_SOURCE_COUNT EQUAL 0 OR RR_IMGUI_OPENGL3_BACKEND_SOURCE_COUNT EQUAL 0)
-	message(FATAL_ERROR "Could not locate Dear ImGui backend sources in the vcpkg buildtree.")
+if(RR_IMGUI_OPENGL3_BACKEND_SOURCE_COUNT EQUAL 0)
+	message(FATAL_ERROR "Could not locate Dear ImGui OpenGL backend sources in the vcpkg buildtree.")
+endif()
+if(RR_BUILD_SDL3_FRONTEND AND RR_IMGUI_SDL3_BACKEND_SOURCE_COUNT EQUAL 0)
+	message(FATAL_ERROR "Could not locate Dear ImGui SDL3 backend sources in the vcpkg buildtree.")
 endif()
 
-list(GET RR_IMGUI_SDL3_BACKEND_SOURCES 0 RR_IMGUI_SDL3_BACKEND_SOURCE)
 list(GET RR_IMGUI_OPENGL3_BACKEND_SOURCES 0 RR_IMGUI_OPENGL3_BACKEND_SOURCE)
-get_filename_component(RR_IMGUI_BACKEND_INCLUDE_DIR "${RR_IMGUI_SDL3_BACKEND_SOURCE}" DIRECTORY)
+get_filename_component(RR_IMGUI_BACKEND_INCLUDE_DIR "${RR_IMGUI_OPENGL3_BACKEND_SOURCE}" DIRECTORY)
+if(RR_BUILD_SDL3_FRONTEND)
+	list(GET RR_IMGUI_SDL3_BACKEND_SOURCES 0 RR_IMGUI_SDL3_BACKEND_SOURCE)
+endif()
 
 add_library(rr_frontend_contract INTERFACE)
 target_include_directories(rr_frontend_contract INTERFACE
@@ -158,57 +167,60 @@ PRIVATE
 	OpenGL::GL
 )
 
-add_executable(RhythmReplugged
-	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.cpp
-	${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.h
-	${RR_SRC_DIR}/platform_sdl3/FileSystem.cpp
-	${RR_SRC_DIR}/platform_sdl3/FileSystem.h
-	${RR_SRC_DIR}/platform_sdl3/main.cpp
-	${RR_IMGUI_SDL3_BACKEND_SOURCE}
-	${RR_IMGUI_OPENGL3_BACKEND_SOURCE}
-)
+if(RR_BUILD_SDL3_FRONTEND)
+	add_executable(RhythmReplugged
+		${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.cpp
+		${RR_SRC_DIR}/platform_sdl3/MiniaudioOutput.h
+		${RR_SRC_DIR}/platform_sdl3/FileSystem.cpp
+		${RR_SRC_DIR}/platform_sdl3/FileSystem.h
+		${RR_SRC_DIR}/platform_sdl3/main.cpp
+		${RR_IMGUI_SDL3_BACKEND_SOURCE}
+		${RR_IMGUI_OPENGL3_BACKEND_SOURCE}
+	)
 
-target_include_directories(RhythmReplugged PRIVATE
-	${RR_SRC_DIR}
-	${MINIAUDIO_INCLUDE_DIRS}
-	${RR_IMGUI_BACKEND_INCLUDE_DIR}
-)
+	target_include_directories(RhythmReplugged PRIVATE
+		${RR_SRC_DIR}
+		${MINIAUDIO_INCLUDE_DIRS}
+		${RR_IMGUI_BACKEND_INCLUDE_DIR}
+	)
 
-target_link_libraries(RhythmReplugged PRIVATE
-	rr_core
-	rr_render_gl
-	rr_ui
-	OpenGL::GL
-	SDL3::SDL3
-	SDL3_image::SDL3_image
-)
+	target_link_libraries(RhythmReplugged PRIVATE
+		rr_core
+		rr_render_gl
+		rr_ui
+		OpenGL::GL
+		SDL3::SDL3
+	)
+endif()
 
-add_library(platform_libretro MODULE
-	${RR_SRC_DIR}/platform_libretro/core.cpp
-	${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.cpp
-	${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.h
-	${RR_SRC_DIR}/platform_libretro/FileSystem.cpp
-	${RR_SRC_DIR}/platform_libretro/FileSystem.h
-	${RR_IMGUI_OPENGL3_BACKEND_SOURCE}
-)
+if(RR_BUILD_LIBRETRO_CORE)
+	add_library(platform_libretro MODULE
+		${RR_SRC_DIR}/platform_libretro/core.cpp
+		${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.cpp
+		${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.h
+		${RR_SRC_DIR}/platform_libretro/FileSystem.cpp
+		${RR_SRC_DIR}/platform_libretro/FileSystem.h
+		${RR_IMGUI_OPENGL3_BACKEND_SOURCE}
+	)
 
-target_include_directories(platform_libretro PRIVATE
-	${RR_SRC_DIR}
-	${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/include
-	${RR_IMGUI_BACKEND_INCLUDE_DIR}
-)
+	target_include_directories(platform_libretro PRIVATE
+		${RR_SRC_DIR}
+		${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/include
+		${RR_IMGUI_BACKEND_INCLUDE_DIR}
+	)
 
-target_link_libraries(platform_libretro PRIVATE
-	rr_core
-	rr_render_gl
-	rr_ui
-	OpenGL::GL
-)
+	target_link_libraries(platform_libretro PRIVATE
+		rr_core
+		rr_render_gl
+		rr_ui
+		OpenGL::GL
+	)
 
-set_target_properties(platform_libretro PROPERTIES
-	PREFIX ""
-	OUTPUT_NAME "rhythmreplugged_libretro"
-)
+	set_target_properties(platform_libretro PROPERTIES
+		PREFIX ""
+		OUTPUT_NAME "rhythmreplugged_libretro"
+	)
+endif()
 
 add_executable(rr_transport_harness
 	${RR_SRC_DIR}/core/play/TransportParityHarness.cpp

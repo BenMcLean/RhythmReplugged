@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
 	MiniaudioOutput audio_output;
 	::rhythmreplugged::frontend_contract::RetroInputState held_input{};
 	std::unordered_map<SDL_JoystickID, SDL_Gamepad *> open_gamepads;
-	OpenGlCoverTextures cover_textures;
+	OpenGlCoverTextures cover_textures(file_system);
 	GameplayRendererGl gameplay_renderer;
 	std::string gameplay_renderer_error;
 	if (!gameplay_renderer.initialize(gameplay_renderer_error))

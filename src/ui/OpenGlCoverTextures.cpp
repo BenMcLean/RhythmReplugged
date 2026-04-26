@@ -9,8 +9,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include <filesystem>
-#include <fstream>
 #include <utility>
 #include <vector>
 
@@ -38,27 +36,16 @@ namespace rhythmreplugged::ui
 			return ImTextureRef(static_cast<ImTextureID>(static_cast<uintptr_t>(texture)));
 		}
 
-		bool read_file_bytes(const std::string &cover_path, std::vector<char> &bytes)
+		bool decode_cover_file(const std::vector<std::uint8_t> &bytes, OpenGlCoverTextures::DecodedImage &decoded)
 		{
-			std::ifstream stream(std::filesystem::path(cover_path), std::ios::binary);
-			if (!stream)
-				return false;
-
-			bytes.assign(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-			return !bytes.empty();
-		}
-
-		bool decode_cover_file(const std::string &cover_path, OpenGlCoverTextures::DecodedImage &decoded)
-		{
-			std::vector<char> bytes;
-			if (!read_file_bytes(cover_path, bytes))
+			if (bytes.empty())
 				return false;
 
 			int width = 0;
 			int height = 0;
 			int components = 0;
 			stbi_uc *pixel_data = stbi_load_from_memory(
-				reinterpret_cast<const stbi_uc *>(bytes.data()),
+				bytes.data(),
 				static_cast<int>(bytes.size()),
 				&width,
 				&height,
@@ -107,6 +94,11 @@ namespace rhythmreplugged::ui
 			glBindTexture(GL_TEXTURE_2D, 0);
 			return true;
 		}
+	}
+
+	OpenGlCoverTextures::OpenGlCoverTextures(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system)
+		: file_system_(file_system)
+	{
 	}
 
 	OpenGlCoverTextures::~OpenGlCoverTextures()
@@ -301,7 +293,8 @@ namespace rhythmreplugged::ui
 			CompletedDecode completed;
 			completed.cover_path = std::move(pending.cover_path);
 			completed.generation = pending.generation;
-			completed.success = decode_cover_file(completed.cover_path, completed.image);
+			const auto bytes = file_system_.read_binary_file(completed.cover_path);
+			completed.success = bytes.has_value() && decode_cover_file(*bytes, completed.image);
 
 			std::scoped_lock lock(completed_mutex_);
 			completed_decodes_.push_back(std::move(completed));

@@ -55,6 +55,34 @@
 				"CMAKE_BUILD_TYPE": "Release",
 				"VCPKG_TARGET_TRIPLET": "x64-linux"
 			}
+		},
+		{
+			"name": "linux-libretro-debug",
+			"displayName": "Linux Libretro Debug",
+			"description": "Linux libretro-only build without SDL3 frontend dependencies.",
+			"inherits": "base",
+			"generator": "Ninja",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug",
+				"VCPKG_TARGET_TRIPLET": "x64-linux",
+				"VCPKG_MANIFEST_NO_DEFAULT_FEATURES": "ON",
+				"RR_BUILD_SDL3_FRONTEND": "OFF",
+				"RR_BUILD_LIBRETRO_CORE": "ON"
+			}
+		},
+		{
+			"name": "linux-libretro-release",
+			"displayName": "Linux Libretro Release",
+			"description": "Linux libretro-only build without SDL3 frontend dependencies.",
+			"inherits": "base",
+			"generator": "Ninja",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release",
+				"VCPKG_TARGET_TRIPLET": "x64-linux",
+				"VCPKG_MANIFEST_NO_DEFAULT_FEATURES": "ON",
+				"RR_BUILD_SDL3_FRONTEND": "OFF",
+				"RR_BUILD_LIBRETRO_CORE": "ON"
+			}
 		}
 	],
 	"buildPresets": [
@@ -79,6 +107,16 @@
 			"name": "linux-release",
 			"displayName": "Linux Release",
 			"configurePreset": "linux-release"
+		},
+		{
+			"name": "linux-libretro-debug",
+			"displayName": "Linux Libretro Debug",
+			"configurePreset": "linux-libretro-debug"
+		},
+		{
+			"name": "linux-libretro-release",
+			"displayName": "Linux Libretro Release",
+			"configurePreset": "linux-libretro-release"
 		}
 	]
 }

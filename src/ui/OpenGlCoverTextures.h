@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/concurrency/BackgroundWorker.h"
+#include "frontend_contract/RetroFileSystem.h"
 
 #include <imgui.h>
 
@@ -31,6 +32,7 @@ namespace rhythmreplugged::ui
 			unsigned height = 0;
 		};
 
+		explicit OpenGlCoverTextures(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system);
 		~OpenGlCoverTextures();
 
 		void sync_song_browser_directory(const core::SongBrowserView &browser);
@@ -70,6 +72,7 @@ namespace rhythmreplugged::ui
 		void upload_ready_textures(size_t max_uploads = 2);
 		void reset_browser_cache();
 
+		::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system_;
 		std::string cached_browser_path_;
 		int cached_selected_index_ = -1;
 		std::uint64_t generation_ = 0;

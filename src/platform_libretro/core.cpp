@@ -54,7 +54,7 @@ namespace
 
 	FileSystem g_file_system;
 	AppCore g_app(g_file_system);
-	OpenGlCoverTextures g_cover_textures;
+	OpenGlCoverTextures g_cover_textures(g_file_system);
 	GameplayRendererGl g_gameplay_renderer;
 	::rhythmreplugged::frontend_contract::RetroInputState g_previous_input{};
 	std::string g_root_path;
