@@ -57,11 +57,6 @@ namespace rhythmreplugged::platform_libretro
 		if (path.empty())
 			return {};
 
-		std::error_code error_code;
-		const std::filesystem::path canonical = std::filesystem::weakly_canonical(std::filesystem::path(path), error_code);
-		if (!error_code)
-			return canonical.generic_string();
-
 		return std::filesystem::path(path).lexically_normal().generic_string();
 	}
 
