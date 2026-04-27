@@ -636,7 +636,11 @@ namespace rhythmreplugged::core
 
 	int AppCore::sample_rate() const
 	{
-		return mode_ == AppMode::Gameplay ? song_session_.sample_rate() : 0;
+		if (const int gameplay_sample_rate = song_session_.sample_rate(); gameplay_sample_rate > 0)
+			return gameplay_sample_rate;
+
+		const SongPreloadStatus preload_status = song_preloader_.status();
+		return preload_status.sample_rate;
 	}
 
 	AppMode AppCore::mode() const

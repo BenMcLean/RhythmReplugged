@@ -149,6 +149,7 @@ namespace rhythmreplugged::core
 						request_state->stem_order_indices.push_back(staged_job->order_index);
 						request_state->stems.push_back(std::move(track));
 					}
+					request_state->sample_rate.store(track.sample_rate);
 
 					const size_t completed_decode_count = request_state->completed_decode_stem_count.fetch_add(1) + 1;
 					if (completed_decode_count == request_state->total_stem_count)
@@ -196,6 +197,7 @@ namespace rhythmreplugged::core
 		result.ready = request_state->ready.load();
 		result.failed = request_state->failed.load();
 		result.phase = request_state->phase.load();
+		result.sample_rate = request_state->sample_rate.load();
 		result.processed_bytes = request_state->processed_decode_bytes.load();
 		result.total_bytes = request_state->total_bytes;
 		result.completed_stem_count = request_state->completed_decode_stem_count.load();

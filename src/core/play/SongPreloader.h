@@ -20,6 +20,7 @@ namespace rhythmreplugged::core
 		bool ready = false;
 		bool failed = false;
 		PreloadPhase phase = PreloadPhase::Idle;
+		int sample_rate = 0;
 		size_t processed_bytes = 0;
 		size_t total_bytes = 0;
 		size_t completed_stem_count = 0;
@@ -63,6 +64,7 @@ namespace rhythmreplugged::core
 			std::atomic<size_t> completed_decode_stem_count{0};
 			std::atomic<size_t> completed_read_file_count{0};
 			size_t total_stem_count = 0;
+			std::atomic<int> sample_rate{0};
 			std::atomic<PreloadPhase> phase{PreloadPhase::Idle};
 			std::atomic<bool> failed{false};
 			std::atomic<bool> ready{false};
