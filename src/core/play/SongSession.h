@@ -26,6 +26,10 @@ namespace rhythmreplugged::core
 			PrototypePlayer::PreloadedSongData preloaded_song_data,
 			const GameplayOptions &options,
 			std::string &error_message);
+		bool reconfigure_loaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+			const std::string &song_directory,
+			const GameplayOptions &options,
+			std::string &error_message);
 		void unload();
 		bool is_loaded() const;
 		void toggle_guitar_mute();
@@ -54,6 +58,8 @@ namespace rhythmreplugged::core
 
 		static std::uint8_t lane_mask_from_state(const std::array<bool, 5> &lanes);
 		static bool held_mask_satisfies_expected(std::uint8_t held_mask, std::uint8_t expected_mask);
+		void apply_gameplay_options(const GameplayOptions &options);
+		void reset_runtime_state();
 		void set_selected_stem_target_gain(float gain);
 		float selected_stem_target_gain() const;
 		bool has_selected_stem() const;

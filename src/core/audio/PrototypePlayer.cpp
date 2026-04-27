@@ -228,6 +228,13 @@ namespace rhythmreplugged::core
 		return !stems_.empty() && frame_index_ >= longest_track_frame_count();
 	}
 
+	void PrototypePlayer::rewind()
+	{
+		frame_index_ = 0;
+		for (StemTrack &track : stems_)
+			track.current_gain = track.target_gain.load();
+	}
+
 	void PrototypePlayer::render_interleaved_s16(std::int16_t *output, size_t frame_count)
 	{
 		if (output == nullptr || frame_count == 0)

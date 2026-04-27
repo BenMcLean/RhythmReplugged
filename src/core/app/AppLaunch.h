@@ -20,6 +20,7 @@ namespace rhythmreplugged::core
 	{
 		std::string songs_root_path;
 		std::string startup_song_path;
+		bool restrict_to_startup_song = false;
 		::rhythmreplugged::frontend_contract::FrontendOptions frontend_options;
 	};
 

@@ -109,6 +109,20 @@ namespace rhythmreplugged::core
 			return false;
 		}
 
+		return reconfigure_loaded(file_system, song_directory, options, error_message);
+	}
+
+	bool SongSession::reconfigure_loaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+		const std::string &song_directory,
+		const GameplayOptions &options,
+		std::string &error_message)
+	{
+		if (!prototype_player_.is_loaded())
+		{
+			error_message = "Song audio is not loaded.";
+			return false;
+		}
+
 		std::string chart_error_message;
 		midi_chart_.load(
 			file_system,
@@ -118,20 +132,14 @@ namespace rhythmreplugged::core
 			chart_error_message);
 		chart_status_message_ = std::move(chart_error_message);
 
+		prototype_player_.rewind();
 		transport_.configure(prototype_player_.sample_rate());
 		audio_mixer_.set_prototype_player(&prototype_player_);
-		selected_stem_name_ = stem_name_for(options.instrument());
-		selected_instrument_label_ = instrument_label_for(options.instrument());
-		if (!prototype_player_.has_stem(selected_stem_name_) && prototype_player_.has_stem("guitar"))
-			selected_stem_name_ = "guitar";
-		lane_held_.fill(false);
-		lane_sustain_end_times_.fill(0.0);
-		lane_sustain_release_times_.fill(-1.0);
-		input_generation_ = 0;
-		consumed_input_generation_ = 0;
-		next_note_index_ = 0;
+		apply_gameplay_options(options);
+		reset_runtime_state();
 		set_selected_stem_target_gain(1.0f);
 		loaded_.store(true);
+		error_message.clear();
 		return true;
 	}
 
@@ -373,6 +381,24 @@ namespace rhythmreplugged::core
 	bool SongSession::held_mask_satisfies_expected(std::uint8_t held_mask, std::uint8_t expected_mask)
 	{
 		return expected_mask != 0 && (held_mask & expected_mask) == expected_mask;
+	}
+
+	void SongSession::apply_gameplay_options(const GameplayOptions &options)
+	{
+		selected_stem_name_ = stem_name_for(options.instrument());
+		selected_instrument_label_ = instrument_label_for(options.instrument());
+		if (!prototype_player_.has_stem(selected_stem_name_) && prototype_player_.has_stem("guitar"))
+			selected_stem_name_ = "guitar";
+	}
+
+	void SongSession::reset_runtime_state()
+	{
+		lane_held_.fill(false);
+		lane_sustain_end_times_.fill(0.0);
+		lane_sustain_release_times_.fill(-1.0);
+		input_generation_ = 0;
+		consumed_input_generation_ = 0;
+		next_note_index_ = 0;
 	}
 
 	void SongSession::set_selected_stem_target_gain(float gain)

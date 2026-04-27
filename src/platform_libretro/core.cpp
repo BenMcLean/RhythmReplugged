@@ -59,6 +59,7 @@ namespace
 	GameplayRendererGl g_gameplay_renderer;
 	::rhythmreplugged::frontend_contract::RetroInputState g_previous_input{};
 	std::string g_root_path;
+	bool g_restrict_to_startup_song = false;
 	bool g_is_loaded = false;
 	bool g_gl_ready = false;
 	int g_reported_sample_rate = 0;
@@ -687,6 +688,7 @@ RR_LIBRETRO_EXPORT void retro_reset(void)
 	g_audio_frame_time_remainder = 0;
 	AppLaunchRequest launch_request;
 	launch_request.songs_root_path = g_root_path;
+	launch_request.restrict_to_startup_song = g_restrict_to_startup_song;
 	launch_request.frontend_options = query_frontend_options();
 	g_is_loaded = g_app.retro_init(launch_request, error_message);
 	if (!g_is_loaded)
@@ -714,6 +716,7 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 		launch_inputs.frontend_options = frontend_options;
 		const AppLaunchRequest launch_request = resolve_app_launch_request(g_file_system, launch_inputs);
 		g_root_path = launch_request.songs_root_path;
+		g_restrict_to_startup_song = launch_request.restrict_to_startup_song;
 		g_is_loaded = g_app.retro_init(launch_request, error_message);
 		if (!g_is_loaded)
 			log_message(RETRO_LOG_ERROR, "App init failed with no explicit content: %s\n", error_message.c_str());
@@ -728,6 +731,7 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 	launch_inputs.frontend_options = frontend_options;
 	const AppLaunchRequest launch_request = resolve_app_launch_request(g_file_system, launch_inputs);
 	g_root_path = launch_request.songs_root_path;
+	g_restrict_to_startup_song = launch_request.restrict_to_startup_song;
 	if (g_root_path.empty())
 	{
 		log_message(RETRO_LOG_ERROR, "Could not derive a song root from '%s'.\n", game->path);
@@ -751,6 +755,7 @@ RR_LIBRETRO_EXPORT void retro_unload_game(void)
 	g_cover_textures.clear();
 	g_app.retro_deinit();
 	g_root_path.clear();
+	g_restrict_to_startup_song = false;
 	g_is_loaded = false;
 	g_pending_audio_samples.clear();
 	g_audio_frame_time_remainder = 0;

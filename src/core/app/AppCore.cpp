@@ -157,6 +157,7 @@ namespace rhythmreplugged::core
 	bool AppCore::retro_init(const AppLaunchRequest &launch_request, std::string &error_message)
 	{
 		frontend_options_ = launch_request.frontend_options;
+		restrict_to_startup_song_ = launch_request.restrict_to_startup_song;
 		mode_ = AppMode::Menu;
 		menu_screen_ = MenuScreen::SongBrowser;
 		song_session_.unload();
@@ -183,6 +184,12 @@ namespace rhythmreplugged::core
 
 		if (!begin_song_activation(launch_request.startup_song_path))
 		{
+			if (restrict_to_startup_song_)
+			{
+				error_message = "Could not open the selected song.";
+				return false;
+			}
+
 			song_browser_.set_status_message("Could not open the selected song.");
 			return true;
 		}
@@ -233,6 +240,7 @@ namespace rhythmreplugged::core
 		pending_instrument_selection_required_ = false;
 		waiting_for_song_preload_ = false;
 		song_preloader_.cancel();
+		restrict_to_startup_song_ = false;
 	}
 
 	GameplayOptions AppCore::make_default_gameplay_options() const
@@ -348,6 +356,24 @@ namespace rhythmreplugged::core
 
 		std::string error_message;
 		difficulty_select_menu_.apply_to(pending_gameplay_options_);
+		if (song_session_.is_loaded())
+		{
+			if (!song_session_.reconfigure_loaded(file_system_, pending_song_path_, pending_gameplay_options_, error_message))
+			{
+				difficulty_select_menu_.set_status_message(error_message.empty() ? "Song restart failed." : error_message);
+				refresh_difficulty_preload_state();
+				return false;
+			}
+
+			waiting_for_song_preload_ = false;
+			mode_ = AppMode::Gameplay;
+			session_unload_pending_ = false;
+			player_status_message_.clear();
+			difficulty_select_menu_.clear_status_message();
+			refresh_difficulty_preload_state();
+			return true;
+		}
+
 		if (!try_finish_song_preload(error_message))
 		{
 			if (error_message.empty())
@@ -391,18 +417,26 @@ namespace rhythmreplugged::core
 		return song_session_.load_preloaded(file_system_, pending_song_path_, std::move(preloaded_song_data), pending_gameplay_options_, error_message);
 	}
 
-	bool AppCore::begin_song_activation(const std::string &selected_song_path)
+	bool AppCore::begin_song_activation(const std::string &selected_song_path, bool allow_auto_start)
 	{
 		const SongBrowserView &browser = song_browser_.view();
 		const SongListItem *selected_entry = nullptr;
 		if (browser.selected_index >= 0 && browser.selected_index < static_cast<int>(browser.entries.size()))
 			selected_entry = &browser.entries[static_cast<size_t>(browser.selected_index)];
+		const std::string previous_song_path = pending_song_path_;
 
 		pending_song_path_ = selected_song_path;
 		pending_gameplay_options_ = make_default_gameplay_options();
 		pending_instrument_selection_required_ = false;
 		waiting_for_song_preload_ = false;
-		song_preloader_.begin(selected_song_path);
+		const bool can_reuse_loaded_song =
+			song_session_.is_loaded() &&
+			!previous_song_path.empty() &&
+			previous_song_path == selected_song_path;
+		if (can_reuse_loaded_song)
+			song_preloader_.cancel();
+		else
+			song_preloader_.begin(selected_song_path);
 		const std::string song_title = selected_entry != nullptr ? selected_entry->label : std::string();
 		const std::string song_subtitle = selected_entry != nullptr ? selected_entry->subtitle : std::string();
 
@@ -449,11 +483,19 @@ namespace rhythmreplugged::core
 			available_difficulties.size() > 1 &&
 			(!requested_difficulty.has_value() || !contains_difficulty(available_difficulties, *requested_difficulty));
 
+		instrument_select_menu_.open(song_title, song_subtitle, available_instruments, pending_gameplay_options_);
+
+		if (!allow_auto_start)
+		{
+			menu_screen_ = MenuScreen::InstrumentSelect;
+			refresh_difficulty_preload_state();
+			return true;
+		}
+
 		if (should_show_instrument_menu)
 		{
 			pending_instrument_selection_required_ = true;
 			menu_screen_ = MenuScreen::InstrumentSelect;
-			instrument_select_menu_.open(song_title, song_subtitle, available_instruments, pending_gameplay_options_);
 		}
 		else
 		{
@@ -462,10 +504,14 @@ namespace rhythmreplugged::core
 			{
 				menu_screen_ = MenuScreen::DifficultySelect;
 			}
-			else
+			else if (allow_auto_start)
 			{
 				menu_screen_ = MenuScreen::DifficultySelect;
 				activate_difficulty_selection_unlocked();
+			}
+			else
+			{
+				menu_screen_ = MenuScreen::DifficultySelect;
 			}
 		}
 		refresh_difficulty_preload_state();
@@ -514,6 +560,25 @@ namespace rhythmreplugged::core
 		}
 	}
 
+	void AppCore::return_to_song_setup_unlocked()
+	{
+		mode_ = AppMode::Menu;
+		session_unload_pending_ = false;
+		player_status_message_.clear();
+		waiting_for_song_preload_ = false;
+		song_preloader_.cancel();
+
+		const std::string song_path = pending_song_path_;
+		if (song_path.empty() || begin_song_activation(song_path, false))
+			return;
+
+		menu_screen_ = pending_instrument_selection_required_
+			? MenuScreen::InstrumentSelect
+			: MenuScreen::DifficultySelect;
+		instrument_select_menu_.set_status_message("Could not reopen the selected song.");
+		difficulty_select_menu_.set_status_message("Could not reopen the selected song.");
+	}
+
 	void AppCore::return_to_browser()
 	{
 		return_to_browser_unlocked();
@@ -521,6 +586,12 @@ namespace rhythmreplugged::core
 
 	void AppCore::return_to_browser_unlocked()
 	{
+		if (restrict_to_startup_song_)
+		{
+			return_to_song_setup_unlocked();
+			return;
+		}
+
 		mode_ = AppMode::Menu;
 		menu_screen_ = MenuScreen::SongBrowser;
 		session_unload_pending_ = true;
@@ -752,11 +823,13 @@ namespace rhythmreplugged::core
 	{
 		if (pressed(input_state.b, previous_input_.b))
 		{
-			menu_screen_ = MenuScreen::SongBrowser;
-			pending_song_path_.clear();
-			pending_instrument_selection_required_ = false;
-			waiting_for_song_preload_ = false;
-			song_preloader_.cancel();
+			if (restrict_to_startup_song_)
+			{
+				instrument_select_menu_.clear_status_message();
+				return;
+			}
+
+			return_to_browser_unlocked();
 			instrument_select_menu_.clear_status_message();
 			return;
 		}
@@ -778,15 +851,7 @@ namespace rhythmreplugged::core
 	{
 		if (pressed(input_state.b, previous_input_.b))
 		{
-			if (pending_instrument_selection_required_)
-				menu_screen_ = MenuScreen::InstrumentSelect;
-			else
-			{
-				menu_screen_ = MenuScreen::SongBrowser;
-				pending_song_path_.clear();
-				waiting_for_song_preload_ = false;
-				song_preloader_.cancel();
-			}
+			menu_screen_ = MenuScreen::InstrumentSelect;
 			difficulty_select_menu_.clear_status_message();
 			refresh_difficulty_preload_state();
 			return;
@@ -861,13 +926,13 @@ namespace rhythmreplugged::core
 	{
 		if (song_session_.playback_finished())
 		{
-			return_to_browser_unlocked();
+			return_to_song_setup_unlocked();
 			return;
 		}
 
 		if (pressed(input_state.b, previous_input_.b))
 		{
-			return_to_browser_unlocked();
+			return_to_song_setup_unlocked();
 			return;
 		}
 

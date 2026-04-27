@@ -54,10 +54,11 @@ namespace rhythmreplugged::core
 		bool activate_browser_selection_unlocked();
 		bool activate_instrument_selection_unlocked();
 		bool activate_difficulty_selection_unlocked();
-		bool begin_song_activation(const std::string &selected_song_path);
+		bool begin_song_activation(const std::string &selected_song_path, bool allow_auto_start = true);
 		void refresh_difficulty_preload_state();
 		GameplayOptions make_default_gameplay_options() const;
 		bool try_finish_song_preload(std::string &error_message);
+		void return_to_song_setup_unlocked();
 		void return_to_browser_unlocked();
 		void toggle_player_guitar_mute_unlocked();
 		void update_player_status_message();
@@ -87,5 +88,6 @@ namespace rhythmreplugged::core
 		bool waiting_for_song_preload_ = false;
 		bool session_unload_pending_ = false;
 		bool audio_batch_enabled_ = false;
+		bool restrict_to_startup_song_ = false;
 	};
 }

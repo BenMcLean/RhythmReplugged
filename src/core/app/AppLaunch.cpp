@@ -21,6 +21,20 @@ namespace rhythmreplugged::core
 			return slash == std::string::npos ? path : path.substr(slash + 1);
 		}
 
+		bool is_specific_song_ini_content(
+			const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+			const std::string &content_path)
+		{
+			if (content_path.empty())
+				return false;
+
+			const std::string canonical_path = file_system.canonicalize_path(content_path);
+			if (canonical_path.empty() || file_system.path_is_directory(canonical_path))
+				return false;
+
+			return to_lower_copy(file_name_of(canonical_path)) == "song.ini";
+		}
+
 		bool is_path_absolute(std::string_view path)
 		{
 			if (path.empty())
@@ -160,6 +174,7 @@ namespace rhythmreplugged::core
 			inputs.content_path,
 			content_base);
 		request.startup_song_path = derive_song_directory(file_system, resolved_content_path);
+		request.restrict_to_startup_song = is_specific_song_ini_content(file_system, resolved_content_path);
 
 		const std::string songs_root_base = !content_root.empty() ? content_root : working_directory;
 		request.songs_root_path = resolve_directory_path(

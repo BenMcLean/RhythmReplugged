@@ -47,6 +47,7 @@ namespace rhythmreplugged::core
 		int sample_rate() const;
 		const SongMetadataView &metadata() const;
 		bool playback_finished() const;
+		void rewind();
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
 		::rhythmreplugged::frontend_contract::AudioBatch generate_audio_batch(size_t frame_count);
 		static bool preload(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
