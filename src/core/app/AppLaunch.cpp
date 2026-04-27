@@ -144,6 +144,7 @@ namespace rhythmreplugged::core
 		const AppLaunchInputs &inputs)
 	{
 		AppLaunchRequest request;
+		request.frontend_options = inputs.frontend_options;
 		const std::string working_directory = canonicalize_directory_if_valid(file_system, ".");
 		const std::string fallback_root = resolve_directory_path(
 			file_system,

@@ -23,12 +23,23 @@ namespace rhythmreplugged::core
 		}};
 	}
 
-	void DifficultySelectMenu::open(std::string song_title, std::string song_subtitle, const GameplayOptions &options)
+	void DifficultySelectMenu::open(
+		std::string song_title,
+		std::string song_subtitle,
+		const std::vector<DifficultyOption> &available_difficulties,
+		const GameplayOptions &options)
 	{
 		cached_view_ = {};
 		song_title_ = std::move(song_title);
 		song_subtitle_ = std::move(song_subtitle);
 		status_message_.clear();
+		available_difficulties_ = available_difficulties;
+		if (available_difficulties_.empty())
+		{
+			available_difficulties_.reserve(kDifficultyDefinitions.size());
+			for (const DifficultyDefinition &definition : kDifficultyDefinitions)
+				available_difficulties_.push_back(definition.difficulty);
+		}
 		selected_index_ = default_index_for(options.difficulty());
 		rebuild_view();
 	}
@@ -36,14 +47,14 @@ namespace rhythmreplugged::core
 	bool DifficultySelectMenu::move_selection(int delta)
 	{
 		const int previous_index = selected_index_;
-		selected_index_ = std::clamp(selected_index_ + delta, 0, static_cast<int>(kDifficultyDefinitions.size()) - 1);
+		selected_index_ = std::clamp(selected_index_ + delta, 0, static_cast<int>(available_difficulties_.size()) - 1);
 		rebuild_view();
 		return selected_index_ != previous_index;
 	}
 
 	bool DifficultySelectMenu::set_selected_index(int index)
 	{
-		if (index < 0 || index >= static_cast<int>(kDifficultyDefinitions.size()))
+		if (index < 0 || index >= static_cast<int>(available_difficulties_.size()))
 			return false;
 
 		selected_index_ = index;
@@ -85,7 +96,7 @@ namespace rhythmreplugged::core
 
 	void DifficultySelectMenu::apply_to(GameplayOptions &options) const
 	{
-		options.set_difficulty(kDifficultyDefinitions[static_cast<size_t>(selected_index_)].difficulty);
+		options.set_difficulty(available_difficulties_[static_cast<size_t>(selected_index_)]);
 	}
 
 	const DifficultySelectView &DifficultySelectMenu::view() const
@@ -100,24 +111,31 @@ namespace rhythmreplugged::core
 		cached_view_.status_message = status_message_;
 		cached_view_.selected_index = selected_index_;
 		cached_view_.entries.clear();
-		cached_view_.entries.reserve(kDifficultyDefinitions.size());
-		for (const DifficultyDefinition &definition : kDifficultyDefinitions)
+		cached_view_.entries.reserve(available_difficulties_.size());
+		for (DifficultyOption difficulty : available_difficulties_)
 		{
 			DifficultyListItem item;
-			item.difficulty = definition.difficulty;
-			item.label = definition.label;
+			item.difficulty = difficulty;
+			for (const DifficultyDefinition &definition : kDifficultyDefinitions)
+			{
+				if (definition.difficulty == difficulty)
+				{
+					item.label = definition.label;
+					break;
+				}
+			}
 			cached_view_.entries.push_back(std::move(item));
 		}
 	}
 
-	int DifficultySelectMenu::default_index_for(DifficultyOption difficulty)
+	int DifficultySelectMenu::default_index_for(DifficultyOption difficulty) const
 	{
-		for (int index = 0; index < static_cast<int>(kDifficultyDefinitions.size()); ++index)
+		for (int index = 0; index < static_cast<int>(available_difficulties_.size()); ++index)
 		{
-			if (kDifficultyDefinitions[static_cast<size_t>(index)].difficulty == difficulty)
+			if (available_difficulties_[static_cast<size_t>(index)] == difficulty)
 				return index;
 		}
 
-		return 1;
+		return available_difficulties_.empty() ? 0 : std::min(1, static_cast<int>(available_difficulties_.size()) - 1);
 	}
 }

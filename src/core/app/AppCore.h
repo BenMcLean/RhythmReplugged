@@ -8,6 +8,7 @@
 #include "core/play/SongPreloader.h"
 #include "core/play/SongSession.h"
 #include "frontend_contract/AudioTypes.h"
+#include "frontend_contract/FrontendOptions.h"
 #include "frontend_contract/RetroInput.h"
 
 #include <atomic>
@@ -22,6 +23,7 @@ namespace rhythmreplugged::core
 
 		bool retro_init(const std::string &song_root_path, std::string &error_message);
 		bool retro_init(const AppLaunchRequest &launch_request, std::string &error_message);
+		void set_frontend_options(const ::rhythmreplugged::frontend_contract::FrontendOptions &options);
 		void retro_run(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 		void retro_deinit();
 		void set_audio_batch_enabled(bool enabled);
@@ -54,6 +56,7 @@ namespace rhythmreplugged::core
 		bool activate_difficulty_selection_unlocked();
 		bool begin_song_activation(const std::string &selected_song_path);
 		void refresh_difficulty_preload_state();
+		GameplayOptions make_default_gameplay_options() const;
 		bool try_finish_song_preload(std::string &error_message);
 		void return_to_browser_unlocked();
 		void toggle_player_guitar_mute_unlocked();
@@ -76,6 +79,7 @@ namespace rhythmreplugged::core
 		std::atomic<MenuScreen> menu_screen_{MenuScreen::SongBrowser};
 		::rhythmreplugged::frontend_contract::RetroInputState previous_input_{};
 		::rhythmreplugged::frontend_contract::AudioBatch audio_batch_{};
+		::rhythmreplugged::frontend_contract::FrontendOptions frontend_options_{};
 		std::string player_status_message_;
 		std::string pending_song_path_;
 		GameplayOptions pending_gameplay_options_;

@@ -57,9 +57,10 @@
 			}
 		},
 		{
-			"name": "linux-libretro-debug",
-			"displayName": "Linux Libretro Debug",
-			"description": "Linux libretro-only build without SDL3 frontend dependencies.",
+			"name": "linux-libretro-debug-internal",
+			"displayName": "Linux Libretro Debug (Internal)",
+			"description": "Internal libretro-only build without SDL3 frontend dependencies.",
+			"hidden": true,
 			"inherits": "base",
 			"generator": "Ninja",
 			"cacheVariables": {
@@ -71,9 +72,10 @@
 			}
 		},
 		{
-			"name": "linux-libretro-release",
-			"displayName": "Linux Libretro Release",
-			"description": "Linux libretro-only build without SDL3 frontend dependencies.",
+			"name": "linux-libretro-release-internal",
+			"displayName": "Linux Libretro Release (Internal)",
+			"description": "Internal libretro-only build without SDL3 frontend dependencies.",
+			"hidden": true,
 			"inherits": "base",
 			"generator": "Ninja",
 			"cacheVariables": {
@@ -109,14 +111,16 @@
 			"configurePreset": "linux-release"
 		},
 		{
-			"name": "linux-libretro-debug",
-			"displayName": "Linux Libretro Debug",
-			"configurePreset": "linux-libretro-debug"
+			"name": "linux-libretro-debug-internal",
+			"displayName": "Linux Libretro Debug (Internal)",
+			"hidden": true,
+			"configurePreset": "linux-libretro-debug-internal"
 		},
 		{
-			"name": "linux-libretro-release",
-			"displayName": "Linux Libretro Release",
-			"configurePreset": "linux-libretro-release"
+			"name": "linux-libretro-release-internal",
+			"displayName": "Linux Libretro Release (Internal)",
+			"hidden": true,
+			"configurePreset": "linux-libretro-release-internal"
 		}
 	]
 }

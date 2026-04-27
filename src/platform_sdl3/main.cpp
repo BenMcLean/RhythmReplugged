@@ -1,5 +1,6 @@
 #include "core/app/AppCore.h"
 #include "core/app/AppLaunch.h"
+#include "frontend_contract/FrontendOptions.h"
 #include "platform_sdl3/MiniaudioOutput.h"
 #include "platform_sdl3/FileSystem.h"
 #include "render_gl/GameplayRendererGl.h"
@@ -34,6 +35,8 @@ namespace
 		std::string songs_root_path;
 		std::string content_root_path;
 		std::string content_path;
+		::rhythmreplugged::frontend_contract::FrontendOptions frontend_options;
+		std::string error_message;
 	};
 
 	std::string find_songs_root(const char *argv0)
@@ -86,6 +89,32 @@ namespace
 			{
 				arguments.content_path = argv[++index] != nullptr ? argv[index] : "";
 				continue;
+			}
+
+			if (!argument.empty() && argument[0] == '-')
+			{
+				const auto *definition =
+					::rhythmreplugged::frontend_contract::find_frontend_option_by_command_line_flag(argument);
+				if (definition != nullptr)
+				{
+					if (index + 1 >= argc)
+					{
+						arguments.error_message = "Missing value for " + argument + ".";
+						return arguments;
+					}
+
+					const std::string value = argv[++index] != nullptr ? argv[index] : "";
+					if (!::rhythmreplugged::frontend_contract::set_frontend_option_value(
+						arguments.frontend_options,
+						definition->id,
+						value))
+					{
+						arguments.error_message = "Invalid value '" + value + "' for " + argument + ".";
+						return arguments;
+					}
+
+					continue;
+				}
 			}
 
 			if (!argument.empty() && argument[0] != '-' && arguments.content_path.empty())
@@ -184,11 +213,23 @@ int main(int argc, char *argv[])
 	AppCore app(file_system);
 	std::string init_error;
 	const SdlLaunchArguments launch_arguments = parse_launch_arguments(argc, argv);
+	if (!launch_arguments.error_message.empty())
+	{
+		std::cerr << launch_arguments.error_message << "\n";
+		ImGui_ImplOpenGL3_Shutdown();
+		ImGui_ImplSDL3_Shutdown();
+		ImGui::DestroyContext();
+		SDL_GL_DestroyContext(gl_context);
+		SDL_DestroyWindow(window);
+		SDL_Quit();
+		return 1;
+	}
 	AppLaunchInputs launch_inputs;
 	launch_inputs.songs_root_path = launch_arguments.songs_root_path;
 	launch_inputs.content_root_path = launch_arguments.content_root_path;
 	launch_inputs.content_path = launch_arguments.content_path;
 	launch_inputs.fallback_songs_root_path = find_songs_root(argc > 0 ? argv[0] : nullptr);
+	launch_inputs.frontend_options = launch_arguments.frontend_options;
 	const AppLaunchRequest launch_request = resolve_app_launch_request(file_system, launch_inputs);
 	if (!app.retro_init(launch_request, init_error))
 	{

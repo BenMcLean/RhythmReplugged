@@ -2,6 +2,7 @@
 
 #include "core/app/AppCore.h"
 #include "core/app/AppLaunch.h"
+#include "frontend_contract/FrontendOptions.h"
 #include "platform_libretro/ImGuiLibretroPlatform.h"
 #include "platform_libretro/FileSystem.h"
 #include "render_gl/GameplayRendererGl.h"
@@ -72,6 +73,90 @@ namespace
 	const retro_system_content_info_override kContentInfoOverrides[] = {
 		{"ini", true, false},
 		{nullptr, false, false},
+	};
+
+	const retro_core_option_v2_category kOptionCategories[] = {
+		{
+			"gameplay",
+			"Gameplay",
+			"Default song startup preferences.",
+		},
+		{nullptr, nullptr, nullptr},
+	};
+
+	const retro_core_option_v2_definition kCoreOptionDefinitions[] = {
+		{
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[0].libretro_key,
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[0].display_name,
+			nullptr,
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[0].description,
+			nullptr,
+			"gameplay",
+			{
+				{
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[0].value,
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[0].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[1].value,
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[1].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[2].value,
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[2].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[3].value,
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[3].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[4].value,
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[4].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[5].value,
+					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[5].label,
+				},
+			},
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[0].default_value,
+		},
+		{
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[1].libretro_key,
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[1].display_name,
+			nullptr,
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[1].description,
+			nullptr,
+			"gameplay",
+			{
+				{
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[0].value,
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[0].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[1].value,
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[1].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[2].value,
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[2].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[3].value,
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[3].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[4].value,
+					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[4].label,
+				},
+			},
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[1].default_value,
+		},
+		{},
+	};
+
+	const retro_core_options_v2 kCoreOptions = {
+		const_cast<retro_core_option_v2_category *>(kOptionCategories),
+		const_cast<retro_core_option_v2_definition *>(kCoreOptionDefinitions),
 	};
 
 	void log_message(retro_log_level level, const char *format, ...)
@@ -256,6 +341,38 @@ namespace
 	{
 		if (usec > 0)
 			g_last_frame_time_usec = usec;
+	}
+
+	void register_core_options()
+	{
+		if (g_environment == nullptr)
+			return;
+
+		g_environment(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2, const_cast<retro_core_options_v2 *>(&kCoreOptions));
+	}
+
+	::rhythmreplugged::frontend_contract::FrontendOptions query_frontend_options()
+	{
+		::rhythmreplugged::frontend_contract::FrontendOptions options;
+		if (g_environment == nullptr)
+			return options;
+
+		for (const auto &definition : ::rhythmreplugged::frontend_contract::frontend_option_definitions())
+		{
+			retro_variable variable{};
+			variable.key = definition.libretro_key;
+			if (!g_environment(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) || variable.value == nullptr)
+				continue;
+
+			::rhythmreplugged::frontend_contract::set_frontend_option_value(options, definition.id, variable.value);
+		}
+
+		return options;
+	}
+
+	void sync_frontend_options()
+	{
+		g_app.set_frontend_options(query_frontend_options());
 	}
 
 	void sync_frontend_sample_rate()
@@ -460,6 +577,7 @@ RR_LIBRETRO_EXPORT void retro_set_environment(retro_environment_t cb)
 	if (g_environment != nullptr)
 	{
 		g_environment(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &g_log_callback);
+		register_core_options();
 		retro_vfs_interface_info vfs_info{};
 		vfs_info.required_interface_version = 3;
 		if (g_environment(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_info) && vfs_info.iface != nullptr)
@@ -508,6 +626,7 @@ RR_LIBRETRO_EXPORT void retro_init(void)
 	initialize_app_imgui(kDefaultUiScale);
 	initialize_imgui_libretro_platform();
 	g_app.set_audio_batch_enabled(false);
+	g_app.set_frontend_options(query_frontend_options());
 	g_reported_sample_rate = 0;
 	g_pending_audio_samples.clear();
 	g_last_frame_time_usec = kNominalFrameTimeUsec;
@@ -562,12 +681,16 @@ RR_LIBRETRO_EXPORT void retro_reset(void)
 	if (g_root_path.empty())
 		return;
 
-		std::string error_message;
+	std::string error_message;
+	sync_frontend_options();
+	g_pending_audio_samples.clear();
+	g_audio_frame_time_remainder = 0;
 	AppLaunchRequest launch_request;
 	launch_request.songs_root_path = g_root_path;
+	launch_request.frontend_options = query_frontend_options();
 	g_is_loaded = g_app.retro_init(launch_request, error_message);
 	if (!g_is_loaded)
-		 log_message(RETRO_LOG_ERROR, "Failed to reset content '%s': %s\n", g_root_path.c_str(), error_message.c_str());
+		log_message(RETRO_LOG_ERROR, "Failed to reset content '%s': %s\n", g_root_path.c_str(), error_message.c_str());
 	else
 		update_frontend_av_info();
 }
@@ -577,12 +700,18 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 	if (!configure_hw_render())
 		return false;
 
+	const ::rhythmreplugged::frontend_contract::FrontendOptions frontend_options = query_frontend_options();
+	g_app.set_frontend_options(frontend_options);
+	g_pending_audio_samples.clear();
+	g_audio_frame_time_remainder = 0;
+
 	if (game == nullptr || game->path == nullptr)
 	{
 		std::string error_message;
 		g_root_path.clear();
 		AppLaunchInputs launch_inputs;
 		launch_inputs.fallback_songs_root_path = query_browser_root_hint();
+		launch_inputs.frontend_options = frontend_options;
 		const AppLaunchRequest launch_request = resolve_app_launch_request(g_file_system, launch_inputs);
 		g_root_path = launch_request.songs_root_path;
 		g_is_loaded = g_app.retro_init(launch_request, error_message);
@@ -596,6 +725,7 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 	AppLaunchInputs launch_inputs;
 	launch_inputs.content_path = game->path;
 	launch_inputs.fallback_songs_root_path = query_browser_root_hint();
+	launch_inputs.frontend_options = frontend_options;
 	const AppLaunchRequest launch_request = resolve_app_launch_request(g_file_system, launch_inputs);
 	g_root_path = launch_request.songs_root_path;
 	if (g_root_path.empty())
@@ -686,6 +816,7 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 	if (!g_is_loaded || !g_gl_ready)
 		return;
 
+	sync_frontend_options();
 	const ::rhythmreplugged::frontend_contract::RetroInputState input = poll_input();
 	if (g_app.mode() == AppMode::Gameplay)
 	{

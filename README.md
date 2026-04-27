@@ -148,6 +148,19 @@ This produces the standalone desktop executable under:
 - `build/linux-debug/RhythmReplugged`
 - `build/linux-release/RhythmReplugged`
 
+It also stages the final desktop artifact under:
+
+- `dist/Debug/desktop/` for debug builds
+- `dist/Release/desktop/` for release builds
+
+The SDL3 host also accepts a few startup flags:
+
+- `--content <path>` to open a specific song or content path
+- `--songs-root <path>` to choose the song browser root
+- `--content-root <path>` to resolve relative content paths
+- `--instrument <ask|guitar|bass|rhythm|coop-guitar|keys>` to pick the startup instrument preference
+- `--difficulty <ask|easy|medium|hard|expert>` to pick the startup difficulty preference
+
 #### Fresh-machine notes
 
 The first Linux configure may need a few system packages before `vcpkg` can finish restoring dependencies. The exact package names vary by distro, but typically include:
@@ -182,6 +195,11 @@ cmake --build --preset windows-x64-release --target platform_libretro
 
 This produces:
 
-- `build/windows-x64/Release/rhythmreplugged_libretro.dll`
+- `build/windows-x64/Release/rhythmreplugged.dll`
+
+It also stages the libretro drop under:
+
+- `dist/Release/libretro/rhythmreplugged.dll`
+- `dist/Release/libretro/rhythmreplugged.info`
 
 The current x64 release core builds as a single drop-in DLL without extra third-party sidecar DLLs.

@@ -1,0 +1,24 @@
+display_name = "Rhythm Replugged"
+categories = "Game"
+corename = "Rhythm Replugged"
+supported_extensions = "ini"
+display_version = "v0.1"
+
+systemname = "Music Game"
+
+supports_no_game = "true"
+single_purpose = "false"
+hw_render = "true"
+required_hw_api = "OpenGL >= 3.0 | OpenGL ES >= 3.0"
+needs_fullpath = "true"
+
+savestate = "false"
+cheats = "false"
+input_descriptors = "false"
+memory_descriptors = "false"
+core_options = "true"
+load_subsystem = "false"
+disk_control = "false"
+is_experimental = "true"
+
+description = "Cross-platform libretro music game for browsing and playing YARG-format songs. The core can start without content, or load a song by pointing content at its song.ini file. Rendering requires OpenGL 3.0 or OpenGL ES 3.0."
