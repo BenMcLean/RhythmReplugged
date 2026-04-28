@@ -117,6 +117,17 @@ namespace rhythmreplugged::core
 			bool is_strong = false;
 		};
 
+		struct LyricTokenView
+		{
+			std::string text;
+			float start_offset_seconds = 0.0f;
+			float end_offset_seconds = 0.0f;
+			bool is_current = false;
+			bool is_past = false;
+			bool prepend_space = false;
+			int line_index = 0;
+		};
+
 		std::string song_title;
 		std::string song_artist;
 		std::string status_message;
@@ -131,8 +142,11 @@ namespace rhythmreplugged::core
 		std::string chart_difficulty_name;
 		double song_time_seconds = 0.0;
 		double chart_beats_per_minute = 120.0;
+		int current_lyric_line_index = 0;
+		int next_lyric_line_index = -1;
 		std::vector<ChartNoteView> visible_chart_notes;
 		std::vector<ChartMeasureLineView> visible_measure_lines;
+		std::vector<LyricTokenView> visible_lyric_tokens;
 	};
 
 	struct Color4

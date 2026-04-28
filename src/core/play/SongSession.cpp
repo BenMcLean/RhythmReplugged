@@ -9,6 +9,149 @@ namespace rhythmreplugged::core
 {
 	namespace
 	{
+		struct ParsedLyricDisplay
+		{
+			std::string text;
+			bool join_next_without_space = false;
+			bool force_new_line_before = false;
+			bool is_spacer_only = false;
+		};
+
+		struct LyricPhraseRange
+		{
+			double start_seconds = 0.0;
+			double end_seconds = 0.0;
+		};
+
+		bool is_displayable_lyric(const MidiChartTextEvent &event)
+		{
+			return event.type == MidiChartTextEventType::Lyric && !event.text.empty();
+		}
+
+		bool starts_with_punctuation(std::string_view text)
+		{
+			if (text.empty())
+				return false;
+
+			switch (text.front())
+			{
+			case '.':
+			case '!':
+			case '?':
+			case ',':
+			case ':':
+			case ';':
+			case ')':
+			case ']':
+				return true;
+			default:
+				return false;
+			}
+		}
+
+		ParsedLyricDisplay parse_lyric_display(std::string_view text)
+		{
+			ParsedLyricDisplay parsed;
+			while (!text.empty())
+			{
+				if (text.size() >= 2 && text[0] == '\\' && text[1] == 'n')
+				{
+					parsed.force_new_line_before = true;
+					text.remove_prefix(2);
+					continue;
+				}
+
+				if (text.front() == '/' || text.front() == '\\')
+				{
+					parsed.force_new_line_before = true;
+					text.remove_prefix(1);
+					continue;
+				}
+
+				break;
+			}
+
+			parsed.text = std::string(text);
+			if (parsed.text == "+")
+			{
+				parsed.text.clear();
+				parsed.is_spacer_only = true;
+				return parsed;
+			}
+
+			if (!parsed.text.empty())
+			{
+				const char tail = parsed.text.back();
+				if (tail == '-')
+				{
+					parsed.join_next_without_space = true;
+					parsed.text.pop_back();
+				}
+				else if (tail == '=')
+				{
+					parsed.join_next_without_space = true;
+					parsed.text.pop_back();
+				}
+			}
+
+			return parsed;
+		}
+
+		bool is_vocal_phrase(const MidiChartPhrase &phrase)
+		{
+			return phrase.type == MidiChartPhraseType::VocalsScoringPhrase ||
+				phrase.type == MidiChartPhraseType::VocalsStaticPhrase;
+		}
+
+		std::vector<LyricPhraseRange> collect_lyric_phrase_ranges(const MidiChart &chart)
+		{
+			std::vector<LyricPhraseRange> ranges;
+			const MidiChartTrack *preferred_track = nullptr;
+			for (const MidiChartTrack &track : chart.tracks())
+			{
+				if (track.type == MidiChartTrackType::Vocals)
+				{
+					preferred_track = &track;
+					break;
+				}
+			}
+
+			if (preferred_track == nullptr)
+			{
+				for (const MidiChartTrack &track : chart.tracks())
+				{
+					if (track.type == MidiChartTrackType::Harmony1 ||
+						track.type == MidiChartTrackType::Harmony2 ||
+						track.type == MidiChartTrackType::Harmony3)
+					{
+						preferred_track = &track;
+						break;
+					}
+				}
+			}
+
+			if (preferred_track == nullptr)
+				return ranges;
+
+			for (const MidiChartPhrase &phrase : preferred_track->phrases)
+			{
+				if (!is_vocal_phrase(phrase))
+					continue;
+
+				LyricPhraseRange range;
+				range.start_seconds = phrase.start_seconds;
+				range.end_seconds = phrase.end_seconds;
+				ranges.push_back(range);
+			}
+
+			std::sort(ranges.begin(), ranges.end(),
+				[](const LyricPhraseRange &left, const LyricPhraseRange &right)
+				{
+					return left.start_seconds < right.start_seconds;
+				});
+			return ranges;
+		}
+		
 		MidiChartDifficulty to_midi_chart_difficulty(DifficultyOption difficulty)
 		{
 			switch (difficulty)
@@ -345,6 +488,116 @@ namespace rhythmreplugged::core
 				measure_line.kind == MidiChartMeasureLine::Kind::Strong;
 			player_view.visible_measure_lines.push_back(measure_line_view);
 		}
+
+		const std::vector<MidiChartTextEvent> &lyrics = midi_chart_.lyrics();
+		const std::vector<LyricPhraseRange> lyric_phrase_ranges = collect_lyric_phrase_ranges(midi_chart_);
+		size_t phrase_index = 0;
+		int current_line_index = 0;
+		bool previous_join_without_space = false;
+		std::vector<PrototypePlayerView::LyricTokenView> all_lyric_tokens;
+		for (size_t index = 0; index < lyrics.size(); ++index)
+		{
+			const MidiChartTextEvent &lyric = lyrics[index];
+			if (!is_displayable_lyric(lyric))
+				continue;
+
+			const ParsedLyricDisplay parsed_lyric = parse_lyric_display(lyric.text);
+			if (parsed_lyric.text.empty())
+			{
+				previous_join_without_space = parsed_lyric.join_next_without_space;
+				continue;
+			}
+
+			while (phrase_index < lyric_phrase_ranges.size() &&
+				lyric_phrase_ranges[phrase_index].end_seconds <= lyric.time_seconds)
+			{
+				++phrase_index;
+			}
+
+			const bool lyric_in_phrase =
+				phrase_index < lyric_phrase_ranges.size() &&
+				lyric.time_seconds >= lyric_phrase_ranges[phrase_index].start_seconds &&
+				lyric.time_seconds < lyric_phrase_ranges[phrase_index].end_seconds;
+
+			double next_time_seconds = lyric.time_seconds + 0.75;
+			for (size_t next_index = index + 1; next_index < lyrics.size(); ++next_index)
+			{
+				if (!is_displayable_lyric(lyrics[next_index]))
+					continue;
+
+				next_time_seconds = lyrics[next_index].time_seconds;
+				break;
+			}
+
+			if (lyric_in_phrase)
+			{
+				current_line_index = static_cast<int>(phrase_index);
+			}
+			else if (!all_lyric_tokens.empty() && parsed_lyric.force_new_line_before)
+			{
+				++current_line_index;
+			}
+
+			PrototypePlayerView::LyricTokenView lyric_view;
+			lyric_view.text = parsed_lyric.text;
+			lyric_view.start_offset_seconds = static_cast<float>(lyric.time_seconds - player_view.song_time_seconds);
+			lyric_view.end_offset_seconds = static_cast<float>(next_time_seconds - player_view.song_time_seconds);
+			lyric_view.is_current = lyric_view.start_offset_seconds <= 0.0f && lyric_view.end_offset_seconds > 0.0f;
+			lyric_view.is_past = lyric_view.end_offset_seconds <= 0.0f;
+			lyric_view.prepend_space =
+				!all_lyric_tokens.empty() &&
+				all_lyric_tokens.back().line_index == current_line_index &&
+				!previous_join_without_space &&
+				!starts_with_punctuation(parsed_lyric.text);
+			lyric_view.line_index = current_line_index;
+			all_lyric_tokens.push_back(std::move(lyric_view));
+
+			previous_join_without_space = parsed_lyric.join_next_without_space;
+		}
+
+		int display_line_index = 0;
+		if (!lyric_phrase_ranges.empty())
+		{
+			display_line_index = static_cast<int>(lyric_phrase_ranges.size() - 1);
+			for (size_t index = 0; index < lyric_phrase_ranges.size(); ++index)
+			{
+				if (player_view.song_time_seconds < lyric_phrase_ranges[index].end_seconds)
+				{
+					display_line_index = static_cast<int>(index);
+					break;
+				}
+			}
+		}
+		else
+		{
+			for (const PrototypePlayerView::LyricTokenView &token : all_lyric_tokens)
+			{
+				if (!token.is_past)
+				{
+					display_line_index = token.line_index;
+					break;
+				}
+			}
+		}
+
+		player_view.current_lyric_line_index = display_line_index;
+		int next_line_index = -1;
+		for (const PrototypePlayerView::LyricTokenView &token : all_lyric_tokens)
+		{
+			if (token.line_index > display_line_index)
+			{
+				next_line_index = token.line_index;
+				break;
+			}
+		}
+		player_view.next_lyric_line_index = next_line_index;
+
+		for (const PrototypePlayerView::LyricTokenView &token : all_lyric_tokens)
+		{
+			if (token.line_index == display_line_index || token.line_index == next_line_index)
+				player_view.visible_lyric_tokens.push_back(token);
+		}
+
 		return player_view;
 	}
 

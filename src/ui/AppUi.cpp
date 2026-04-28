@@ -32,6 +32,73 @@ namespace
 			text);
 	}
 
+	void draw_lyric_strip(const PrototypePlayerView &player, const ImVec2 &canvas_pos, ImVec2 window_size)
+	{
+		if (player.visible_lyric_tokens.empty())
+			return;
+
+		ImDrawList *draw_list = ImGui::GetWindowDrawList();
+		const int current_line_index = player.current_lyric_line_index;
+		const int next_line_index = player.next_lyric_line_index;
+		const float font_size = ImGui::GetFontSize();
+		const float panel_padding_x = 18.0f;
+		const float panel_padding_y = 12.0f;
+		const float line_gap = 6.0f;
+		const float panel_height = panel_padding_y * 2.0f + font_size * 2.0f + line_gap;
+		const ImVec2 panel_pos(canvas_pos.x + 16.0f, canvas_pos.y + 8.0f);
+		const ImVec2 panel_size(window_size.x - 32.0f, panel_height);
+		draw_list->AddRectFilled(
+			panel_pos,
+			ImVec2(panel_pos.x + panel_size.x, panel_pos.y + panel_size.y),
+			IM_COL32(10, 14, 22, 208),
+			12.0f);
+		draw_list->AddRect(
+			panel_pos,
+			ImVec2(panel_pos.x + panel_size.x, panel_pos.y + panel_size.y),
+			IM_COL32(80, 92, 116, 180),
+			12.0f);
+
+		auto draw_line = [&](int line_index, float baseline_y)
+		{
+			float line_width = 0.0f;
+			bool has_any = false;
+			for (const PrototypePlayerView::LyricTokenView &token : player.visible_lyric_tokens)
+			{
+				if (token.line_index != line_index)
+					continue;
+
+				const std::string rendered = token.prepend_space ? (" " + token.text) : token.text;
+				line_width += ImGui::CalcTextSize(rendered.c_str()).x;
+				has_any = true;
+			}
+
+			if (!has_any)
+				return;
+
+			float cursor_x = panel_pos.x + (panel_size.x - line_width) * 0.5f;
+			for (const PrototypePlayerView::LyricTokenView &token : player.visible_lyric_tokens)
+			{
+				if (token.line_index != line_index)
+					continue;
+
+				const std::string rendered = token.prepend_space ? (" " + token.text) : token.text;
+				const ImVec2 text_size = ImGui::CalcTextSize(rendered.c_str());
+				ImU32 color = IM_COL32(136, 146, 164, 255);
+				if (token.is_current)
+					color = IM_COL32(255, 238, 154, 255);
+				else if (token.is_past)
+					color = IM_COL32(88, 212, 130, 255);
+
+				draw_list->AddText(ImVec2(cursor_x, baseline_y), color, rendered.c_str());
+				cursor_x += text_size.x;
+			}
+		};
+
+		draw_line(current_line_index, panel_pos.y + panel_padding_y);
+		if (next_line_index >= 0)
+			draw_line(next_line_index, panel_pos.y + panel_padding_y + font_size + line_gap);
+	}
+
 	void render_preload_progress_overlay(const DifficultySelectView &menu, ImVec2 window_size, float ui_scale)
 	{
 		if (menu.preload_phase == PreloadPhase::Idle)
@@ -564,7 +631,7 @@ namespace rhythmreplugged::ui
 			title += " - " + player.song_artist;
 
 		draw_list->AddText(
-			ImVec2(canvas_pos.x + 28.0f, canvas_pos.y + 24.0f),
+			ImVec2(canvas_pos.x + 28.0f, canvas_pos.y + 92.0f),
 			IM_COL32(240, 243, 248, 255),
 			title.c_str());
 
@@ -572,12 +639,14 @@ namespace rhythmreplugged::ui
 			? (player.chart_track_name + " / " + player.chart_difficulty_name)
 			: std::string("No supported playable chart loaded");
 		draw_list->AddText(
-			ImVec2(canvas_pos.x + 28.0f, canvas_pos.y + 52.0f),
+			ImVec2(canvas_pos.x + 28.0f, canvas_pos.y + 118.0f),
 			IM_COL32(180, 188, 202, 255),
 			chart_label.c_str());
 
+		draw_lyric_strip(player, canvas_pos, window_size);
+
 		if (!player.status_message.empty())
-			draw_status_pill("player_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + 76.0f), player.status_message.c_str(), IM_COL32(16, 20, 29, 210));
+			draw_status_pill("player_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + 146.0f), player.status_message.c_str(), IM_COL32(16, 20, 29, 210));
 
 		if (player.playable_stem_muted)
 		{

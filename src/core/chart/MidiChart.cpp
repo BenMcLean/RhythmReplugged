@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <string_view>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -183,6 +184,580 @@ namespace rhythmreplugged::core
 			if (text.size() < prefix.size())
 				return false;
 			return to_lower_copy(text.substr(0, prefix.size())) == to_lower_copy(prefix);
+		}
+
+		bool ends_with_ignore_case(std::string_view text, std::string_view suffix)
+		{
+			if (text.size() < suffix.size())
+				return false;
+			return to_lower_copy(text.substr(text.size() - suffix.size())) == to_lower_copy(suffix);
+		}
+
+		std::string trim_copy(std::string_view text)
+		{
+			size_t start = 0;
+			size_t end = text.size();
+			while (start < end && std::isspace(static_cast<unsigned char>(text[start])) != 0)
+				++start;
+			while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])) != 0)
+				--end;
+			return std::string(text.substr(start, end - start));
+		}
+
+		std::optional<int> try_parse_int(std::string_view text)
+		{
+			const std::string trimmed = trim_copy(text);
+			if (trimmed.empty())
+				return std::nullopt;
+
+			try
+			{
+				size_t parsed = 0;
+				const int value = std::stoi(trimmed, &parsed, 10);
+				if (parsed != trimmed.size())
+					return std::nullopt;
+				return value;
+			}
+			catch (...)
+			{
+				return std::nullopt;
+			}
+		}
+
+		std::string chart_consume_token(std::string_view &text)
+		{
+			while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())) != 0)
+				text.remove_prefix(1);
+			if (text.empty())
+				return {};
+
+			if (text.front() == '"' || text.front() == '`')
+			{
+				const char quote = text.front();
+				text.remove_prefix(1);
+				size_t index = 0;
+				while (index < text.size() && text[index] != quote)
+					++index;
+				const std::string token(text.substr(0, index));
+				text.remove_prefix((std::min)(index + (index < text.size() ? 1u : 0u), text.size()));
+				return token;
+			}
+
+			size_t index = 0;
+			while (index < text.size() && std::isspace(static_cast<unsigned char>(text[index])) == 0)
+				++index;
+			const std::string token(text.substr(0, index));
+			text.remove_prefix(index);
+			return token;
+		}
+
+		MidiChartTextEventType classify_chart_text_event_type(std::string_view text)
+		{
+			const std::string lowered = to_lower_copy(text);
+			if (starts_with_ignore_case(text, "lyric "))
+				return MidiChartTextEventType::Lyric;
+			if (starts_with_ignore_case(text, "[section ") || starts_with_ignore_case(text, "section "))
+				return MidiChartTextEventType::Section;
+			if (starts_with_ignore_case(text, "[crowd") || starts_with_ignore_case(text, "crowd"))
+				return MidiChartTextEventType::Crowd;
+			if (lowered == "music_start")
+				return MidiChartTextEventType::MusicStart;
+			if (lowered == "music_end")
+				return MidiChartTextEventType::MusicEnd;
+			if (lowered == "coda")
+				return MidiChartTextEventType::Coda;
+			if (lowered == "coda_end")
+				return MidiChartTextEventType::CodaEnd;
+			return MidiChartTextEventType::Generic;
+		}
+
+		std::string normalize_chart_text_event(std::string_view text)
+		{
+			if (starts_with_ignore_case(text, "lyric "))
+				return trim_copy(text.substr(6));
+			return trim_copy(text);
+		}
+
+		double time_in_seconds_at_tick(int tick,
+			const std::vector<MidiChartTempoChange> &tempo_changes,
+			int ticks_per_quarter_note)
+		{
+			if (tick <= 0 || ticks_per_quarter_note <= 0 || tempo_changes.empty())
+				return 0.0;
+
+			const MidiChartTempoChange *active = &tempo_changes.front();
+			for (const MidiChartTempoChange &tempo_change : tempo_changes)
+			{
+				if (tempo_change.tick > tick)
+					break;
+				active = &tempo_change;
+			}
+
+			const double beats_since_change = static_cast<double>(tick - active->tick) / static_cast<double>(ticks_per_quarter_note);
+			const double seconds_per_beat = 60.0 / active->beats_per_minute;
+			return active->time_seconds + beats_since_change * seconds_per_beat;
+		}
+
+		void build_tempo_change_times(std::vector<MidiChartTempoChange> &tempo_changes, int ticks_per_quarter_note)
+		{
+			if (ticks_per_quarter_note <= 0)
+				ticks_per_quarter_note = 480;
+
+			std::sort(tempo_changes.begin(), tempo_changes.end(),
+				[](const MidiChartTempoChange &left, const MidiChartTempoChange &right)
+				{
+					return left.tick < right.tick;
+				});
+
+			if (tempo_changes.empty())
+			{
+				tempo_changes.push_back({0, 0.0, 120.0});
+				return;
+			}
+
+			if (tempo_changes.front().tick != 0)
+				tempo_changes.insert(tempo_changes.begin(), {0, 0.0, 120.0});
+
+			tempo_changes.front().time_seconds = 0.0;
+			for (size_t index = 1; index < tempo_changes.size(); ++index)
+			{
+				const MidiChartTempoChange &previous = tempo_changes[index - 1];
+				MidiChartTempoChange &current = tempo_changes[index];
+				const double beats_between = static_cast<double>(current.tick - previous.tick) / static_cast<double>(ticks_per_quarter_note);
+				current.time_seconds = previous.time_seconds + beats_between * (60.0 / previous.beats_per_minute);
+			}
+		}
+
+		MidiChartMeasureLine::Kind get_yarg_beatline_kind(const MidiChartTimeSignature &time_signature, int beatline_count);
+		std::vector<ParsedDifficultyPreference> build_preview_difficulty_order(MidiChartDifficulty preferred_difficulty);
+		int denominator_from_power(int power_of_two);
+		bool is_five_fret_track(MidiChartTrackType type);
+		bool is_six_fret_track(MidiChartTrackType type);
+		std::optional<int> map_preview_lane(const MidiChartParsedNote &note,
+			MidiChartTrackType track_type,
+			MidiChartDrumsType detected_drums_type);
+		void push_parsed_note(MidiChartTrack &track, MidiChartParsedNote note);
+		void sort_track_content(MidiChartTrack &track);
+		MidiChartDrumsType detect_drums_type(const std::vector<MidiChartTrack> &tracks);
+
+		void generate_measure_lines_from_ticks(
+			const std::vector<MidiChartTimeSignature> &time_signatures,
+			int file_duration_ticks,
+			int ticks_per_quarter_note,
+			const std::vector<MidiChartTempoChange> &tempo_changes,
+			std::vector<MidiChartMeasureLine> &measure_lines)
+		{
+			if (ticks_per_quarter_note <= 0 || file_duration_ticks <= 0 || time_signatures.empty())
+				return;
+
+			for (size_t index = 0; index < time_signatures.size(); ++index)
+			{
+				const MidiChartTimeSignature &segment = time_signatures[index];
+				const int segment_end_tick = index + 1 < time_signatures.size()
+					? time_signatures[index + 1].tick - 1
+					: file_duration_ticks + 1;
+				const int beat_length_ticks = (ticks_per_quarter_note * 4) / (std::max)(segment.denominator, 1);
+				if (beat_length_ticks <= 0)
+					continue;
+
+				int beatline_count = 0;
+				for (int current_tick = segment.tick; current_tick <= segment_end_tick; current_tick += beat_length_ticks)
+				{
+					MidiChartMeasureLine beat_line;
+					beat_line.tick = current_tick;
+					beat_line.time_seconds = time_in_seconds_at_tick(current_tick, tempo_changes, ticks_per_quarter_note);
+					beat_line.kind = get_yarg_beatline_kind(segment, beatline_count);
+					measure_lines.push_back(beat_line);
+					++beatline_count;
+				}
+			}
+		}
+
+		std::optional<std::pair<MidiChartDifficulty, MidiChartTrackType>> parse_chart_track_header(std::string_view header)
+		{
+			static constexpr std::array<std::pair<std::string_view, MidiChartDifficulty>, 4> kDifficulties = {{
+				{"Easy", MidiChartDifficulty::Easy},
+				{"Medium", MidiChartDifficulty::Medium},
+				{"Hard", MidiChartDifficulty::Hard},
+				{"Expert", MidiChartDifficulty::Expert},
+			}};
+
+			for (const auto &[prefix, difficulty] : kDifficulties)
+			{
+				if (!starts_with_ignore_case(header, prefix))
+					continue;
+
+				const std::string suffix = to_upper_copy(header.substr(prefix.size()));
+				if (suffix == "SINGLE")
+					return std::make_pair(difficulty, MidiChartTrackType::FiveFretGuitar);
+				if (suffix == "DOUBLEBASS")
+					return std::make_pair(difficulty, MidiChartTrackType::FiveFretBass);
+				if (suffix == "DOUBLERHYTHM")
+					return std::make_pair(difficulty, MidiChartTrackType::FiveFretRhythm);
+				if (suffix == "DOUBLEGUITAR")
+					return std::make_pair(difficulty, MidiChartTrackType::FiveFretCoop);
+				if (suffix == "KEYBOARD")
+					return std::make_pair(difficulty, MidiChartTrackType::FiveFretKeys);
+				if (suffix == "DRUMS")
+					return std::make_pair(difficulty, MidiChartTrackType::Drums);
+				if (suffix == "GHLGUITAR")
+					return std::make_pair(difficulty, MidiChartTrackType::SixFretGuitar);
+				if (suffix == "GHLBASS")
+					return std::make_pair(difficulty, MidiChartTrackType::SixFretBass);
+				if (suffix == "GHLRHYTHM")
+					return std::make_pair(difficulty, MidiChartTrackType::SixFretRhythm);
+			}
+
+			return std::nullopt;
+		}
+
+		bool parse_chart_note_track_line(std::string_view line,
+			MidiChartDifficulty difficulty,
+			MidiChartTrack &track)
+		{
+			const size_t equals_index = line.find('=');
+			if (equals_index == std::string_view::npos)
+				return false;
+
+			const std::optional<int> tick = try_parse_int(line.substr(0, equals_index));
+			if (!tick.has_value())
+				return false;
+
+			std::string_view payload = line.substr(equals_index + 1);
+			const std::string event_type = chart_consume_token(payload);
+			if (event_type != "N")
+				return false;
+
+			const std::optional<int> note_value = try_parse_int(chart_consume_token(payload));
+			const std::optional<int> sustain_ticks = try_parse_int(chart_consume_token(payload));
+			if (!note_value.has_value())
+				return false;
+
+			MidiChartParsedNote note;
+			note.difficulty = difficulty;
+			note.tick = *tick;
+			note.end_tick = *tick + sustain_ticks.value_or(0);
+			note.raw_midi_note = *note_value;
+			note.raw_value = *note_value;
+
+			if (is_five_fret_track(track.type))
+			{
+				if (*note_value < 0 || *note_value > 4)
+					return false;
+				note.category = MidiChartNoteCategory::FiveFret;
+				note.raw_value = *note_value + 1;
+				note.lane = *note_value + 1;
+			}
+			else if (track.type == MidiChartTrackType::Drums)
+			{
+				if (*note_value < 0 || *note_value > 5)
+					return false;
+				note.category = MidiChartNoteCategory::Drums;
+				note.lane = *note_value;
+			}
+			else if (is_six_fret_track(track.type))
+			{
+				if (*note_value < 0 || *note_value > 6)
+					return false;
+				note.category = MidiChartNoteCategory::SixFret;
+				note.lane = *note_value;
+			}
+			else
+			{
+				return false;
+			}
+
+			push_parsed_note(track, note);
+			return true;
+		}
+
+		bool load_chart_file(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+			const std::string &chart_path,
+			MidiChartDifficulty preferred_difficulty,
+			MidiChartTrackType preferred_track_type,
+			int &ticks_per_quarter_note,
+			MidiChartDrumsType &detected_drums_type,
+			std::vector<MidiChartTempoChange> &tempo_changes,
+			std::vector<MidiChartTimeSignature> &time_signatures,
+			std::vector<MidiChartMeasureLine> &measure_lines,
+			std::vector<MidiChartTextEvent> &global_events,
+			std::vector<MidiChartTextEvent> &sections,
+			std::vector<MidiChartTextEvent> &lyrics,
+			std::vector<MidiChartTrack> &tracks,
+			std::string &track_name,
+			std::string &difficulty_name,
+			std::vector<MidiChartNote> &preview_notes,
+			double &duration_seconds,
+			std::string &error_message)
+		{
+			const auto chart_text = file_system.read_text_file(chart_path);
+			if (!chart_text.has_value())
+			{
+				error_message = "Could not read notes.chart.";
+				return false;
+			}
+
+			std::string current_section;
+			bool in_section_body = false;
+			std::istringstream stream(*chart_text);
+			std::string line;
+
+			while (std::getline(stream, line))
+			{
+				const std::string trimmed = trim_copy(line);
+				if (trimmed.empty() || starts_with_ignore_case(trimmed, ";"))
+					continue;
+
+				if (!trimmed.empty() && trimmed.front() == '[' && trimmed.back() == ']')
+				{
+					current_section = trimmed.substr(1, trimmed.size() - 2);
+					in_section_body = false;
+					continue;
+				}
+
+				if (trimmed == "{")
+				{
+					in_section_body = true;
+					continue;
+				}
+
+				if (trimmed == "}")
+				{
+					in_section_body = false;
+					continue;
+				}
+
+				if (!in_section_body)
+					continue;
+
+				if (current_section == "Song")
+				{
+					const size_t equals_index = trimmed.find('=');
+					if (equals_index == std::string::npos)
+						continue;
+
+					const std::string key = to_upper_copy(trim_copy(trimmed.substr(0, equals_index)));
+					const std::string value = trim_copy(trimmed.substr(equals_index + 1));
+					if ((key == "RESOLUTION" || key == "RESOLUTION ") && try_parse_int(value).has_value())
+						ticks_per_quarter_note = *try_parse_int(value);
+					continue;
+				}
+
+				if (current_section == "SyncTrack")
+				{
+					const size_t equals_index = trimmed.find('=');
+					if (equals_index == std::string::npos)
+						continue;
+
+					const std::optional<int> tick = try_parse_int(trimmed.substr(0, equals_index));
+					if (!tick.has_value())
+						continue;
+
+					std::string_view payload(trimmed.c_str() + equals_index + 1, trimmed.size() - equals_index - 1);
+					const std::string event_type = chart_consume_token(payload);
+					if (event_type == "B")
+					{
+						if (const std::optional<int> raw_bpm = try_parse_int(chart_consume_token(payload)))
+						{
+							MidiChartTempoChange tempo_change;
+							tempo_change.tick = *tick;
+							tempo_change.beats_per_minute = static_cast<double>(*raw_bpm) / 1000.0;
+							tempo_changes.push_back(tempo_change);
+						}
+					}
+					else if (event_type == "TS")
+					{
+						const std::optional<int> numerator = try_parse_int(chart_consume_token(payload));
+						const std::optional<int> denominator_power = try_parse_int(chart_consume_token(payload));
+						if (!numerator.has_value())
+							continue;
+
+						MidiChartTimeSignature time_signature;
+						time_signature.tick = *tick;
+						time_signature.numerator = *numerator;
+						time_signature.denominator = denominator_from_power(denominator_power.value_or(2));
+						time_signatures.push_back(time_signature);
+					}
+					continue;
+				}
+
+				if (current_section == "Events")
+				{
+					const size_t equals_index = trimmed.find('=');
+					if (equals_index == std::string::npos)
+						continue;
+
+					const std::optional<int> tick = try_parse_int(trimmed.substr(0, equals_index));
+					if (!tick.has_value())
+						continue;
+
+					std::string_view payload(trimmed.c_str() + equals_index + 1, trimmed.size() - equals_index - 1);
+					const std::string event_type = chart_consume_token(payload);
+					if (event_type != "E" && event_type != "L" && event_type != "SN")
+						continue;
+
+					const std::string raw_text = chart_consume_token(payload);
+					const std::string normalized_text = event_type == "SN"
+						? std::string("section " + raw_text)
+						: normalize_chart_text_event(raw_text);
+					const MidiChartTextEventType text_type = event_type == "L"
+						? MidiChartTextEventType::Lyric
+						: classify_chart_text_event_type(raw_text);
+
+					MidiChartTextEvent text_event;
+					text_event.type = text_type;
+					text_event.tick = *tick;
+					text_event.text = normalized_text;
+					global_events.push_back(text_event);
+					if (text_type == MidiChartTextEventType::Section)
+						sections.push_back(text_event);
+					if (text_type == MidiChartTextEventType::Lyric)
+						lyrics.push_back(text_event);
+					continue;
+				}
+
+				const auto parsed_header = parse_chart_track_header(current_section);
+				if (!parsed_header.has_value())
+					continue;
+
+				const auto [difficulty, track_type] = *parsed_header;
+				MidiChartTrack *track = nullptr;
+				for (MidiChartTrack &existing_track : tracks)
+				{
+					if (existing_track.type == track_type)
+					{
+						track = &existing_track;
+						break;
+					}
+				}
+
+				if (track == nullptr)
+				{
+					MidiChartTrack new_track;
+					new_track.type = track_type;
+					new_track.name = std::string(current_section);
+					tracks.push_back(std::move(new_track));
+					track = &tracks.back();
+				}
+
+				parse_chart_note_track_line(trimmed, difficulty, *track);
+			}
+
+			build_tempo_change_times(tempo_changes, ticks_per_quarter_note);
+
+			if (time_signatures.empty())
+			{
+				time_signatures.push_back({});
+			}
+			else
+			{
+				std::sort(time_signatures.begin(), time_signatures.end(),
+					[](const MidiChartTimeSignature &left, const MidiChartTimeSignature &right)
+					{
+						return left.tick < right.tick;
+					});
+				if (time_signatures.front().tick != 0)
+					time_signatures.insert(time_signatures.begin(), {});
+			}
+
+			for (MidiChartTimeSignature &time_signature : time_signatures)
+				time_signature.time_seconds = time_in_seconds_at_tick(time_signature.tick, tempo_changes, ticks_per_quarter_note);
+
+			int file_duration_ticks = 0;
+			for (MidiChartTrack &track : tracks)
+			{
+				for (MidiChartParsedNote &note : track.parsed_notes)
+				{
+					note.start_seconds = time_in_seconds_at_tick(note.tick, tempo_changes, ticks_per_quarter_note);
+					note.end_seconds = time_in_seconds_at_tick(note.end_tick, tempo_changes, ticks_per_quarter_note);
+					file_duration_ticks = (std::max)(file_duration_ticks, note.end_tick);
+				}
+				sort_track_content(track);
+				file_duration_ticks = (std::max)(file_duration_ticks, track.parsed_notes.empty() ? 0 : track.parsed_notes.back().end_tick);
+			}
+
+			for (MidiChartTextEvent &text_event : global_events)
+			{
+				text_event.time_seconds = time_in_seconds_at_tick(text_event.tick, tempo_changes, ticks_per_quarter_note);
+				file_duration_ticks = (std::max)(file_duration_ticks, text_event.tick);
+			}
+			for (MidiChartTextEvent &text_event : sections)
+				text_event.time_seconds = time_in_seconds_at_tick(text_event.tick, tempo_changes, ticks_per_quarter_note);
+			for (MidiChartTextEvent &text_event : lyrics)
+				text_event.time_seconds = time_in_seconds_at_tick(text_event.tick, tempo_changes, ticks_per_quarter_note);
+
+			detected_drums_type = detect_drums_type(tracks);
+			generate_measure_lines_from_ticks(time_signatures, file_duration_ticks, ticks_per_quarter_note, tempo_changes, measure_lines);
+
+			duration_seconds = time_in_seconds_at_tick(file_duration_ticks, tempo_changes, ticks_per_quarter_note);
+
+			std::sort(global_events.begin(), global_events.end(),
+				[](const MidiChartTextEvent &left, const MidiChartTextEvent &right)
+				{
+					return left.tick < right.tick;
+				});
+			std::sort(sections.begin(), sections.end(),
+				[](const MidiChartTextEvent &left, const MidiChartTextEvent &right)
+				{
+					return left.tick < right.tick;
+				});
+			std::sort(lyrics.begin(), lyrics.end(),
+				[](const MidiChartTextEvent &left, const MidiChartTextEvent &right)
+				{
+					return left.tick < right.tick;
+				});
+
+			const std::vector<ParsedDifficultyPreference> difficulty_order = build_preview_difficulty_order(preferred_difficulty);
+			std::vector<MidiChartTrackType> track_order;
+			if (is_supported_preview_track_type(preferred_track_type))
+				track_order.push_back(preferred_track_type);
+			for (const InstrumentTrackPreference &track_preference : kPreviewTrackPreferences)
+			{
+				if (track_preference.type != preferred_track_type)
+					track_order.push_back(track_preference.type);
+			}
+
+			for (const MidiChartTrackType track_type : track_order)
+			{
+				for (const MidiChartTrack &track : tracks)
+				{
+					if (track.type != track_type)
+						continue;
+
+					for (const ParsedDifficultyPreference &difficulty_preference : difficulty_order)
+					{
+						std::vector<MidiChartNote> candidate_preview_notes;
+						for (const MidiChartParsedNote &note : track.parsed_notes)
+						{
+							if (note.difficulty != difficulty_preference.difficulty)
+								continue;
+
+							const std::optional<int> preview_lane = map_preview_lane(note, track_type, detected_drums_type);
+							if (!preview_lane.has_value())
+								continue;
+
+							MidiChartNote preview_note;
+							preview_note.lane = *preview_lane;
+							preview_note.tick = note.tick;
+							preview_note.end_tick = note.end_tick;
+							preview_note.start_seconds = note.start_seconds;
+							preview_note.end_seconds = note.end_seconds;
+							candidate_preview_notes.push_back(preview_note);
+						}
+
+						if (candidate_preview_notes.empty())
+							continue;
+
+						track_name = std::string(display_name_for_preview_track_type(track_type));
+						difficulty_name = std::string(difficulty_preference.name);
+						preview_notes = std::move(candidate_preview_notes);
+						return true;
+					}
+				}
+			}
+
+			error_message = "notes.chart loaded, but no supported playable chart was found yet.";
+			return false;
 		}
 
 		std::string extract_track_name(const smf::MidiEventList &track)
@@ -1888,10 +2463,41 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 				star_power_note_override_ = multiplier_note;
 		}
 
-		const std::string midi_path = find_case_insensitive_file(file_system, song_directory, "notes.mid");
+		std::string midi_path = find_case_insensitive_file(file_system, song_directory, "notes.mid");
+		if (midi_path.empty())
+			midi_path = find_case_insensitive_file(file_system, song_directory, "notes.midi");
 		if (midi_path.empty())
 		{
-			error_message.clear();
+			const std::string chart_path = find_case_insensitive_file(file_system, song_directory, "notes.chart");
+			if (chart_path.empty())
+			{
+				error_message.clear();
+				return true;
+			}
+
+			if (!load_chart_file(
+				file_system,
+				chart_path,
+				preferred_difficulty,
+				preferred_track_type,
+				ticks_per_quarter_note_,
+				detected_drums_type_,
+				tempo_changes_,
+				time_signatures_,
+				measure_lines_,
+				global_events_,
+				sections_,
+				lyrics_,
+				tracks_,
+				track_name_,
+				difficulty_name_,
+				notes_,
+				duration_seconds_,
+				error_message))
+			{
+				return false;
+			}
+
 			return true;
 		}
 
