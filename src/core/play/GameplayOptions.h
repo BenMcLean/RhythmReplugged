@@ -17,6 +17,7 @@ namespace rhythmreplugged::core
 		Rhythm,
 		CoopGuitar,
 		Keys,
+		Drums,
 	};
 
 	class GameplayOptions

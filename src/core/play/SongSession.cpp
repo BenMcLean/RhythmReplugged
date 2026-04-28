@@ -40,6 +40,8 @@ namespace rhythmreplugged::core
 				return MidiChartTrackType::FiveFretCoop;
 			case InstrumentOption::Keys:
 				return MidiChartTrackType::FiveFretKeys;
+			case InstrumentOption::Drums:
+				return MidiChartTrackType::Drums;
 			}
 
 			return MidiChartTrackType::FiveFretGuitar;
@@ -59,6 +61,8 @@ namespace rhythmreplugged::core
 				return "guitar";
 			case InstrumentOption::Keys:
 				return "keys";
+			case InstrumentOption::Drums:
+				return "drums";
 			}
 
 			return "guitar";
@@ -78,6 +82,8 @@ namespace rhythmreplugged::core
 				return "Co-op Guitar";
 			case InstrumentOption::Keys:
 				return "Keys";
+			case InstrumentOption::Drums:
+				return "Drums";
 			}
 
 			return "Guitar";

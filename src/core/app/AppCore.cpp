@@ -26,6 +26,8 @@ namespace rhythmreplugged::core
 				return MidiChartTrackType::FiveFretCoop;
 			case InstrumentOption::Keys:
 				return MidiChartTrackType::FiveFretKeys;
+			case InstrumentOption::Drums:
+				return MidiChartTrackType::Drums;
 			}
 
 			return MidiChartTrackType::FiveFretGuitar;
@@ -45,6 +47,8 @@ namespace rhythmreplugged::core
 				return InstrumentOption::CoopGuitar;
 			case MidiChartTrackType::FiveFretKeys:
 				return InstrumentOption::Keys;
+			case MidiChartTrackType::Drums:
+				return InstrumentOption::Drums;
 			default:
 				return std::nullopt;
 			}
@@ -62,6 +66,8 @@ namespace rhythmreplugged::core
 				return InstrumentOption::CoopGuitar;
 			if (value == "keys")
 				return InstrumentOption::Keys;
+			if (value == "drums")
+				return InstrumentOption::Drums;
 
 			return std::nullopt;
 		}
@@ -93,7 +99,10 @@ namespace rhythmreplugged::core
 
 				for (const MidiChartParsedNote &note : track.parsed_notes)
 				{
-					if (note.category != MidiChartNoteCategory::FiveFret || note.lane < 1 || note.lane > 5)
+					const bool is_supported_note =
+						(track_type == MidiChartTrackType::Drums && note.category == MidiChartNoteCategory::Drums && note.lane >= 0 && note.lane <= 5) ||
+						(track_type != MidiChartTrackType::Drums && note.category == MidiChartNoteCategory::FiveFret && note.lane >= 1 && note.lane <= 5);
+					if (!is_supported_note)
 						continue;
 
 					switch (note.difficulty)
@@ -688,7 +697,9 @@ namespace rhythmreplugged::core
 		gameplay_player.world.style = make_default_guitar_highway_style_view();
 
 		InstrumentLaneView lane;
-		lane.instrument_type = HighwayInstrumentType::FiveFretGuitar;
+		lane.instrument_type = player.chart_track_name == "Drums"
+			? HighwayInstrumentType::FiveLaneDrums
+			: HighwayInstrumentType::FiveFretGuitar;
 		lane.instrument_label = player.chart_track_name.empty() ? "Guitar" : player.chart_track_name;
 		lane.is_active = true;
 		lane.is_muted = player.playable_stem_muted;

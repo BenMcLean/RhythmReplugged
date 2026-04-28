@@ -50,6 +50,7 @@ namespace rhythmreplugged::core
 			{MidiChartTrackType::FiveFretRhythm, "Rhythm"},
 			{MidiChartTrackType::FiveFretCoop, "Co-op Guitar"},
 			{MidiChartTrackType::FiveFretKeys, "Keys"},
+			{MidiChartTrackType::Drums, "Drums"},
 		};
 
 		bool is_supported_preview_track_type(MidiChartTrackType type)
@@ -245,6 +246,62 @@ namespace rhythmreplugged::core
 				return true;
 			default:
 				return false;
+			}
+		}
+
+		std::optional<int> map_preview_lane(const MidiChartParsedNote &note,
+			MidiChartTrackType track_type,
+			MidiChartDrumsType detected_drums_type)
+		{
+			if (is_five_fret_track(track_type))
+			{
+				if (note.category != MidiChartNoteCategory::FiveFret || note.lane < 1 || note.lane > 5)
+					return std::nullopt;
+				return note.lane - 1;
+			}
+
+			if (track_type != MidiChartTrackType::Drums || note.category != MidiChartNoteCategory::Drums)
+				return std::nullopt;
+
+			if (note.raw_value < 0 || note.raw_value > 5)
+				return std::nullopt;
+
+			if (detected_drums_type == MidiChartDrumsType::FiveLane)
+			{
+				// Five-lane drum charts can expose six distinct gems including kick,
+				// so we merge the top two pad colors onto the final gamepad lane.
+				switch (note.raw_value)
+				{
+				case 0:
+					return 0;
+				case 1:
+					return 1;
+				case 2:
+					return 2;
+				case 3:
+					return 3;
+				case 4:
+				case 5:
+					return 4;
+				default:
+					return std::nullopt;
+				}
+			}
+
+			switch (note.raw_value)
+			{
+			case 0:
+				return 0;
+			case 1:
+				return 1;
+			case 2:
+				return 2;
+			case 3:
+				return 3;
+			case 4:
+				return 4;
+			default:
+				return std::nullopt;
 			}
 		}
 
@@ -1961,7 +2018,7 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 		rebuild_preview_selection(preferred_difficulty, preferred_track_type);
 		if (notes_.empty())
 		{
-			error_message = "notes.mid loaded, but no supported 5-fret chart was found yet.";
+			error_message = "notes.mid loaded, but no supported playable chart was found yet.";
 			return false;
 		}
 
@@ -2052,11 +2109,9 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 					continue;
 
 				const auto has_preview_notes = std::any_of(track.parsed_notes.begin(), track.parsed_notes.end(),
-					[](const MidiChartParsedNote &note)
+					[track_type = track.type, detected_drums_type = detected_drums_type_](const MidiChartParsedNote &note)
 					{
-						return note.category == MidiChartNoteCategory::FiveFret &&
-							note.lane >= 1 &&
-							note.lane <= 5;
+						return map_preview_lane(note, track_type, detected_drums_type).has_value();
 					});
 				if (has_preview_notes)
 					available_track_types.push_back(track.type);
@@ -2200,15 +2255,15 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 					std::vector<MidiChartNote> preview_notes;
 					for (const MidiChartParsedNote &note : track.parsed_notes)
 					{
-						if (note.category != MidiChartNoteCategory::FiveFret ||
-							note.difficulty != difficulty_preference.difficulty ||
-							note.lane < 1 || note.lane > 5)
-						{
+						if (note.difficulty != difficulty_preference.difficulty)
 							continue;
-						}
+
+						const std::optional<int> preview_lane = map_preview_lane(note, track_type, detected_drums_type_);
+						if (!preview_lane.has_value())
+							continue;
 
 						MidiChartNote preview_note;
-						preview_note.lane = note.lane - 1;
+						preview_note.lane = *preview_lane;
 						preview_note.tick = note.tick;
 						preview_note.end_tick = note.end_tick;
 						preview_note.start_seconds = note.start_seconds;

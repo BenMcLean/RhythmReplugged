@@ -570,7 +570,7 @@ namespace rhythmreplugged::ui
 
 		std::string chart_label = player.has_chart
 			? (player.chart_track_name + " / " + player.chart_difficulty_name)
-			: std::string("No supported 5-fret chart loaded");
+			: std::string("No supported playable chart loaded");
 		draw_list->AddText(
 			ImVec2(canvas_pos.x + 28.0f, canvas_pos.y + 52.0f),
 			IM_COL32(180, 188, 202, 255),

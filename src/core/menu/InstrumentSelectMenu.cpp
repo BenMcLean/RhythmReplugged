@@ -122,6 +122,8 @@ namespace rhythmreplugged::core
 			return "Co-op Guitar";
 		case InstrumentOption::Keys:
 			return "Keys";
+		case InstrumentOption::Drums:
+			return "Drums";
 		}
 
 		return "Instrument";
