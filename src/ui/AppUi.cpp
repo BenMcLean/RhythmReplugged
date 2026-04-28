@@ -1,6 +1,8 @@
 #include "ui/AppUi.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace
 {
@@ -58,45 +60,157 @@ namespace
 			IM_COL32(80, 92, 116, 180),
 			12.0f);
 
-		auto draw_line = [&](int line_index, float baseline_y)
+		auto rendered_token_text = [](const PrototypePlayerView::LyricTokenView &token)
 		{
-			float line_width = 0.0f;
-			bool has_any = false;
+			std::string rendered;
+			if (token.prepend_space)
+				rendered.push_back(' ');
+			rendered += token.text;
+			if (token.append_hyphen)
+				rendered.push_back('-');
+			return rendered;
+		};
+
+		auto token_color = [](const PrototypePlayerView::LyricTokenView &token)
+		{
+			if (token.is_current)
+				return IM_COL32(255, 238, 154, 255);
+			if (token.is_past)
+				return IM_COL32(88, 212, 130, 255);
+			return IM_COL32(136, 146, 164, 255);
+		};
+
+		auto collect_line_tokens = [&](int line_index)
+		{
+			std::vector<const PrototypePlayerView::LyricTokenView *> line_tokens;
 			for (const PrototypePlayerView::LyricTokenView &token : player.visible_lyric_tokens)
 			{
-				if (token.line_index != line_index)
-					continue;
+				if (token.line_index == line_index)
+					line_tokens.push_back(&token);
+			}
+			return line_tokens;
+		};
 
-				const std::string rendered = token.prepend_space ? (" " + token.text) : token.text;
-				line_width += ImGui::CalcTextSize(rendered.c_str()).x;
-				has_any = true;
+		auto wrap_line = [&](const std::vector<const PrototypePlayerView::LyricTokenView *> &line_tokens)
+		{
+			std::vector<std::vector<const PrototypePlayerView::LyricTokenView *>> rows;
+			if (line_tokens.empty())
+				return rows;
+
+			const float max_width = panel_size.x - panel_padding_x * 2.0f;
+			std::vector<float> token_widths;
+			token_widths.reserve(line_tokens.size());
+			float total_width = 0.0f;
+			for (const PrototypePlayerView::LyricTokenView *token : line_tokens)
+			{
+				const std::string rendered = rendered_token_text(*token);
+				const float token_width = ImGui::CalcTextSize(rendered.c_str()).x;
+				token_widths.push_back(token_width);
+				total_width += token_width;
 			}
 
-			if (!has_any)
-				return;
-
-			float cursor_x = panel_pos.x + (panel_size.x - line_width) * 0.5f;
-			for (const PrototypePlayerView::LyricTokenView &token : player.visible_lyric_tokens)
+			if (total_width <= max_width)
 			{
-				if (token.line_index != line_index)
+				rows.push_back(line_tokens);
+				return rows;
+			}
+
+			int best_split_index = -1;
+			float best_score = std::numeric_limits<float>::max();
+			float prefix_width = 0.0f;
+			for (size_t index = 0; index + 1 < line_tokens.size(); ++index)
+			{
+				prefix_width += token_widths[index];
+				const float suffix_width = total_width - prefix_width;
+				if (prefix_width > max_width || suffix_width > max_width)
 					continue;
 
-				const std::string rendered = token.prepend_space ? (" " + token.text) : token.text;
-				const ImVec2 text_size = ImGui::CalcTextSize(rendered.c_str());
-				ImU32 color = IM_COL32(136, 146, 164, 255);
-				if (token.is_current)
-					color = IM_COL32(255, 238, 154, 255);
-				else if (token.is_past)
-					color = IM_COL32(88, 212, 130, 255);
+				const float balance_penalty = std::fabs(prefix_width - suffix_width);
+				const float target_penalty = std::fabs(prefix_width - total_width * 0.5f);
+				const float score = balance_penalty + target_penalty * 0.25f;
+				if (score < best_score)
+				{
+					best_score = score;
+					best_split_index = static_cast<int>(index);
+				}
+			}
 
-				draw_list->AddText(ImVec2(cursor_x, baseline_y), color, rendered.c_str());
+			if (best_split_index >= 0)
+			{
+				std::vector<const PrototypePlayerView::LyricTokenView *> first_row;
+				std::vector<const PrototypePlayerView::LyricTokenView *> second_row;
+				first_row.reserve(static_cast<size_t>(best_split_index) + 1);
+				second_row.reserve(line_tokens.size() - static_cast<size_t>(best_split_index) - 1);
+				for (int index = 0; index <= best_split_index; ++index)
+					first_row.push_back(line_tokens[static_cast<size_t>(index)]);
+				for (size_t index = static_cast<size_t>(best_split_index) + 1; index < line_tokens.size(); ++index)
+					second_row.push_back(line_tokens[index]);
+				rows.push_back(std::move(first_row));
+				rows.push_back(std::move(second_row));
+				return rows;
+			}
+
+			std::vector<const PrototypePlayerView::LyricTokenView *> current_row;
+			float current_width = 0.0f;
+			for (size_t index = 0; index < line_tokens.size(); ++index)
+			{
+				const PrototypePlayerView::LyricTokenView *token = line_tokens[index];
+				const float token_width = token_widths[index];
+				if (!current_row.empty() && current_width + token_width > max_width)
+				{
+					rows.push_back(current_row);
+					current_row.clear();
+					current_width = 0.0f;
+				}
+
+				current_row.push_back(token);
+				current_width += token_width;
+			}
+
+			if (!current_row.empty())
+				rows.push_back(std::move(current_row));
+			return rows;
+		};
+
+		auto draw_row = [&](const std::vector<const PrototypePlayerView::LyricTokenView *> &row, float baseline_y)
+		{
+			if (row.empty())
+				return;
+
+			float line_width = 0.0f;
+			for (const PrototypePlayerView::LyricTokenView *token : row)
+			{
+				const std::string rendered = rendered_token_text(*token);
+				line_width += ImGui::CalcTextSize(rendered.c_str()).x;
+			}
+
+			float cursor_x = panel_pos.x + (panel_size.x - line_width) * 0.5f;
+			for (const PrototypePlayerView::LyricTokenView *token : row)
+			{
+				const std::string rendered = rendered_token_text(*token);
+				const ImVec2 text_size = ImGui::CalcTextSize(rendered.c_str());
+				draw_list->AddText(ImVec2(cursor_x, baseline_y), token_color(*token), rendered.c_str());
 				cursor_x += text_size.x;
 			}
 		};
 
-		draw_line(current_line_index, panel_pos.y + panel_padding_y);
-		if (next_line_index >= 0)
-			draw_line(next_line_index, panel_pos.y + panel_padding_y + font_size + line_gap);
+		const auto current_line_rows = wrap_line(collect_line_tokens(current_line_index));
+		const auto next_line_rows = next_line_index >= 0
+			? wrap_line(collect_line_tokens(next_line_index))
+			: std::vector<std::vector<const PrototypePlayerView::LyricTokenView *>>{};
+
+		std::vector<std::vector<const PrototypePlayerView::LyricTokenView *>> display_rows;
+		if (!current_line_rows.empty())
+			display_rows.push_back(current_line_rows.front());
+		if (current_line_rows.size() > 1)
+			display_rows.push_back(current_line_rows[1]);
+		else if (!next_line_rows.empty())
+			display_rows.push_back(next_line_rows.front());
+
+		if (!display_rows.empty())
+			draw_row(display_rows[0], panel_pos.y + panel_padding_y);
+		if (display_rows.size() > 1)
+			draw_row(display_rows[1], panel_pos.y + panel_padding_y + font_size + line_gap);
 	}
 
 	void render_preload_progress_overlay(const DifficultySelectView &menu, ImVec2 window_size, float ui_scale)

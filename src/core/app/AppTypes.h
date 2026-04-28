@@ -125,6 +125,7 @@ namespace rhythmreplugged::core
 			bool is_current = false;
 			bool is_past = false;
 			bool prepend_space = false;
+			bool append_hyphen = false;
 			int line_index = 0;
 		};
 

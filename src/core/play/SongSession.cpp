@@ -15,6 +15,7 @@ namespace rhythmreplugged::core
 			bool join_next_without_space = false;
 			bool force_new_line_before = false;
 			bool is_spacer_only = false;
+			bool append_hyphen = false;
 		};
 
 		struct LyricPhraseRange
@@ -90,6 +91,7 @@ namespace rhythmreplugged::core
 				else if (tail == '=')
 				{
 					parsed.join_next_without_space = true;
+					parsed.append_hyphen = true;
 					parsed.text.pop_back();
 				}
 			}
@@ -504,7 +506,6 @@ namespace rhythmreplugged::core
 			const ParsedLyricDisplay parsed_lyric = parse_lyric_display(lyric.text);
 			if (parsed_lyric.text.empty())
 			{
-				previous_join_without_space = parsed_lyric.join_next_without_space;
 				continue;
 			}
 
@@ -549,6 +550,7 @@ namespace rhythmreplugged::core
 				all_lyric_tokens.back().line_index == current_line_index &&
 				!previous_join_without_space &&
 				!starts_with_punctuation(parsed_lyric.text);
+			lyric_view.append_hyphen = parsed_lyric.append_hyphen;
 			lyric_view.line_index = current_line_index;
 			all_lyric_tokens.push_back(std::move(lyric_view));
 
