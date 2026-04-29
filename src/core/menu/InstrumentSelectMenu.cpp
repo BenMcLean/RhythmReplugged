@@ -20,25 +20,30 @@ namespace rhythmreplugged::core
 		song_title_ = std::move(song_title);
 		song_subtitle_ = std::move(song_subtitle);
 		status_message_.clear();
-		available_instruments_ = available_instruments;
-		selected_index_ = default_index_for(options.instrument());
+		available_entries_.clear();
+		available_entries_.reserve(available_instruments.size() + (available_instruments.size() > 1 ? 1u : 0u));
+		for (const InstrumentOption instrument : available_instruments)
+			available_entries_.push_back({GameplayMode::Classic, instrument});
+		if (available_instruments.size() > 1)
+			available_entries_.push_back({GameplayMode::Freeplay, InstrumentOption::Guitar});
+		selected_index_ = default_index_for(options);
 		rebuild_view();
 	}
 
 	bool InstrumentSelectMenu::move_selection(int delta)
 	{
-		if (available_instruments_.empty())
+		if (available_entries_.empty())
 			return false;
 
 		const int previous_index = selected_index_;
-		selected_index_ = std::clamp(selected_index_ + delta, 0, static_cast<int>(available_instruments_.size()) - 1);
+		selected_index_ = std::clamp(selected_index_ + delta, 0, static_cast<int>(available_entries_.size()) - 1);
 		rebuild_view();
 		return selected_index_ != previous_index;
 	}
 
 	bool InstrumentSelectMenu::set_selected_index(int index)
 	{
-		if (index < 0 || index >= static_cast<int>(available_instruments_.size()))
+		if (index < 0 || index >= static_cast<int>(available_entries_.size()))
 			return false;
 
 		selected_index_ = index;
@@ -80,10 +85,13 @@ namespace rhythmreplugged::core
 
 	void InstrumentSelectMenu::apply_to(GameplayOptions &options) const
 	{
-		if (selected_index_ < 0 || selected_index_ >= static_cast<int>(available_instruments_.size()))
+		if (selected_index_ < 0 || selected_index_ >= static_cast<int>(available_entries_.size()))
 			return;
 
-		options.set_instrument(available_instruments_[static_cast<size_t>(selected_index_)]);
+		const SelectionEntry &entry = available_entries_[static_cast<size_t>(selected_index_)];
+		options.set_gameplay_mode(entry.gameplay_mode);
+		if (entry.gameplay_mode == GameplayMode::Classic)
+			options.set_instrument(entry.instrument);
 	}
 
 	const InstrumentSelectView &InstrumentSelectMenu::view() const
@@ -98,19 +106,23 @@ namespace rhythmreplugged::core
 		cached_view_.status_message = status_message_;
 		cached_view_.selected_index = selected_index_;
 		cached_view_.entries.clear();
-		cached_view_.entries.reserve(available_instruments_.size());
-		for (const InstrumentOption instrument : available_instruments_)
+		cached_view_.entries.reserve(available_entries_.size());
+		for (const SelectionEntry &entry : available_entries_)
 		{
 			InstrumentListItem item;
-			item.instrument = instrument;
-			item.label = label_for(instrument);
+			item.gameplay_mode = entry.gameplay_mode;
+			item.instrument = entry.instrument;
+			item.label = label_for(entry);
 			cached_view_.entries.push_back(std::move(item));
 		}
 	}
 
-	std::string InstrumentSelectMenu::label_for(InstrumentOption instrument)
+	std::string InstrumentSelectMenu::label_for(const SelectionEntry &entry)
 	{
-		switch (instrument)
+		if (entry.gameplay_mode == GameplayMode::Freeplay)
+			return "Freeplay";
+
+		switch (entry.instrument)
 		{
 		case InstrumentOption::Guitar:
 			return "Guitar";
@@ -129,11 +141,14 @@ namespace rhythmreplugged::core
 		return "Instrument";
 	}
 
-	int InstrumentSelectMenu::default_index_for(InstrumentOption instrument) const
+	int InstrumentSelectMenu::default_index_for(const GameplayOptions &options) const
 	{
-		for (int index = 0; index < static_cast<int>(available_instruments_.size()); ++index)
+		for (int index = 0; index < static_cast<int>(available_entries_.size()); ++index)
 		{
-			if (available_instruments_[static_cast<size_t>(index)] == instrument)
+			const SelectionEntry &entry = available_entries_[static_cast<size_t>(index)];
+			if (entry.gameplay_mode != options.gameplay_mode())
+				continue;
+			if (entry.gameplay_mode == GameplayMode::Freeplay || entry.instrument == options.instrument())
 				return index;
 		}
 

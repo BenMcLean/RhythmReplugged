@@ -63,6 +63,7 @@ namespace rhythmreplugged::core
 
 	struct InstrumentListItem
 	{
+		GameplayMode gameplay_mode = GameplayMode::Classic;
 		InstrumentOption instrument = InstrumentOption::Guitar;
 		std::string label;
 	};

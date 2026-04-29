@@ -138,6 +138,50 @@ namespace rhythmreplugged::core
 			return difficulties;
 		}
 
+		std::vector<DifficultyOption> collect_available_difficulties(
+			const MidiChart &chart,
+			const std::vector<InstrumentOption> &available_instruments)
+		{
+			bool has_easy = false;
+			bool has_medium = false;
+			bool has_hard = false;
+			bool has_expert = false;
+			for (const InstrumentOption instrument : available_instruments)
+			{
+				const std::vector<DifficultyOption> difficulties =
+					collect_available_difficulties(chart, to_midi_chart_track_type(instrument));
+				for (const DifficultyOption difficulty : difficulties)
+				{
+					switch (difficulty)
+					{
+					case DifficultyOption::Easy:
+						has_easy = true;
+						break;
+					case DifficultyOption::Medium:
+						has_medium = true;
+						break;
+					case DifficultyOption::Hard:
+						has_hard = true;
+						break;
+					case DifficultyOption::Expert:
+						has_expert = true;
+						break;
+					}
+				}
+			}
+
+			std::vector<DifficultyOption> difficulties;
+			if (has_easy)
+				difficulties.push_back(DifficultyOption::Easy);
+			if (has_medium)
+				difficulties.push_back(DifficultyOption::Medium);
+			if (has_hard)
+				difficulties.push_back(DifficultyOption::Hard);
+			if (has_expert)
+				difficulties.push_back(DifficultyOption::Expert);
+			return difficulties;
+		}
+
 		bool contains_instrument(const std::vector<InstrumentOption> &available_instruments, InstrumentOption instrument)
 		{
 			return std::find(available_instruments.begin(), available_instruments.end(), instrument) != available_instruments.end();
@@ -146,6 +190,65 @@ namespace rhythmreplugged::core
 		bool contains_difficulty(const std::vector<DifficultyOption> &available_difficulties, DifficultyOption difficulty)
 		{
 			return std::find(available_difficulties.begin(), available_difficulties.end(), difficulty) != available_difficulties.end();
+		}
+
+		int instrument_sort_rank(InstrumentOption instrument)
+		{
+			switch (instrument)
+			{
+			case InstrumentOption::Drums:
+				return 0;
+			case InstrumentOption::Bass:
+				return 1;
+			case InstrumentOption::Guitar:
+				return 2;
+			case InstrumentOption::Rhythm:
+				return 3;
+			case InstrumentOption::CoopGuitar:
+				return 4;
+			case InstrumentOption::Keys:
+				return 5;
+			}
+
+			return 99;
+		}
+
+		void sort_instruments_canonical(std::vector<InstrumentOption> &available_instruments)
+		{
+			std::sort(
+				available_instruments.begin(),
+				available_instruments.end(),
+				[](InstrumentOption left, InstrumentOption right)
+				{
+					return instrument_sort_rank(left) < instrument_sort_rank(right);
+				});
+		}
+
+		void layout_freeplay_lanes(std::vector<InstrumentLaneView> &lanes, int focused_lane_index)
+		{
+			if (lanes.empty())
+				return;
+
+			const float base_width = std::clamp(2.6f - 0.5f * static_cast<float>(lanes.size() - 1), 0.55f, 2.6f);
+			const float active_width = std::min(base_width + 0.9f, 3.2f);
+			const float gap = std::clamp(0.28f - 0.04f * static_cast<float>(lanes.size() - 1), 0.10f, 0.28f);
+
+			float cursor_x = 0.0f;
+			for (size_t index = 0; index < lanes.size(); ++index)
+			{
+				InstrumentLaneView &lane = lanes[index];
+				lane.lane_width = static_cast<int>(index) == focused_lane_index ? active_width : base_width;
+				lane.lane_center_x = cursor_x + lane.lane_width * 0.5f;
+				cursor_x += lane.lane_width + gap;
+				lane.lane_depth_offset = 0.0f;
+			}
+
+			const float focus_center = lanes[static_cast<size_t>(std::clamp(
+				focused_lane_index,
+				0,
+				static_cast<int>(lanes.size()) - 1))].lane_center_x;
+			for (InstrumentLaneView &lane : lanes)
+				lane.lane_center_x -= focus_center;
 		}
 	}
 
@@ -339,9 +442,20 @@ namespace rhythmreplugged::core
 			to_midi_chart_track_type(pending_gameplay_options_.instrument()),
 			chart_error_message))
 		{
-			available_difficulties = collect_available_difficulties(
-				inspect_chart,
-				to_midi_chart_track_type(pending_gameplay_options_.instrument()));
+			std::vector<InstrumentOption> available_instruments;
+			for (const MidiChartTrackType track_type : inspect_chart.available_preview_track_types())
+			{
+				const std::optional<InstrumentOption> instrument = to_instrument_option(track_type);
+				if (instrument.has_value())
+					available_instruments.push_back(*instrument);
+			}
+			sort_instruments_canonical(available_instruments);
+
+			available_difficulties = pending_gameplay_options_.gameplay_mode() == GameplayMode::Freeplay
+				? collect_available_difficulties(inspect_chart, available_instruments)
+				: collect_available_difficulties(
+					inspect_chart,
+					to_midi_chart_track_type(pending_gameplay_options_.instrument()));
 		}
 		difficulty_select_menu_.open(
 			instrument_select_menu_.view().song_title,
@@ -466,18 +580,27 @@ namespace rhythmreplugged::core
 				if (instrument.has_value())
 					available_instruments.push_back(*instrument);
 			}
+			sort_instruments_canonical(available_instruments);
 		}
 
 		const std::optional<InstrumentOption> requested_instrument =
 			parse_instrument_option(frontend_options_.default_instrument);
 		if (available_instruments.size() == 1)
+		{
+			pending_gameplay_options_.set_gameplay_mode(GameplayMode::Classic);
 			pending_gameplay_options_.set_instrument(available_instruments.front());
+		}
 		else if (requested_instrument.has_value() && contains_instrument(available_instruments, *requested_instrument))
+		{
+			pending_gameplay_options_.set_gameplay_mode(GameplayMode::Classic);
 			pending_gameplay_options_.set_instrument(*requested_instrument);
+		}
 
-		available_difficulties = collect_available_difficulties(
-			inspect_chart,
-			to_midi_chart_track_type(pending_gameplay_options_.instrument()));
+		available_difficulties = pending_gameplay_options_.gameplay_mode() == GameplayMode::Freeplay
+			? collect_available_difficulties(inspect_chart, available_instruments)
+			: collect_available_difficulties(
+				inspect_chart,
+				to_midi_chart_track_type(pending_gameplay_options_.instrument()));
 		const std::optional<DifficultyOption> requested_difficulty =
 			parse_difficulty_option(frontend_options_.default_difficulty);
 		if (available_difficulties.size() == 1)
@@ -695,43 +818,20 @@ namespace rhythmreplugged::core
 		gameplay_player.normalized_rect = {0.0f, 0.0f, 1.0f, 1.0f};
 		gameplay_player.camera = make_default_guitar_camera_view();
 		gameplay_player.world.style = make_default_guitar_highway_style_view();
-
-		InstrumentLaneView lane;
-		lane.instrument_type = player.chart_track_name == "Drums"
-			? HighwayInstrumentType::FiveLaneDrums
-			: HighwayInstrumentType::FiveFretGuitar;
-		lane.instrument_label = player.chart_track_name.empty() ? "Guitar" : player.chart_track_name;
-		lane.is_active = true;
-		lane.is_muted = player.playable_stem_muted;
-		lane.has_chart = player.has_chart;
-		lane.lane_center_x = 0.0f;
-		lane.lane_width = 5.0f;
-		lane.lane_depth_offset = 0.0f;
-		lane.lane_held = player.lane_held;
-		lane.lane_sustaining = player.lane_sustaining;
-		lane.visible_notes.reserve(player.visible_chart_notes.size());
-		for (const PrototypePlayerView::ChartNoteView &note : player.visible_chart_notes)
+		for (size_t index = 0; index < song_session_.gameplay_lane_count(); ++index)
+			gameplay_player.world.lanes.push_back(song_session_.gameplay_lane_view(index));
+		if (gameplay_player.world.lanes.empty())
+			gameplay_player.world.lanes.push_back(song_session_.gameplay_lane_view(0));
+		gameplay_player.world.focused_lane_index = song_session_.active_gameplay_lane_index();
+		gameplay_player.world.focus_blend = song_session_.gameplay_mode() == GameplayMode::Freeplay ? 0.35f : 1.0f;
+		if (song_session_.gameplay_mode() == GameplayMode::Freeplay)
+			layout_freeplay_lanes(gameplay_player.world.lanes, gameplay_player.world.focused_lane_index);
+		else if (!gameplay_player.world.lanes.empty())
 		{
-			HighwayNoteView note_view;
-			note_view.lane = note.lane;
-			note_view.start_offset_seconds = note.start_offset_seconds;
-			note_view.length_seconds = note.length_seconds;
-			lane.visible_notes.push_back(note_view);
+			gameplay_player.world.lanes[0].lane_center_x = 0.0f;
+			gameplay_player.world.lanes[0].lane_width = 5.0f;
+			gameplay_player.world.lanes[0].lane_depth_offset = 0.0f;
 		}
-
-		lane.visible_measure_lines.reserve(player.visible_measure_lines.size());
-		for (const PrototypePlayerView::ChartMeasureLineView &measure_line : player.visible_measure_lines)
-		{
-			HighwayMeasureLineView measure_line_view;
-			measure_line_view.offset_seconds = measure_line.offset_seconds;
-			measure_line_view.is_measure = measure_line.is_measure;
-			measure_line_view.is_strong = measure_line.is_strong;
-			lane.visible_measure_lines.push_back(measure_line_view);
-		}
-
-		gameplay_player.world.lanes.push_back(std::move(lane));
-		gameplay_player.world.focused_lane_index = 0;
-		gameplay_player.world.focus_blend = 1.0f;
 
 		gameplay_player.hud.player_label = player.song_title.empty() ? "Player 1" : player.song_title;
 		gameplay_player.hud.status_message = player.status_message;
@@ -768,7 +868,7 @@ namespace rhythmreplugged::core
 		status << "Timing offset: ";
 		if (offset_milliseconds >= 0)
 			status << '+';
-		status << offset_milliseconds << " ms  ([ / ] adjust, \\ reset)";
+		status << offset_milliseconds << " ms";
 		player_status_message_ = status.str();
 	}
 
@@ -950,6 +1050,12 @@ namespace rhythmreplugged::core
 			return_to_song_setup_unlocked();
 			return;
 		}
+
+		if (pressed(input_state.l, previous_input_.l))
+			song_session_.switch_active_lane(-1);
+
+		if (pressed(input_state.r, previous_input_.r))
+			song_session_.switch_active_lane(1);
 
 		const std::array<bool, 5> previous_lane_held = {
 			previous_input_.left || previous_input_.lane_1,

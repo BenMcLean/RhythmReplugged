@@ -173,6 +173,11 @@ namespace
 		return (lane_left_edge(lane, fret_lane) + lane_right_edge(lane, fret_lane)) * 0.5f;
 	}
 
+	float lane_x_scale(const InstrumentLaneView &lane)
+	{
+		return lane.lane_width / 5.0f;
+	}
+
 	float note_depth(float offset_seconds, float visible_depth_seconds)
 	{
 		const float seconds = visible_depth_seconds > 0.001f ? visible_depth_seconds : 1.5f;
@@ -332,6 +337,7 @@ namespace
 		const HighwayStyleView &style,
 		float visible_depth_seconds)
 	{
+		const float x_scale = lane_x_scale(lane);
 		for (const HighwayNoteView &note : lane.visible_notes)
 		{
 			if (note.lane < 0 || note.lane >= 5)
@@ -349,8 +355,8 @@ namespace
 			const float x = lane_center(lane, note.lane);
 			append_xz_quad(
 				batch,
-				x - style.sustain_width * 0.5f,
-				x + style.sustain_width * 0.5f,
+				x - style.sustain_width * 0.5f * x_scale,
+				x + style.sustain_width * 0.5f * x_scale,
 				far_z,
 				near_z,
 				0.09f,
@@ -365,6 +371,7 @@ namespace
 		const HighwayStyleView &style,
 		float visible_depth_seconds)
 	{
+		const float x_scale = lane_x_scale(lane);
 		for (const HighwayNoteView &note : lane.visible_notes)
 		{
 			if (note.lane < 0 || note.lane >= 5)
@@ -375,7 +382,7 @@ namespace
 				continue;
 
 			const float x = lane_center(lane, note.lane);
-			const float width = style.note_width * 0.5f;
+			const float width = style.note_width * 0.5f * x_scale;
 			const float height = style.note_height * 0.5f;
 			const float y = 0.14f;
 			append_xy_quad(
@@ -402,6 +409,7 @@ namespace
 
 	void append_hit_line(MeshBatch &batch, const InstrumentLaneView &lane, const HighwayStyleView &style)
 	{
+		const float x_scale = lane_x_scale(lane);
 		append_xz_quad(
 			batch,
 			lane.lane_center_x - lane.lane_width * 0.5f,
@@ -417,14 +425,16 @@ namespace
 			Color4 color = lane.lane_held[static_cast<size_t>(fret)] || lane.lane_sustaining[static_cast<size_t>(fret)]
 				? style.lane_colors[fret]
 				: with_alpha_scale(style.lane_border_color, 0.8f);
-			const float radius = 0.24f;
+			const float radius_x = 0.24f * x_scale;
+			const float radius_y = 0.14f;
+			const float center_y = 0.16f;
 			const float center_x = lane_center(lane, fret);
 			append_xy_quad(
 				batch,
-				center_x - radius,
-				center_x + radius,
-				0.30f,
-				0.02f,
+				center_x - radius_x,
+				center_x + radius_x,
+				center_y + radius_y,
+				center_y - radius_y,
 				0.12f,
 				color,
 				1.0f);
@@ -738,15 +748,62 @@ namespace rhythmreplugged::render_gl
 			glEnable(GL_SCISSOR_TEST);
 
 			const float aspect_ratio = static_cast<float>(viewport[2]) / static_cast<float>(viewport[3]);
-			const Vec3 eye = {0.0f, player.camera.camera_height, player.camera.camera_distance};
+			float span_left = 0.0f;
+			float span_right = 0.0f;
+			bool have_span = false;
+			for (const InstrumentLaneView &lane : player.world.lanes)
+			{
+				const float lane_left = lane.lane_center_x - lane.lane_width * 0.5f - 0.9f;
+				const float lane_right = lane.lane_center_x + lane.lane_width * 0.5f + 0.9f;
+				if (!have_span)
+				{
+					span_left = lane_left;
+					span_right = lane_right;
+					have_span = true;
+				}
+				else
+				{
+					span_left = (std::min)(span_left, lane_left);
+					span_right = (std::max)(span_right, lane_right);
+				}
+			}
+
+			const float span_center = have_span ? (span_left + span_right) * 0.5f : 0.0f;
+			float focus_center = span_center;
+			if (player.world.focused_lane_index >= 0 &&
+				player.world.focused_lane_index < static_cast<int>(player.world.lanes.size()))
+			{
+				focus_center = player.world.lanes[static_cast<size_t>(player.world.focused_lane_index)].lane_center_x;
+			}
+
+			const float focus_blend = std::clamp(player.world.focus_blend, 0.0f, 1.0f);
+			const float camera_center_x = span_center + (focus_center - span_center) * focus_blend;
+			const float required_half_width = have_span
+				? (std::max)(std::fabs(span_left - camera_center_x), std::fabs(span_right - camera_center_x))
+				: 0.0f;
+
+			float camera_distance = player.camera.camera_distance;
+			float camera_height = player.camera.camera_height;
+			float look_depth = 7.5f;
+			const float vertical_fov = radians(player.camera.field_of_view_degrees);
+			const float horizontal_half_angle = std::atan(std::tan(vertical_fov * 0.5f) * (std::max)(aspect_ratio, 0.25f));
+			const float base_visible_half_width = std::tan(horizontal_half_angle) * (camera_distance + look_depth);
+			if (required_half_width > 0.0f && base_visible_half_width > 0.001f)
+			{
+				const float fit_scale = (std::max)(1.0f, required_half_width / (base_visible_half_width * 0.92f));
+				camera_distance *= fit_scale;
+				camera_height *= fit_scale;
+				look_depth *= fit_scale;
+			}
+
+			const Vec3 eye = {camera_center_x, camera_height, camera_distance};
 			const float look_pitch = radians(player.camera.pitch_degrees);
-			const float look_depth = 7.5f;
 			const Vec3 target = {
-				0.0f,
-				player.camera.camera_height - std::tan(look_pitch) * (player.camera.camera_distance + look_depth),
+				camera_center_x,
+				camera_height - std::tan(look_pitch) * (camera_distance + look_depth),
 				-look_depth,
 			};
-			const Mat4 projection = perspective(radians(player.camera.field_of_view_degrees), aspect_ratio, 0.1f, 50.0f);
+			const Mat4 projection = perspective(vertical_fov, aspect_ratio, 0.1f, 50.0f);
 			const Mat4 view = look_at(eye, target, {0.0f, 1.0f, 0.0f});
 			const Mat4 mvp = multiply(projection, view);
 

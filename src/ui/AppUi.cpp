@@ -779,7 +779,7 @@ namespace rhythmreplugged::ui
 		render_preload_progress_overlay(menu, window_size, ui_scale);
 	}
 
-	void render_prototype_player_ui(const PrototypePlayerView &player, ImVec2 window_size)
+	void render_prototype_player_ui(const PrototypePlayerView &player, const GameplaySceneView &scene, ImVec2 window_size)
 	{
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
@@ -810,6 +810,21 @@ namespace rhythmreplugged::ui
 			ImVec2(canvas_pos.x + 28.0f, canvas_pos.y + 118.0f),
 			IM_COL32(180, 188, 202, 255),
 			chart_label.c_str());
+
+		if (!scene.players.empty())
+		{
+			const auto &lanes = scene.players.front().world.lanes;
+			float label_x = canvas_pos.x + 28.0f;
+			const float label_y = canvas_pos.y + 26.0f;
+			for (const InstrumentLaneView &lane : lanes)
+			{
+				const ImU32 text_color = lane.is_active
+					? IM_COL32(245, 245, 245, 255)
+					: (lane.is_muted ? IM_COL32(255, 140, 140, 255) : IM_COL32(180, 188, 202, 255));
+				draw_list->AddText(ImVec2(label_x, label_y), text_color, lane.instrument_label.c_str());
+				label_x += ImGui::CalcTextSize(lane.instrument_label.c_str()).x + 20.0f;
+			}
+		}
 
 		draw_lyric_strip(player, canvas_pos, window_size);
 		draw_song_countdown(player, canvas_pos, window_size);

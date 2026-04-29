@@ -32,14 +32,20 @@ namespace rhythmreplugged::core
 		const InstrumentSelectView &view() const;
 
 	private:
+		struct SelectionEntry
+		{
+			GameplayMode gameplay_mode = GameplayMode::Classic;
+			InstrumentOption instrument = InstrumentOption::Guitar;
+		};
+
 		void rebuild_view();
-		static std::string label_for(InstrumentOption instrument);
-		int default_index_for(InstrumentOption instrument) const;
+		static std::string label_for(const SelectionEntry &entry);
+		int default_index_for(const GameplayOptions &options) const;
 
 		std::string song_title_;
 		std::string song_subtitle_;
 		std::string status_message_;
-		std::vector<InstrumentOption> available_instruments_;
+		std::vector<SelectionEntry> available_entries_;
 		int selected_index_ = 0;
 		mutable InstrumentSelectView cached_view_;
 	};

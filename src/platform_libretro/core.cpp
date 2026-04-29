@@ -228,6 +228,8 @@ namespace
 		input.down = input.down || keyboard_pressed(RETROK_DOWN);
 		input.a = input.a || keyboard_pressed(RETROK_RETURN) || keyboard_pressed(RETROK_SPACE);
 		input.b = input.b || keyboard_pressed(RETROK_0) || keyboard_pressed(RETROK_BACKSPACE);
+		input.l = input.l || keyboard_pressed(RETROK_LEFTBRACKET);
+		input.r = input.r || keyboard_pressed(RETROK_RIGHTBRACKET);
 		input.lane_1 = keyboard_pressed(RETROK_1);
 		input.lane_2 = keyboard_pressed(RETROK_2);
 		input.lane_3 = keyboard_pressed(RETROK_3);

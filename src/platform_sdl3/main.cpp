@@ -402,15 +402,6 @@ int main(int argc, char *argv[])
 				else if (scancode == SDL_SCANCODE_5)
 					held_input.lane_5 = is_down;
 
-				if (is_down && app.mode() == AppMode::Gameplay)
-				{
-					if (scancode == SDL_SCANCODE_LEFTBRACKET)
-						app.nudge_timing_offset_seconds(-0.005);
-					else if (scancode == SDL_SCANCODE_RIGHTBRACKET)
-						app.nudge_timing_offset_seconds(0.005);
-					else if (scancode == SDL_SCANCODE_BACKSLASH)
-						app.reset_timing_offset();
-				}
 			}
 		}
 
