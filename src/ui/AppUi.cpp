@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 
 namespace
@@ -16,6 +17,28 @@ namespace
 		IM_COL32(65, 117, 220, 255),
 		IM_COL32(234, 140, 41, 255),
 	};
+
+	float lyric_strip_panel_height(const PrototypePlayerView &player)
+	{
+		if (player.visible_lyric_tokens.empty())
+			return 0.0f;
+
+		const float font_size = ImGui::GetFontSize();
+		const float panel_padding_y = 12.0f;
+		const float line_gap = 6.0f;
+		return panel_padding_y * 2.0f + font_size * 2.0f + line_gap;
+	}
+
+	std::string format_countdown_text(double remaining_seconds)
+	{
+		const int total_seconds = static_cast<int>(std::ceil((std::max)(0.0, remaining_seconds)));
+		const int minutes = total_seconds / 60;
+		const int seconds = total_seconds % 60;
+
+		char buffer[32];
+		std::snprintf(buffer, sizeof(buffer), "%d:%02d", minutes, seconds);
+		return std::string(buffer);
+	}
 
 	void draw_status_pill(const char *id, const ImVec2 &position, const char *text, ImU32 background_color)
 	{
@@ -211,6 +234,37 @@ namespace
 			draw_row(display_rows[0], panel_pos.y + panel_padding_y);
 		if (display_rows.size() > 1)
 			draw_row(display_rows[1], panel_pos.y + panel_padding_y + font_size + line_gap);
+	}
+
+	void draw_song_countdown(const PrototypePlayerView &player, const ImVec2 &canvas_pos, ImVec2 window_size)
+	{
+		if (player.song_duration_seconds <= 0.0)
+			return;
+
+		ImDrawList *draw_list = ImGui::GetWindowDrawList();
+		const std::string countdown_text = format_countdown_text(player.song_time_remaining_seconds);
+		const ImVec2 text_size = ImGui::CalcTextSize(countdown_text.c_str());
+		const ImVec2 padding(14.0f, 10.0f);
+		const float top_offset = 8.0f + lyric_strip_panel_height(player) + 10.0f;
+		const ImVec2 panel_pos(
+			canvas_pos.x + window_size.x - text_size.x - padding.x * 2.0f - 18.0f,
+			canvas_pos.y + top_offset);
+		const ImVec2 panel_size(text_size.x + padding.x * 2.0f, text_size.y + padding.y * 2.0f);
+
+		draw_list->AddRectFilled(
+			panel_pos,
+			ImVec2(panel_pos.x + panel_size.x, panel_pos.y + panel_size.y),
+			IM_COL32(10, 14, 22, 214),
+			10.0f);
+		draw_list->AddRect(
+			panel_pos,
+			ImVec2(panel_pos.x + panel_size.x, panel_pos.y + panel_size.y),
+			IM_COL32(80, 92, 116, 180),
+			10.0f);
+		draw_list->AddText(
+			ImVec2(panel_pos.x + padding.x, panel_pos.y + padding.y),
+			IM_COL32(235, 239, 246, 255),
+			countdown_text.c_str());
 	}
 
 	void render_preload_progress_overlay(const DifficultySelectView &menu, ImVec2 window_size, float ui_scale)
@@ -758,6 +812,7 @@ namespace rhythmreplugged::ui
 			chart_label.c_str());
 
 		draw_lyric_strip(player, canvas_pos, window_size);
+		draw_song_countdown(player, canvas_pos, window_size);
 
 		if (!player.status_message.empty())
 			draw_status_pill("player_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + 146.0f), player.status_message.c_str(), IM_COL32(16, 20, 29, 210));

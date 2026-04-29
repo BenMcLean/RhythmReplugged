@@ -459,6 +459,8 @@ namespace rhythmreplugged::core
 		player_view.lane_held = lane_held_;
 		player_view.loaded_stem_count = prototype_player_.loaded_stem_count();
 		player_view.song_time_seconds = song_time_seconds();
+		player_view.song_duration_seconds = (std::max)(midi_chart_.duration_seconds(), prototype_player_.duration_seconds());
+		player_view.song_time_remaining_seconds = (std::max)(0.0, player_view.song_duration_seconds - player_view.song_time_seconds);
 		const std::uint8_t sustain_mask = active_sustain_lane_mask(player_view.song_time_seconds);
 		for (size_t lane = 0; lane < player_view.lane_sustaining.size(); ++lane)
 			player_view.lane_sustaining[lane] = (sustain_mask & static_cast<std::uint8_t>(1u << lane)) != 0;

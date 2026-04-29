@@ -142,6 +142,8 @@ namespace rhythmreplugged::core
 		std::string chart_track_name;
 		std::string chart_difficulty_name;
 		double song_time_seconds = 0.0;
+		double song_duration_seconds = 0.0;
+		double song_time_remaining_seconds = 0.0;
 		double chart_beats_per_minute = 120.0;
 		int current_lyric_line_index = 0;
 		int next_lyric_line_index = -1;

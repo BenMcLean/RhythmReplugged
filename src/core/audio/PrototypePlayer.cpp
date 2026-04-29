@@ -218,6 +218,15 @@ namespace rhythmreplugged::core
 		return stems_.empty() ? 0 : stems_.front().sample_rate;
 	}
 
+	double PrototypePlayer::duration_seconds() const
+	{
+		const int rate = sample_rate();
+		if (rate <= 0)
+			return 0.0;
+
+		return static_cast<double>(longest_track_frame_count()) / static_cast<double>(rate);
+	}
+
 	const SongMetadataView &PrototypePlayer::metadata() const
 	{
 		return metadata_;

@@ -45,6 +45,7 @@ namespace rhythmreplugged::core
 		void set_stem_target_gain(std::string_view stem_name, float gain);
 		float stem_target_gain(std::string_view stem_name) const;
 		int sample_rate() const;
+		double duration_seconds() const;
 		const SongMetadataView &metadata() const;
 		bool playback_finished() const;
 		void rewind();
