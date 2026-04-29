@@ -1390,16 +1390,14 @@ namespace rhythmreplugged::core
 
 			if (note_number == 105)
 			{
-				push_phrase(track, MidiChartPhraseType::VocalsScoringPhrase, MidiChartDifficulty::All, event);
-				push_phrase(track, MidiChartPhraseType::VocalsStaticPhrase, MidiChartDifficulty::All, event);
+				push_phrase(track, MidiChartPhraseType::VocalsPhrase, MidiChartDifficulty::All, event);
 				return true;
 			}
 
 			if (note_number == 106)
 			{
 				push_phrase(track, MidiChartPhraseType::VersusPlayer2, MidiChartDifficulty::All, event);
-				push_phrase(track, MidiChartPhraseType::VocalsScoringPhrase, MidiChartDifficulty::All, event);
-				push_phrase(track, MidiChartPhraseType::VocalsStaticPhrase, MidiChartDifficulty::All, event);
+				push_phrase(track, MidiChartPhraseType::VocalsPhrase, MidiChartDifficulty::All, event);
 				return true;
 			}
 
@@ -2263,6 +2261,15 @@ namespace rhythmreplugged::core
 
 		void copy_down_vocals_phrases(std::vector<MidiChartTrack> &tracks)
 		{
+			auto has_any_vocals_phrase = [](const MidiChartTrack &track)
+			{
+				return std::any_of(track.phrases.begin(), track.phrases.end(),
+					[](const MidiChartPhrase &phrase)
+					{
+						return phrase.type == MidiChartPhraseType::VocalsPhrase;
+					});
+			};
+
 			MidiChartTrack *harm1 = nullptr;
 			MidiChartTrack *harm2 = nullptr;
 			MidiChartTrack *harm3 = nullptr;
@@ -2284,14 +2291,21 @@ namespace rhythmreplugged::core
 				std::vector<MidiChartPhrase> new_phrases;
 				for (const MidiChartPhrase &phrase : harm2->phrases)
 				{
-					if (phrase.type == MidiChartPhraseType::VocalsStaticPhrase)
+					if (phrase.type == MidiChartPhraseType::VocalsPhrase)
 						new_phrases.push_back(phrase);
+				}
+				if (!has_any_vocals_phrase(*harm2))
+				{
+					for (const MidiChartPhrase &phrase : harm1->phrases)
+					{
+						if (phrase.type == MidiChartPhraseType::VocalsPhrase)
+							new_phrases.push_back(phrase);
+					}
 				}
 				harm2->phrases = std::move(new_phrases);
 				for (const MidiChartPhrase &phrase : harm1->phrases)
 				{
-					if (phrase.type == MidiChartPhraseType::VocalsScoringPhrase ||
-						phrase.type == MidiChartPhraseType::StarPower)
+					if (phrase.type == MidiChartPhraseType::StarPower)
 					{
 						harm2->phrases.push_back(phrase);
 					}
@@ -2305,15 +2319,22 @@ namespace rhythmreplugged::core
 				{
 					for (const MidiChartPhrase &phrase : harm2->phrases)
 					{
-						if (phrase.type == MidiChartPhraseType::VocalsStaticPhrase)
+						if (phrase.type == MidiChartPhraseType::VocalsPhrase)
+							new_phrases.push_back(phrase);
+					}
+				}
+				if (!has_any_vocals_phrase(*harm3))
+				{
+					for (const MidiChartPhrase &phrase : harm1->phrases)
+					{
+						if (phrase.type == MidiChartPhraseType::VocalsPhrase)
 							new_phrases.push_back(phrase);
 					}
 				}
 				harm3->phrases = std::move(new_phrases);
 				for (const MidiChartPhrase &phrase : harm1->phrases)
 				{
-					if (phrase.type == MidiChartPhraseType::VocalsScoringPhrase ||
-						phrase.type == MidiChartPhraseType::StarPower)
+					if (phrase.type == MidiChartPhraseType::StarPower)
 					{
 						harm3->phrases.push_back(phrase);
 					}

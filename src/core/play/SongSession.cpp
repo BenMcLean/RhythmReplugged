@@ -101,8 +101,7 @@ namespace rhythmreplugged::core
 
 		bool is_vocal_phrase(const MidiChartPhrase &phrase)
 		{
-			return phrase.type == MidiChartPhraseType::VocalsScoringPhrase ||
-				phrase.type == MidiChartPhraseType::VocalsStaticPhrase;
+			return phrase.type == MidiChartPhraseType::VocalsPhrase;
 		}
 
 		std::vector<LyricPhraseRange> collect_lyric_phrase_ranges(const MidiChart &chart)
@@ -151,6 +150,13 @@ namespace rhythmreplugged::core
 				{
 					return left.start_seconds < right.start_seconds;
 				});
+			ranges.erase(std::unique(ranges.begin(), ranges.end(),
+				[](const LyricPhraseRange &left, const LyricPhraseRange &right)
+				{
+					return std::fabs(left.start_seconds - right.start_seconds) < 0.001 &&
+						std::fabs(left.end_seconds - right.end_seconds) < 0.001;
+				}),
+				ranges.end());
 			return ranges;
 		}
 		
@@ -582,23 +588,41 @@ namespace rhythmreplugged::core
 			}
 		}
 
-		player_view.current_lyric_line_index = display_line_index;
-		int next_line_index = -1;
-		for (const PrototypePlayerView::LyricTokenView &token : all_lyric_tokens)
-		{
-			if (token.line_index > display_line_index)
+			player_view.current_lyric_line_index = display_line_index;
+			bool has_display_line = false;
+			for (const PrototypePlayerView::LyricTokenView &token : all_lyric_tokens)
 			{
-				next_line_index = token.line_index;
-				break;
+				if (token.line_index == display_line_index)
+				{
+					has_display_line = true;
+					break;
+				}
 			}
-		}
-		player_view.next_lyric_line_index = next_line_index;
+			if (!has_display_line)
+			{
+				for (const PrototypePlayerView::LyricTokenView &token : all_lyric_tokens)
+				{
+					if (token.line_index <= display_line_index)
+						player_view.current_lyric_line_index = token.line_index;
+				}
+			}
 
-		for (const PrototypePlayerView::LyricTokenView &token : all_lyric_tokens)
-		{
-			if (token.line_index == display_line_index || token.line_index == next_line_index)
-				player_view.visible_lyric_tokens.push_back(token);
-		}
+			int next_line_index = -1;
+			for (const PrototypePlayerView::LyricTokenView &token : all_lyric_tokens)
+			{
+				if (token.line_index > player_view.current_lyric_line_index)
+				{
+					next_line_index = token.line_index;
+					break;
+				}
+			}
+			player_view.next_lyric_line_index = next_line_index;
+
+			for (const PrototypePlayerView::LyricTokenView &token : all_lyric_tokens)
+			{
+				if (token.line_index == player_view.current_lyric_line_index || token.line_index == next_line_index)
+					player_view.visible_lyric_tokens.push_back(token);
+			}
 
 		return player_view;
 	}
