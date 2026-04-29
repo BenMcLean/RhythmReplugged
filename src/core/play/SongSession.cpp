@@ -81,6 +81,9 @@ namespace rhythmreplugged::core
 				return parsed;
 			}
 
+			while (!parsed.text.empty() && parsed.text.back() == '#')
+				parsed.text.pop_back();
+
 			if (!parsed.text.empty())
 			{
 				const char tail = parsed.text.back();
@@ -105,37 +108,45 @@ namespace rhythmreplugged::core
 			return phrase.type == MidiChartPhraseType::VocalsPhrase;
 		}
 
-		std::vector<LyricPhraseRange> collect_lyric_phrase_ranges(const MidiChart &chart)
+		const MidiChartTrack *preferred_vocal_track(const MidiChart &chart)
 		{
-			std::vector<LyricPhraseRange> ranges;
-			const MidiChartTrack *preferred_track = nullptr;
 			for (const MidiChartTrack &track : chart.tracks())
 			{
 				if (track.type == MidiChartTrackType::Vocals)
-				{
-					preferred_track = &track;
-					break;
-				}
+					return &track;
 			}
-
-			if (preferred_track == nullptr)
+			for (const MidiChartTrack &track : chart.tracks())
 			{
-				for (const MidiChartTrack &track : chart.tracks())
-				{
-					if (track.type == MidiChartTrackType::Harmony1 ||
-						track.type == MidiChartTrackType::Harmony2 ||
-						track.type == MidiChartTrackType::Harmony3)
-					{
-						preferred_track = &track;
-						break;
-					}
-				}
+				if (track.type == MidiChartTrackType::Harmony1 ||
+					track.type == MidiChartTrackType::Harmony2 ||
+					track.type == MidiChartTrackType::Harmony3)
+					return &track;
 			}
+			return nullptr;
+		}
 
-			if (preferred_track == nullptr)
+		std::vector<MidiChartTextEvent> collect_preferred_vocal_lyrics(const MidiChart &chart)
+		{
+			const MidiChartTrack *track = preferred_vocal_track(chart);
+			if (track == nullptr)
+				return {};
+			std::vector<MidiChartTextEvent> lyrics;
+			for (const MidiChartTextEvent &event : track->text_events)
+			{
+				if (event.type == MidiChartTextEventType::Lyric && !event.text.empty())
+					lyrics.push_back(event);
+			}
+			return lyrics;
+		}
+
+		std::vector<LyricPhraseRange> collect_lyric_phrase_ranges(const MidiChart &chart)
+		{
+			std::vector<LyricPhraseRange> ranges;
+			const MidiChartTrack *track = preferred_vocal_track(chart);
+			if (track == nullptr)
 				return ranges;
 
-			for (const MidiChartPhrase &phrase : preferred_track->phrases)
+			for (const MidiChartPhrase &phrase : track->phrases)
 			{
 				if (!is_vocal_phrase(phrase))
 					continue;
@@ -633,7 +644,7 @@ namespace rhythmreplugged::core
 		}
 
 		const MidiChart *lyrics_chart = lane != nullptr ? &lane->midi_chart : nullptr;
-		const std::vector<MidiChartTextEvent> lyrics = lyrics_chart != nullptr ? lyrics_chart->lyrics() : std::vector<MidiChartTextEvent>{};
+		const std::vector<MidiChartTextEvent> lyrics = lyrics_chart != nullptr ? collect_preferred_vocal_lyrics(*lyrics_chart) : std::vector<MidiChartTextEvent>{};
 		const std::vector<LyricPhraseRange> lyric_phrase_ranges = lyrics_chart != nullptr
 			? collect_lyric_phrase_ranges(*lyrics_chart)
 			: std::vector<LyricPhraseRange>{};
