@@ -1,6 +1,10 @@
 #include "render_gl/GameplayRendererGl.h"
 
+#if defined(RR_RENDER_OPENGL_ES3)
+#include <GLES3/gl3.h>
+#else
 #include <imgui_impl_opengl3_loader.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -502,9 +506,9 @@ void main()
 	v_color = vec4(a_color.rgb, a_color.a * fade);
 }
 )";
-		case GameplayRendererGl::GraphicsApi::DesktopOpenGl:
+		case GameplayRendererGl::GraphicsApi::OpenGl33Core:
 		default:
-			return R"(#version 130
+			return R"(#version 330 core
 in vec3 a_position;
 in vec4 a_color;
 in float a_fade;
@@ -535,9 +539,9 @@ void main()
 	o_color = v_color;
 }
 )";
-		case GameplayRendererGl::GraphicsApi::DesktopOpenGl:
+		case GameplayRendererGl::GraphicsApi::OpenGl33Core:
 		default:
-			return R"(#version 130
+			return R"(#version 330 core
 in vec4 v_color;
 out vec4 o_color;
 void main()
@@ -591,12 +595,14 @@ namespace rhythmreplugged::render_gl
 		const char *vertex_shader_source = gameplay_vertex_shader_source(graphics_api_);
 		const char *fragment_shader_source = gameplay_fragment_shader_source(graphics_api_);
 
+#if !defined(RR_RENDER_OPENGL_ES3)
 		if (imgl3wInit() != 0)
 		{
 			error_message = "Failed to initialize OpenGL function loader for gameplay renderer.";
 			destroy_device_objects();
 			return false;
 		}
+#endif
 
 		vertex_shader_ = glCreateShader(GL_VERTEX_SHADER);
 		fragment_shader_ = glCreateShader(GL_FRAGMENT_SHADER);

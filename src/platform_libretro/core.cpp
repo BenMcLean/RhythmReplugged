@@ -10,7 +10,11 @@
 
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
+#if defined(RR_RENDER_OPENGL_ES3)
+#include <GLES3/gl3.h>
+#else
 #include <imgui_impl_opengl3_loader.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -51,7 +55,7 @@ namespace
 	retro_input_state_t g_input_state = nullptr;
 	retro_log_callback g_log_callback{};
 	retro_hw_render_callback g_hw_render{};
-	GameplayRendererGl::GraphicsApi g_graphics_api = GameplayRendererGl::GraphicsApi::DesktopOpenGl;
+	GameplayRendererGl::GraphicsApi g_graphics_api = GameplayRendererGl::GraphicsApi::OpenGl33Core;
 
 	FileSystem g_file_system;
 	AppCore g_app(g_file_system);
@@ -179,9 +183,9 @@ namespace
 		{
 		case GameplayRendererGl::GraphicsApi::OpenGlEs3:
 			return "#version 300 es";
-		case GameplayRendererGl::GraphicsApi::DesktopOpenGl:
+		case GameplayRendererGl::GraphicsApi::OpenGl33Core:
 		default:
-			return "#version 130";
+			return "#version 330 core";
 		}
 	}
 
@@ -501,19 +505,20 @@ namespace
 			return false;
 		}
 
-		retro_hw_context_type preferred_context = RETRO_HW_CONTEXT_OPENGL;
-		const bool can_fallback_context = g_environment(RETRO_ENVIRONMENT_GET_PREFERRED_HW_RENDER, &preferred_context);
-
 		struct ContextCandidate
 		{
 			retro_hw_context_type context_type;
 			GameplayRendererGl::GraphicsApi graphics_api;
+			unsigned major;
+			unsigned minor;
 			const char *label;
 		};
 
 		std::vector<ContextCandidate> candidates;
 		auto append_candidate = [&](retro_hw_context_type context_type,
 			GameplayRendererGl::GraphicsApi graphics_api,
+			unsigned major,
+			unsigned minor,
 			const char *label)
 		{
 			for (const ContextCandidate &candidate : candidates)
@@ -522,26 +527,15 @@ namespace
 					return;
 			}
 
-			candidates.push_back({context_type, graphics_api, label});
+			candidates.push_back({context_type, graphics_api, major, minor, label});
 		};
 
-		switch (preferred_context)
-		{
-		case RETRO_HW_CONTEXT_OPENGLES3:
-		case RETRO_HW_CONTEXT_OPENGLES2:
-		case RETRO_HW_CONTEXT_OPENGLES_VERSION:
-			append_candidate(RETRO_HW_CONTEXT_OPENGLES3, GameplayRendererGl::GraphicsApi::OpenGlEs3, "OpenGL ES 3");
-			if (can_fallback_context)
-				append_candidate(RETRO_HW_CONTEXT_OPENGL, GameplayRendererGl::GraphicsApi::DesktopOpenGl, "OpenGL");
-			break;
-		case RETRO_HW_CONTEXT_OPENGL:
-		case RETRO_HW_CONTEXT_OPENGL_CORE:
-		default:
-			append_candidate(RETRO_HW_CONTEXT_OPENGL, GameplayRendererGl::GraphicsApi::DesktopOpenGl, "OpenGL");
-			if (can_fallback_context)
-				append_candidate(RETRO_HW_CONTEXT_OPENGLES3, GameplayRendererGl::GraphicsApi::OpenGlEs3, "OpenGL ES 3");
-			break;
-		}
+#if defined(RR_RENDER_OPENGL_ES3)
+		append_candidate(RETRO_HW_CONTEXT_OPENGLES3, GameplayRendererGl::GraphicsApi::OpenGlEs3, 3, 0, "OpenGL ES 3");
+#else
+		append_candidate(RETRO_HW_CONTEXT_OPENGLES3, GameplayRendererGl::GraphicsApi::OpenGlEs3, 3, 0, "OpenGL ES 3");
+		append_candidate(RETRO_HW_CONTEXT_OPENGL_CORE, GameplayRendererGl::GraphicsApi::OpenGl33Core, 3, 3, "OpenGL 3.3 Core");
+#endif
 
 		for (const ContextCandidate &candidate : candidates)
 		{
@@ -552,8 +546,8 @@ namespace
 			g_hw_render.depth = true;
 			g_hw_render.stencil = true;
 			g_hw_render.bottom_left_origin = true;
-			g_hw_render.version_major = 3;
-			g_hw_render.version_minor = 0;
+			g_hw_render.version_major = candidate.major;
+			g_hw_render.version_minor = candidate.minor;
 			g_hw_render.cache_context = false;
 			g_hw_render.debug_context = false;
 			if (g_environment(RETRO_ENVIRONMENT_SET_HW_RENDER, &g_hw_render))
@@ -564,7 +558,11 @@ namespace
 			}
 		}
 
-		log_message(RETRO_LOG_ERROR, "Frontend rejected all supported hardware rendering APIs (OpenGL ES 3, OpenGL).\n");
+#if defined(RR_RENDER_OPENGL_ES3)
+		log_message(RETRO_LOG_ERROR, "Frontend rejected OpenGL ES 3 hardware rendering.\n");
+#else
+		log_message(RETRO_LOG_ERROR, "Frontend rejected OpenGL ES 3 and OpenGL 3.3 Core hardware rendering.\n");
+#endif
 		return false;
 	}
 }

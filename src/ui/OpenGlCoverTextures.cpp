@@ -4,7 +4,11 @@
 
 #include <algorithm>
 #include <cstdlib>
+#if defined(RR_RENDER_OPENGL_ES3)
+#include <GLES3/gl3.h>
+#else
 #include <imgui_impl_opengl3_loader.h>
+#endif
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>

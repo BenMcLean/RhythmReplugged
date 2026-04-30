@@ -11,7 +11,7 @@ namespace rhythmreplugged::render_gl
 	public:
 		enum class GraphicsApi
 		{
-			DesktopOpenGl,
+			OpenGl33Core,
 			OpenGlEs3,
 		};
 
@@ -36,7 +36,7 @@ namespace rhythmreplugged::render_gl
 		unsigned int ebo_ = 0;
 		int u_mvp_location_ = -1;
 		int u_use_vertex_fade_location_ = -1;
-		GraphicsApi graphics_api_ = GraphicsApi::DesktopOpenGl;
+		GraphicsApi graphics_api_ = GraphicsApi::OpenGl33Core;
 		bool initialized_ = false;
 	};
 }

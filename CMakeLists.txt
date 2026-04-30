@@ -25,10 +25,23 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(RR_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 option(RR_BUILD_SDL3_FRONTEND "Build the SDL3 desktop frontend." ON)
 option(RR_BUILD_LIBRETRO_CORE "Build the libretro core." ON)
+option(RR_RENDER_USE_GLES "Build the OpenGL renderer against OpenGL ES 3 headers instead of desktop OpenGL." OFF)
+
+if(RR_RENDER_USE_GLES AND RR_BUILD_SDL3_FRONTEND)
+	message(FATAL_ERROR "RR_RENDER_USE_GLES currently supports libretro-only builds. Set RR_BUILD_SDL3_FRONTEND=OFF.")
+endif()
 
 add_subdirectory(external/midifile)
 
-find_package(OpenGL REQUIRED)
+set(RR_GL_LIBRARIES "")
+if(RR_RENDER_USE_GLES)
+	find_path(GLES3_INCLUDE_DIRS "GLES3/gl3.h" REQUIRED)
+	find_library(GLES_LIBRARY NAMES GLESv2 GLESv3 REQUIRED)
+	list(APPEND RR_GL_LIBRARIES ${GLES_LIBRARY})
+else()
+	find_package(OpenGL REQUIRED)
+	list(APPEND RR_GL_LIBRARIES OpenGL::GL)
+endif()
 find_package(Threads REQUIRED)
 find_package(Vorbis CONFIG REQUIRED)
 find_path(STB_INCLUDE_DIRS "stb_image.h" REQUIRED)
@@ -72,6 +85,25 @@ add_library(rr_frontend_contract INTERFACE)
 target_include_directories(rr_frontend_contract INTERFACE
 	${RR_SRC_DIR}
 )
+
+add_library(rr_gl_api INTERFACE)
+target_include_directories(rr_gl_api INTERFACE
+	${RR_IMGUI_BACKEND_INCLUDE_DIR}
+	${GLES3_INCLUDE_DIRS}
+)
+target_link_libraries(rr_gl_api INTERFACE
+	${RR_GL_LIBRARIES}
+)
+if(RR_RENDER_USE_GLES)
+	target_compile_definitions(rr_gl_api INTERFACE
+		RR_RENDER_OPENGL_ES3
+		IMGUI_IMPL_OPENGL_ES3
+	)
+else()
+	target_compile_definitions(rr_gl_api INTERFACE
+		RR_RENDER_OPENGL33_CORE
+	)
+endif()
 
 add_library(rr_imgui_core STATIC IMPORTED GLOBAL)
 set_target_properties(rr_imgui_core PROPERTIES
@@ -145,14 +177,12 @@ add_library(rr_ui
 target_include_directories(rr_ui PUBLIC
 	${RR_SRC_DIR}
 	${STB_INCLUDE_DIRS}
-	${RR_IMGUI_BACKEND_INCLUDE_DIR}
 )
 
 target_link_libraries(rr_ui PUBLIC
 	rr_core
+	rr_gl_api
 	rr_imgui_core
-PRIVATE
-	OpenGL::GL
 )
 
 add_library(rr_render_gl
@@ -162,13 +192,11 @@ add_library(rr_render_gl
 
 target_include_directories(rr_render_gl PUBLIC
 	${RR_SRC_DIR}
-	${RR_IMGUI_BACKEND_INCLUDE_DIR}
 )
 
 target_link_libraries(rr_render_gl PUBLIC
 	rr_core
-PRIVATE
-	OpenGL::GL
+	rr_gl_api
 )
 
 if(RR_BUILD_SDL3_FRONTEND)
@@ -192,7 +220,6 @@ if(RR_BUILD_SDL3_FRONTEND)
 		rr_core
 		rr_render_gl
 		rr_ui
-		OpenGL::GL
 		SDL3::SDL3
 	)
 
@@ -219,14 +246,12 @@ if(RR_BUILD_LIBRETRO_CORE)
 	target_include_directories(platform_libretro PRIVATE
 		${RR_SRC_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/include
-		${RR_IMGUI_BACKEND_INCLUDE_DIR}
 	)
 
 	target_link_libraries(platform_libretro PRIVATE
 		rr_core
 		rr_render_gl
 		rr_ui
-		OpenGL::GL
 	)
 
 	set_target_properties(platform_libretro PROPERTIES

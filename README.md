@@ -17,7 +17,7 @@ The code under `src/` is currently split into:
 - `src/frontend_contract` for host-facing filesystem, input, and audio interfaces shared by both frontends
 - `src/core` for launch flow, song browsing, metadata parsing, chart loading, preload orchestration, gameplay state, and audio mixing
 - `src/ui` for Dear ImGui menus, overlays, and OpenGL cover-art texture management
-- `src/render_gl` for the shared OpenGL gameplay highway renderer used by both hosts
+- `src/render_gl` for the shared GLES3-compatible gameplay highway renderer used by both hosts
 - `src/platform_sdl3` for the standalone SDL3 host, OpenGL context, gamepad polling, and miniaudio output
 - `src/platform_libretro` for the libretro host, frontend integration, and OpenGL-backed core rendering
 
@@ -27,13 +27,15 @@ The current build is organized around a strict host split:
 
 - `src/core` must not depend on SDL or `libretro.h`.
 - `src/ui` must not depend on SDL or `libretro.h`.
-- `src/render_gl` may depend on OpenGL and core view types, but not on SDL or `libretro.h`.
+- `src/render_gl` may depend on GLES3-compatible OpenGL calls and core view types, but not on SDL or `libretro.h`.
 - `src/platform_sdl3` is the standalone desktop host and may depend on SDL.
 - `src/platform_libretro` is the libretro host and may depend on `libretro.h`.
 
+Rendering code is written to the OpenGL ES 3.0 feature set. The SDL desktop host uses an OpenGL 3.3 Core context as a compatibility backend. Desktop libretro builds ask RetroArch for OpenGL ES 3.0 first and fall back to OpenGL 3.3 Core, while ARM/SBC libretro builds use an actual OpenGL ES 3.0 context only.
+
 For Dear ImGui specifically:
 
-- `platform_sdl3` builds the SDL3 platform backend and the OpenGL renderer backend.
+- `platform_sdl3` builds the SDL3 platform backend and the OpenGL renderer backend for OpenGL 3.3 Core.
 - `platform_libretro` builds only the OpenGL renderer backend and uses project-owned libretro platform glue.
 
 This keeps the libretro core free of SDL link dependencies while still allowing both hosts to share the same menu UI and gameplay renderer.
@@ -202,4 +204,25 @@ It also stages the libretro drop under:
 - `dist/Release/libretro/rhythmreplugged.dll`
 - `dist/Release/libretro/rhythmreplugged.info`
 
-The current x64 release core builds as a single drop-in DLL without extra third-party sidecar DLLs.
+The current x64 release core builds as a single drop-in DLL without extra third-party sidecar DLLs. It is compiled against the desktop OpenGL loader, requests OpenGL ES 3 first at runtime, and falls back to OpenGL 3.3 Core if the frontend rejects GLES.
+
+### Raspberry Pi / ARM64 libretro builds
+
+The project also includes native Linux ARM64 libretro presets for Raspberry Pi 4/5 class systems running a 64-bit OS. These presets are libretro-only, disable the SDL3 desktop frontend, and compile the renderer against OpenGL ES 3 headers.
+
+On the target ARM64 machine, set `VCPKG_ROOT` and build:
+
+```bash
+cmake --preset linux-arm64-libretro-release
+cmake --build --preset linux-arm64-libretro-release --target stage_libretro
+```
+
+This produces and stages:
+
+- `build/linux-arm64-libretro-release/rhythmreplugged.so`
+- `dist/Release/libretro/rhythmreplugged.so`
+- `dist/Release/libretro/rhythmreplugged.info`
+
+The ARM64 presets assume a 64-bit Linux userland and the vcpkg `arm64-linux` triplet. A 32-bit RetroPie image may need a separate `arm-linux` triplet or a custom vcpkg triplet/toolchain file.
+
+For ARM/SBC targets, OpenGL ES 3 is the expected path and the ARM64 libretro presets are GLES-only. Desktop x64 libretro builds are more flexible: they try GLES3 first, then OpenGL 3.3 Core, while renderer features stay inside the OpenGL ES 3.0 feature set.

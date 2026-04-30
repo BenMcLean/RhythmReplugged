@@ -85,6 +85,36 @@
 				"RR_BUILD_SDL3_FRONTEND": "OFF",
 				"RR_BUILD_LIBRETRO_CORE": "ON"
 			}
+		},
+		{
+			"name": "linux-arm64-libretro-debug",
+			"displayName": "Linux ARM64 Libretro Debug",
+			"description": "Native AArch64/ARM64 libretro core build for Raspberry Pi 4/5 class systems using OpenGL ES 3.",
+			"inherits": "base",
+			"generator": "Ninja",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug",
+				"VCPKG_TARGET_TRIPLET": "arm64-linux",
+				"VCPKG_MANIFEST_NO_DEFAULT_FEATURES": "ON",
+				"RR_BUILD_SDL3_FRONTEND": "OFF",
+				"RR_BUILD_LIBRETRO_CORE": "ON",
+				"RR_RENDER_USE_GLES": "ON"
+			}
+		},
+		{
+			"name": "linux-arm64-libretro-release",
+			"displayName": "Linux ARM64 Libretro Release",
+			"description": "Native AArch64/ARM64 libretro core build for Raspberry Pi 4/5 class systems using OpenGL ES 3.",
+			"inherits": "base",
+			"generator": "Ninja",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release",
+				"VCPKG_TARGET_TRIPLET": "arm64-linux",
+				"VCPKG_MANIFEST_NO_DEFAULT_FEATURES": "ON",
+				"RR_BUILD_SDL3_FRONTEND": "OFF",
+				"RR_BUILD_LIBRETRO_CORE": "ON",
+				"RR_RENDER_USE_GLES": "ON"
+			}
 		}
 	],
 	"buildPresets": [
@@ -121,6 +151,16 @@
 			"displayName": "Linux Libretro Release (Internal)",
 			"hidden": true,
 			"configurePreset": "linux-libretro-release-internal"
+		},
+		{
+			"name": "linux-arm64-libretro-debug",
+			"displayName": "Linux ARM64 Libretro Debug",
+			"configurePreset": "linux-arm64-libretro-debug"
+		},
+		{
+			"name": "linux-arm64-libretro-release",
+			"displayName": "Linux ARM64 Libretro Release",
+			"configurePreset": "linux-arm64-libretro-release"
 		}
 	]
 }
