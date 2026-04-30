@@ -347,8 +347,8 @@ namespace
 
 			const float start_z = note_depth(note.start_offset_seconds, visible_depth_seconds) + lane.lane_depth_offset;
 			const float end_z = note_depth(note.start_offset_seconds + note.length_seconds, visible_depth_seconds) + lane.lane_depth_offset;
-			const float near_z = std::min(start_z, end_z);
-			const float far_z = std::max(start_z, end_z);
+			const float near_z = (std::min)(start_z, end_z);
+			const float far_z = (std::max)(start_z, end_z);
 			if (far_z < -10.5f || near_z > 1.6f)
 				continue;
 
