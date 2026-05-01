@@ -19,6 +19,10 @@
 #define GL_DEPTH_BUFFER_BIT 0x00000100
 #endif
 
+#ifndef GL_DYNAMIC_DRAW
+#define GL_DYNAMIC_DRAW 0x88E8
+#endif
+
 namespace
 {
 	using namespace rhythmreplugged::core;
@@ -36,30 +40,6 @@ namespace
 	struct Mat4
 	{
 		float v[16]{};
-	};
-
-	struct RenderVertex
-	{
-		float x;
-		float y;
-		float z;
-		float r;
-		float g;
-		float b;
-		float a;
-		float fade;
-	};
-
-	struct MeshBatch
-	{
-		std::vector<RenderVertex> vertices;
-		std::vector<std::uint32_t> indices;
-
-		void clear()
-		{
-			vertices.clear();
-			indices.clear();
-		}
 	};
 
 	float radians(float degrees)
@@ -551,6 +531,61 @@ void main()
 )";
 		}
 	}
+
+	size_t grow_capacity(size_t current_capacity, size_t required_capacity, size_t minimum_capacity)
+	{
+		size_t capacity = (std::max)(current_capacity, minimum_capacity);
+		while (capacity < required_capacity)
+		{
+			const size_t next_capacity = capacity + capacity / 2;
+			if (next_capacity <= capacity)
+			{
+				capacity = required_capacity;
+				break;
+			}
+
+			capacity = next_capacity;
+		}
+
+		return capacity;
+	}
+
+	void reserve_mesh_capacity(MeshBatch &batch, size_t required_vertices, size_t required_indices)
+	{
+		if (batch.vertices.capacity() < required_vertices)
+			batch.vertices.reserve(grow_capacity(batch.vertices.capacity(), required_vertices, 256));
+		if (batch.indices.capacity() < required_indices)
+			batch.indices.reserve(grow_capacity(batch.indices.capacity(), required_indices, 384));
+	}
+
+	void reserve_mesh_for_player(MeshBatch &batch, const PlayerGameplayView &player)
+	{
+		size_t required_vertices = 0;
+		size_t required_indices = 0;
+		for (const InstrumentLaneView &lane : player.world.lanes)
+		{
+			required_vertices += 64;
+			required_indices += 96;
+			required_vertices += lane.visible_measure_lines.size() * 4;
+			required_indices += lane.visible_measure_lines.size() * 6;
+			required_vertices += lane.visible_notes.size() * 12;
+			required_indices += lane.visible_notes.size() * 18;
+		}
+
+		reserve_mesh_capacity(batch, required_vertices, required_indices);
+	}
+
+	void upload_buffer_data(GLenum target, GLuint buffer, size_t required_bytes, const void *data, size_t &capacity_bytes)
+	{
+		glBindBuffer(target, buffer);
+		if (required_bytes > capacity_bytes)
+		{
+			capacity_bytes = grow_capacity(capacity_bytes, required_bytes, 4096);
+			glBufferData(target, static_cast<GLsizeiptr>(capacity_bytes), nullptr, GL_DYNAMIC_DRAW);
+		}
+
+		glBufferSubData(target, 0, static_cast<GLsizeiptr>(required_bytes), data);
+	}
 }
 
 namespace rhythmreplugged::render_gl
@@ -685,6 +720,8 @@ namespace rhythmreplugged::render_gl
 		glBindVertexArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		vbo_capacity_bytes_ = 0;
+		ebo_capacity_bytes_ = 0;
 		return true;
 	}
 
@@ -723,6 +760,8 @@ namespace rhythmreplugged::render_gl
 
 		u_mvp_location_ = -1;
 		u_use_vertex_fade_location_ = -1;
+		vbo_capacity_bytes_ = 0;
+		ebo_capacity_bytes_ = 0;
 	}
 
 	void GameplayRendererGl::render(const GameplaySceneView &scene, int framebuffer_width, int framebuffer_height)
@@ -742,7 +781,6 @@ namespace rhythmreplugged::render_gl
 		glUseProgram(shader_program_);
 		glBindVertexArray(vao_);
 
-		MeshBatch batch;
 		for (const PlayerGameplayView &player : scene.players)
 		{
 			const std::array<int, 4> viewport = viewport_from_rect(player.normalized_rect, framebuffer_width, framebuffer_height);
@@ -816,32 +854,33 @@ namespace rhythmreplugged::render_gl
 			glUniformMatrix4fv(u_mvp_location_, 1, GL_FALSE, mvp.v);
 			glUniform1i(u_use_vertex_fade_location_, 1);
 
-			batch.clear();
+			reserve_mesh_for_player(mesh_batch_, player);
+			mesh_batch_.clear();
 			for (const InstrumentLaneView &lane : player.world.lanes)
 			{
-				append_highway_background(batch, lane, player.world.style);
-				append_measure_lines(batch, lane, player.world.style, player.camera.visible_depth_seconds);
-				append_sustains(batch, lane, player.world.style, player.camera.visible_depth_seconds);
-				append_notes(batch, lane, player.world.style, player.camera.visible_depth_seconds);
-				append_hit_line(batch, lane, player.world.style);
+				append_highway_background(mesh_batch_, lane, player.world.style);
+				append_measure_lines(mesh_batch_, lane, player.world.style, player.camera.visible_depth_seconds);
+				append_sustains(mesh_batch_, lane, player.world.style, player.camera.visible_depth_seconds);
+				append_notes(mesh_batch_, lane, player.world.style, player.camera.visible_depth_seconds);
+				append_hit_line(mesh_batch_, lane, player.world.style);
 			}
 
-			if (batch.vertices.empty() || batch.indices.empty())
+			if (mesh_batch_.vertices.empty() || mesh_batch_.indices.empty())
 				continue;
 
-			glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-			glBufferData(
+			upload_buffer_data(
 				GL_ARRAY_BUFFER,
-				static_cast<GLsizeiptr>(batch.vertices.size() * sizeof(RenderVertex)),
-				batch.vertices.data(),
-				GL_STREAM_DRAW);
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_);
-			glBufferData(
+				vbo_,
+				mesh_batch_.vertices.size() * sizeof(RenderVertex),
+				mesh_batch_.vertices.data(),
+				vbo_capacity_bytes_);
+			upload_buffer_data(
 				GL_ELEMENT_ARRAY_BUFFER,
-				static_cast<GLsizeiptr>(batch.indices.size() * sizeof(std::uint32_t)),
-				batch.indices.data(),
-				GL_STREAM_DRAW);
-			glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(batch.indices.size()), GL_UNSIGNED_INT, nullptr);
+				ebo_,
+				mesh_batch_.indices.size() * sizeof(std::uint32_t),
+				mesh_batch_.indices.data(),
+				ebo_capacity_bytes_);
+			glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh_batch_.indices.size()), GL_UNSIGNED_INT, nullptr);
 		}
 
 		glBindVertexArray(0);
