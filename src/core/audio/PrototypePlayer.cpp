@@ -12,6 +12,8 @@ namespace rhythmreplugged::core
 	{
 		constexpr float kStemFadeDurationSeconds = 0.012f;
 		constexpr size_t kProgressReportBytes = 1024u * 1024u;
+		constexpr int kGainFractionBits = 15;
+		constexpr std::int32_t kUnityGainFixed = 1 << kGainFractionBits;
 
 		struct DecodedStemPcm
 		{
@@ -94,6 +96,26 @@ namespace rhythmreplugged::core
 		{
 			const float clamped = std::clamp(sample, -1.0f, 1.0f);
 			return static_cast<std::int16_t>(std::lrintf(clamped * 32767.0f));
+		}
+
+		std::int32_t clamp_s32_to_s16_range(std::int32_t sample)
+		{
+			return std::clamp(sample, static_cast<std::int32_t>(-32768), static_cast<std::int32_t>(32767));
+		}
+
+		std::int32_t gain_to_fixed(float gain)
+		{
+			const float clamped_gain = std::clamp(gain, 0.0f, 1.0f);
+			return static_cast<std::int32_t>(std::lrintf(clamped_gain * static_cast<float>(kUnityGainFixed)));
+		}
+
+		std::int32_t apply_gain_fixed(std::int16_t sample, std::int32_t gain_fixed)
+		{
+			const std::int64_t scaled = static_cast<std::int64_t>(sample) * static_cast<std::int64_t>(gain_fixed);
+			const std::int64_t rounded = scaled >= 0
+				? scaled + (static_cast<std::int64_t>(1) << (kGainFractionBits - 1))
+				: scaled - (static_cast<std::int64_t>(1) << (kGainFractionBits - 1));
+			return static_cast<std::int32_t>(rounded >> kGainFractionBits);
 		}
 	}
 
@@ -276,14 +298,14 @@ namespace rhythmreplugged::core
 			for (int channel = 0; channel < 2; ++channel)
 			{
 				const size_t output_index = frame * 2 + static_cast<size_t>(channel);
-				float mixed = 0.0f;
+				std::int32_t mixed = 0;
 				for (StemTrack &track : stems_)
 				{
-					const float sample = static_cast<float>(sample_track_channel(track, frame_index_, channel)) / 32767.0f;
-					mixed += sample * track.current_gain;
+					const std::int16_t sample = sample_track_channel(track, frame_index_, channel);
+					const std::int32_t gain_fixed = gain_to_fixed(track.current_gain);
+					mixed += apply_gain_fixed(sample, gain_fixed);
 				}
-				mixed = std::clamp(mixed, -1.0f, 1.0f);
-				output[output_index] = static_cast<std::int16_t>(std::lrintf(mixed * 32767.0f));
+				output[output_index] = static_cast<std::int16_t>(clamp_s32_to_s16_range(mixed));
 			}
 
 			if (frame_index_ < longest_track_frames)
