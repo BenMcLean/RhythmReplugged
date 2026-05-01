@@ -104,6 +104,17 @@ namespace rhythmreplugged::core
 			std::vector<LyricPhraseRange> lyric_phrase_ranges;
 		};
 
+		struct LaneFrameCache
+		{
+			std::vector<HighwayNoteView> visible_highway_notes;
+			std::vector<HighwayMeasureLineView> visible_highway_measure_lines;
+			std::vector<PrototypePlayerView::ChartNoteView> visible_chart_notes;
+			std::vector<PrototypePlayerView::ChartMeasureLineView> visible_chart_measure_lines;
+			std::vector<PrototypePlayerView::LyricTokenView> visible_lyric_tokens;
+			int current_lyric_line_index = 0;
+			int next_lyric_line_index = -1;
+		};
+
 		static constexpr double kChartLookbehindSeconds = 0.35;
 		static constexpr double kChartLookaheadSeconds = 3.0;
 		static constexpr double kNoteHitWindowSeconds = 0.125;
@@ -119,12 +130,10 @@ namespace rhythmreplugged::core
 			std::string &error_message);
 		void reset_runtime_state(GameplayLaneRuntimeState &lane);
 		void cache_lyric_data(GameplayLaneDefinition &lane);
+		void refresh_lane_frame_cache(double song_time_seconds);
+		void populate_lane_frame_cache(size_t lane_index, double song_time_seconds);
 		void rebuild_cached_scene(GameplaySceneView &scene) const;
 		void rebuild_cached_player_view(PrototypePlayerView &player_view, const std::string &status_message) const;
-		void append_visible_notes(InstrumentLaneView &lane_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const;
-		void append_visible_measure_lines(InstrumentLaneView &lane_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const;
-		void append_visible_chart_data(PrototypePlayerView &player_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const;
-		void append_visible_lyrics(PrototypePlayerView &player_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const;
 		void set_lane_stem_target_gain(size_t lane_index, float gain);
 		float lane_stem_target_gain(size_t lane_index) const;
 		bool has_lane_stem(size_t lane_index) const;
@@ -144,6 +153,7 @@ namespace rhythmreplugged::core
 		AudioMixer audio_mixer_;
 		std::vector<GameplayLaneDefinition> gameplay_lanes_;
 		PlayState play_state_;
+		std::vector<LaneFrameCache> lane_frame_cache_;
 		GameplayFrameSnapshot frame_snapshot_;
 		std::string chart_status_message_;
 		std::atomic<bool> loaded_{false};

@@ -439,6 +439,7 @@ namespace rhythmreplugged::core
 		transport_.reset();
 		gameplay_lanes_.clear();
 		play_state_ = {};
+		lane_frame_cache_.clear();
 		frame_snapshot_ = {};
 		chart_status_message_.clear();
 		prototype_player_.unload();
@@ -621,6 +622,7 @@ namespace rhythmreplugged::core
 
 	void SongSession::refresh_frame_snapshot(const std::string &status_message)
 	{
+		refresh_lane_frame_cache(song_time_seconds());
 		rebuild_cached_player_view(frame_snapshot_.player, status_message);
 		rebuild_cached_scene(frame_snapshot_.scene);
 	}
@@ -784,6 +786,8 @@ namespace rhythmreplugged::core
 		}
 
 		play_state_.lanes.resize(gameplay_lanes_.size());
+		lane_frame_cache_.clear();
+		lane_frame_cache_.resize(gameplay_lanes_.size());
 		for (GameplayLaneRuntimeState &lane_runtime : play_state_.lanes)
 			reset_runtime_state(lane_runtime);
 
@@ -1079,6 +1083,7 @@ namespace rhythmreplugged::core
 
 		const GameplayLaneDefinition &lane = gameplay_lanes_[index];
 		const GameplayLaneRuntimeState &lane_runtime = play_state_.lanes[index];
+		const LaneFrameCache *frame_cache = index < lane_frame_cache_.size() ? &lane_frame_cache_[index] : nullptr;
 		lane_view.instrument_type = lane.instrument_type;
 		lane_view.instrument_label = lane.instrument_label;
 		lane_view.is_active = static_cast<int>(index) == play_state_.active_lane_index;
@@ -1089,9 +1094,156 @@ namespace rhythmreplugged::core
 		for (size_t fret = 0; fret < lane_view.lane_sustaining.size(); ++fret)
 			lane_view.lane_sustaining[fret] = (sustain_mask & static_cast<std::uint8_t>(1u << fret)) != 0;
 
-		append_visible_notes(lane_view, lane, song_time_seconds());
-		append_visible_measure_lines(lane_view, lane, song_time_seconds());
+		if (frame_cache != nullptr)
+		{
+			lane_view.visible_notes = frame_cache->visible_highway_notes;
+			lane_view.visible_measure_lines = frame_cache->visible_highway_measure_lines;
+		}
 		return lane_view;
+	}
+
+	void SongSession::refresh_lane_frame_cache(double song_time_seconds)
+	{
+		lane_frame_cache_.resize(gameplay_lanes_.size());
+		for (size_t lane_index = 0; lane_index < gameplay_lanes_.size(); ++lane_index)
+			populate_lane_frame_cache(lane_index, song_time_seconds);
+	}
+
+	void SongSession::populate_lane_frame_cache(size_t lane_index, double song_time_seconds)
+	{
+		if (lane_index >= gameplay_lanes_.size() || lane_index >= lane_frame_cache_.size())
+			return;
+
+		const GameplayLaneDefinition &lane_definition = gameplay_lanes_[lane_index];
+		LaneFrameCache &frame_cache = lane_frame_cache_[lane_index];
+		frame_cache = {};
+
+		const double min_time = song_time_seconds - kChartLookbehindSeconds;
+		const double max_time = song_time_seconds + kChartLookaheadSeconds;
+
+		const auto &notes = lane_definition.midi_chart.notes();
+		auto note_begin = std::lower_bound(notes.begin(), notes.end(), min_time,
+			[](const MidiChartNote &note, double time_seconds)
+			{
+				return note.end_seconds < time_seconds;
+			});
+		for (auto it = note_begin; it != notes.end(); ++it)
+		{
+			if (it->start_seconds > max_time)
+				break;
+
+			HighwayNoteView highway_note;
+			highway_note.lane = it->lane;
+			highway_note.start_offset_seconds = static_cast<float>(it->start_seconds - song_time_seconds);
+			highway_note.length_seconds = static_cast<float>((std::max)(it->end_seconds - it->start_seconds, 0.0));
+			frame_cache.visible_highway_notes.push_back(highway_note);
+
+			PrototypePlayerView::ChartNoteView chart_note;
+			chart_note.lane = it->lane;
+			chart_note.start_offset_seconds = static_cast<float>(it->start_seconds - song_time_seconds);
+			chart_note.length_seconds = static_cast<float>((std::max)(it->end_seconds - it->start_seconds, 0.0));
+			frame_cache.visible_chart_notes.push_back(chart_note);
+		}
+
+		const auto &measure_lines = lane_definition.midi_chart.measure_lines();
+		auto measure_begin = std::lower_bound(measure_lines.begin(), measure_lines.end(), min_time,
+			[](const MidiChartMeasureLine &measure_line, double time_seconds)
+			{
+				return measure_line.time_seconds < time_seconds;
+			});
+		for (auto it = measure_begin; it != measure_lines.end(); ++it)
+		{
+			if (it->time_seconds > max_time)
+				break;
+
+			const bool is_measure = it->kind == MidiChartMeasureLine::Kind::Measure;
+			const bool is_strong = is_measure || it->kind == MidiChartMeasureLine::Kind::Strong;
+
+			HighwayMeasureLineView highway_measure_line;
+			highway_measure_line.offset_seconds = static_cast<float>(it->time_seconds - song_time_seconds);
+			highway_measure_line.is_measure = is_measure;
+			highway_measure_line.is_strong = is_strong;
+			frame_cache.visible_highway_measure_lines.push_back(highway_measure_line);
+
+			PrototypePlayerView::ChartMeasureLineView chart_measure_line;
+			chart_measure_line.offset_seconds = static_cast<float>(it->time_seconds - song_time_seconds);
+			chart_measure_line.is_measure = is_measure;
+			chart_measure_line.is_strong = is_strong;
+			frame_cache.visible_chart_measure_lines.push_back(chart_measure_line);
+		}
+
+		int display_line_index = 0;
+		if (!lane_definition.lyric_phrase_ranges.empty())
+		{
+			display_line_index = static_cast<int>(lane_definition.lyric_phrase_ranges.size() - 1);
+			for (size_t index = 0; index < lane_definition.lyric_phrase_ranges.size(); ++index)
+			{
+				if (song_time_seconds < lane_definition.lyric_phrase_ranges[index].end_seconds)
+				{
+					display_line_index = static_cast<int>(index);
+					break;
+				}
+			}
+		}
+		else
+		{
+			for (const CachedLyricToken &token : lane_definition.lyric_tokens)
+			{
+				if (token.end_seconds > song_time_seconds)
+				{
+					display_line_index = token.line_index;
+					break;
+				}
+			}
+		}
+
+		frame_cache.current_lyric_line_index = display_line_index;
+		bool has_display_line = false;
+		for (const CachedLyricToken &token : lane_definition.lyric_tokens)
+		{
+			if (token.line_index == display_line_index)
+			{
+				has_display_line = true;
+				break;
+			}
+		}
+		if (!has_display_line)
+		{
+			for (const CachedLyricToken &token : lane_definition.lyric_tokens)
+			{
+				if (token.line_index <= display_line_index)
+					frame_cache.current_lyric_line_index = token.line_index;
+			}
+		}
+
+		for (const CachedLyricToken &token : lane_definition.lyric_tokens)
+		{
+			if (token.line_index > frame_cache.current_lyric_line_index)
+			{
+				frame_cache.next_lyric_line_index = token.line_index;
+				break;
+			}
+		}
+
+		for (const CachedLyricToken &token : lane_definition.lyric_tokens)
+		{
+			if (token.line_index != frame_cache.current_lyric_line_index &&
+				token.line_index != frame_cache.next_lyric_line_index)
+			{
+				continue;
+			}
+
+			PrototypePlayerView::LyricTokenView lyric_view;
+			lyric_view.text = token.text;
+			lyric_view.start_offset_seconds = static_cast<float>(token.start_seconds - song_time_seconds);
+			lyric_view.end_offset_seconds = static_cast<float>(token.end_seconds - song_time_seconds);
+			lyric_view.is_current = lyric_view.start_offset_seconds <= 0.0f && lyric_view.end_offset_seconds > 0.0f;
+			lyric_view.is_past = lyric_view.end_offset_seconds <= 0.0f;
+			lyric_view.prepend_space = token.prepend_space;
+			lyric_view.append_hyphen = token.append_hyphen;
+			lyric_view.line_index = token.line_index;
+			frame_cache.visible_lyric_tokens.push_back(std::move(lyric_view));
+		}
 	}
 
 	void SongSession::rebuild_cached_scene(GameplaySceneView &scene) const
@@ -1147,6 +1299,7 @@ namespace rhythmreplugged::core
 
 		const GameplayLaneDefinition &lane = gameplay_lanes_[lane_index];
 		const GameplayLaneRuntimeState &lane_runtime = play_state_.lanes[lane_index];
+		const LaneFrameCache *frame_cache = lane_index < lane_frame_cache_.size() ? &lane_frame_cache_[lane_index] : nullptr;
 		player_view.has_playable_stem = has_lane_stem(lane_index);
 		player_view.playable_stem_muted = has_lane_stem(lane_index) && lane_stem_target_gain(lane_index) < 0.5f;
 		player_view.playable_stem_label = lane.instrument_label;
@@ -1161,151 +1314,13 @@ namespace rhythmreplugged::core
 		player_view.chart_difficulty_name = std::string(lane.midi_chart.difficulty_name());
 		player_view.chart_beats_per_minute = lane.midi_chart.bpm_at_time(player_view.song_time_seconds);
 
-		append_visible_chart_data(player_view, lane, player_view.song_time_seconds);
-		append_visible_lyrics(player_view, lane, player_view.song_time_seconds);
-	}
-
-	void SongSession::append_visible_notes(InstrumentLaneView &lane_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const
-	{
-		const std::vector<MidiChartNote> visible_notes = lane_definition.midi_chart.collect_visible_notes(
-			song_time_seconds,
-			kChartLookbehindSeconds,
-			kChartLookaheadSeconds);
-		lane_view.visible_notes.reserve(visible_notes.size());
-		for (const MidiChartNote &note : visible_notes)
+		if (frame_cache != nullptr)
 		{
-			HighwayNoteView note_view;
-			note_view.lane = note.lane;
-			note_view.start_offset_seconds = static_cast<float>(note.start_seconds - song_time_seconds);
-			note_view.length_seconds = static_cast<float>((std::max)(note.end_seconds - note.start_seconds, 0.0));
-			lane_view.visible_notes.push_back(note_view);
-		}
-	}
-
-	void SongSession::append_visible_measure_lines(InstrumentLaneView &lane_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const
-	{
-		const std::vector<MidiChartMeasureLine> visible_measure_lines = lane_definition.midi_chart.collect_visible_measure_lines(
-			song_time_seconds,
-			kChartLookbehindSeconds,
-			kChartLookaheadSeconds);
-		lane_view.visible_measure_lines.reserve(visible_measure_lines.size());
-		for (const MidiChartMeasureLine &measure_line : visible_measure_lines)
-		{
-			HighwayMeasureLineView measure_line_view;
-			measure_line_view.offset_seconds = static_cast<float>(measure_line.time_seconds - song_time_seconds);
-			measure_line_view.is_measure = measure_line.kind == MidiChartMeasureLine::Kind::Measure;
-			measure_line_view.is_strong =
-				measure_line.kind == MidiChartMeasureLine::Kind::Measure ||
-				measure_line.kind == MidiChartMeasureLine::Kind::Strong;
-			lane_view.visible_measure_lines.push_back(measure_line_view);
-		}
-	}
-
-	void SongSession::append_visible_chart_data(PrototypePlayerView &player_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const
-	{
-		const std::vector<MidiChartNote> visible_notes = lane_definition.midi_chart.collect_visible_notes(
-			song_time_seconds,
-			kChartLookbehindSeconds,
-			kChartLookaheadSeconds);
-		player_view.visible_chart_notes.reserve(visible_notes.size());
-		for (const MidiChartNote &note : visible_notes)
-		{
-			PrototypePlayerView::ChartNoteView note_view;
-			note_view.lane = note.lane;
-			note_view.start_offset_seconds = static_cast<float>(note.start_seconds - song_time_seconds);
-			note_view.length_seconds = static_cast<float>((std::max)(note.end_seconds - note.start_seconds, 0.0));
-			player_view.visible_chart_notes.push_back(note_view);
-		}
-
-		const std::vector<MidiChartMeasureLine> visible_measure_lines = lane_definition.midi_chart.collect_visible_measure_lines(
-			song_time_seconds,
-			kChartLookbehindSeconds,
-			kChartLookaheadSeconds);
-		player_view.visible_measure_lines.reserve(visible_measure_lines.size());
-		for (const MidiChartMeasureLine &measure_line : visible_measure_lines)
-		{
-			PrototypePlayerView::ChartMeasureLineView measure_line_view;
-			measure_line_view.offset_seconds = static_cast<float>(measure_line.time_seconds - song_time_seconds);
-			measure_line_view.is_measure = measure_line.kind == MidiChartMeasureLine::Kind::Measure;
-			measure_line_view.is_strong =
-				measure_line.kind == MidiChartMeasureLine::Kind::Measure ||
-				measure_line.kind == MidiChartMeasureLine::Kind::Strong;
-			player_view.visible_measure_lines.push_back(measure_line_view);
-		}
-	}
-
-	void SongSession::append_visible_lyrics(PrototypePlayerView &player_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const
-	{
-		int display_line_index = 0;
-		if (!lane_definition.lyric_phrase_ranges.empty())
-		{
-			display_line_index = static_cast<int>(lane_definition.lyric_phrase_ranges.size() - 1);
-			for (size_t index = 0; index < lane_definition.lyric_phrase_ranges.size(); ++index)
-			{
-				if (song_time_seconds < lane_definition.lyric_phrase_ranges[index].end_seconds)
-				{
-					display_line_index = static_cast<int>(index);
-					break;
-				}
-			}
-		}
-		else
-		{
-			for (const CachedLyricToken &token : lane_definition.lyric_tokens)
-			{
-				if (token.end_seconds > song_time_seconds)
-				{
-					display_line_index = token.line_index;
-					break;
-				}
-			}
-		}
-
-		player_view.current_lyric_line_index = display_line_index;
-		bool has_display_line = false;
-		for (const CachedLyricToken &token : lane_definition.lyric_tokens)
-		{
-			if (token.line_index == display_line_index)
-			{
-				has_display_line = true;
-				break;
-			}
-		}
-		if (!has_display_line)
-		{
-			for (const CachedLyricToken &token : lane_definition.lyric_tokens)
-			{
-				if (token.line_index <= display_line_index)
-					player_view.current_lyric_line_index = token.line_index;
-			}
-		}
-
-		int next_line_index = -1;
-		for (const CachedLyricToken &token : lane_definition.lyric_tokens)
-		{
-			if (token.line_index > player_view.current_lyric_line_index)
-			{
-				next_line_index = token.line_index;
-				break;
-			}
-		}
-		player_view.next_lyric_line_index = next_line_index;
-
-		for (const CachedLyricToken &token : lane_definition.lyric_tokens)
-		{
-			if (token.line_index != player_view.current_lyric_line_index && token.line_index != next_line_index)
-				continue;
-
-			PrototypePlayerView::LyricTokenView lyric_view;
-			lyric_view.text = token.text;
-			lyric_view.start_offset_seconds = static_cast<float>(token.start_seconds - song_time_seconds);
-			lyric_view.end_offset_seconds = static_cast<float>(token.end_seconds - song_time_seconds);
-			lyric_view.is_current = lyric_view.start_offset_seconds <= 0.0f && lyric_view.end_offset_seconds > 0.0f;
-			lyric_view.is_past = lyric_view.end_offset_seconds <= 0.0f;
-			lyric_view.prepend_space = token.prepend_space;
-			lyric_view.append_hyphen = token.append_hyphen;
-			lyric_view.line_index = token.line_index;
-			player_view.visible_lyric_tokens.push_back(std::move(lyric_view));
+			player_view.visible_chart_notes = frame_cache->visible_chart_notes;
+			player_view.visible_measure_lines = frame_cache->visible_chart_measure_lines;
+			player_view.current_lyric_line_index = frame_cache->current_lyric_line_index;
+			player_view.next_lyric_line_index = frame_cache->next_lyric_line_index;
+			player_view.visible_lyric_tokens = frame_cache->visible_lyric_tokens;
 		}
 	}
 

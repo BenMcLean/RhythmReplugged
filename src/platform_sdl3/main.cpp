@@ -429,7 +429,7 @@ int main(int argc, char *argv[])
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
 
-		gameplay_renderer.render(app.gameplay_scene_view(), drawable_width, drawable_height);
+		gameplay_renderer.render(app.gameplay_snapshot().scene, drawable_width, drawable_height);
 
 		render_app_ui(
 			app,

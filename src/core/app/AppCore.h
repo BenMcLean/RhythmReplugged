@@ -44,8 +44,7 @@ namespace rhythmreplugged::core
 		const SongBrowserView &song_browser_view() const;
 		const InstrumentSelectView &instrument_select_view() const;
 		const DifficultySelectView &difficulty_select_view() const;
-		PrototypePlayerView prototype_player_view() const;
-		GameplaySceneView gameplay_scene_view() const;
+		const GameplayFrameSnapshot &gameplay_snapshot() const;
 		const ::rhythmreplugged::frontend_contract::AudioBatch &audio_batch() const;
 
 	private:

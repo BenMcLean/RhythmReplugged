@@ -50,7 +50,6 @@ namespace rhythmreplugged::ui
 		ImVec2 window_size,
 		float ui_scale);
 	void render_prototype_player_ui(
-		const core::PrototypePlayerView &player,
-		const core::GameplaySceneView &scene,
+		const core::GameplayFrameSnapshot &snapshot,
 		ImVec2 window_size);
 }

@@ -10,14 +10,6 @@ namespace
 	using namespace rhythmreplugged::core;
 	using namespace rhythmreplugged::ui;
 
-	constexpr ImU32 kLaneColors[5] = {
-		IM_COL32(90, 197, 92, 255),
-		IM_COL32(210, 62, 62, 255),
-		IM_COL32(226, 209, 63, 255),
-		IM_COL32(65, 117, 220, 255),
-		IM_COL32(234, 140, 41, 255),
-	};
-
 	float lyric_strip_panel_height(const PrototypePlayerView &player)
 	{
 		if (player.visible_lyric_tokens.empty())
@@ -779,8 +771,9 @@ namespace rhythmreplugged::ui
 		render_preload_progress_overlay(menu, window_size, ui_scale);
 	}
 
-	void render_prototype_player_ui(const PrototypePlayerView &player, const GameplaySceneView &scene, ImVec2 window_size)
+	void render_prototype_player_ui(const GameplayFrameSnapshot &snapshot, ImVec2 window_size)
 	{
+		const PrototypePlayerView &player = snapshot.player;
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -811,21 +804,6 @@ namespace rhythmreplugged::ui
 			IM_COL32(180, 188, 202, 255),
 			chart_label.c_str());
 
-		if (!scene.players.empty())
-		{
-			const auto &lanes = scene.players.front().world.lanes;
-			float label_x = canvas_pos.x + 28.0f;
-			const float label_y = canvas_pos.y + 26.0f;
-			for (const InstrumentLaneView &lane : lanes)
-			{
-				const ImU32 text_color = lane.is_active
-					? IM_COL32(245, 245, 245, 255)
-					: (lane.is_muted ? IM_COL32(255, 140, 140, 255) : IM_COL32(180, 188, 202, 255));
-				draw_list->AddText(ImVec2(label_x, label_y), text_color, lane.instrument_label.c_str());
-				label_x += ImGui::CalcTextSize(lane.instrument_label.c_str()).x + 20.0f;
-			}
-		}
-
 		draw_lyric_strip(player, canvas_pos, window_size);
 		draw_song_countdown(player, canvas_pos, window_size);
 
@@ -836,15 +814,6 @@ namespace rhythmreplugged::ui
 		{
 			const std::string muted_label = (player.playable_stem_label.empty() ? std::string("Instrument") : player.playable_stem_label) + " muted";
 			draw_status_pill("mute_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + window_size.y - 62.0f), muted_label.c_str(), IM_COL32(120, 18, 18, 210));
-		}
-
-		const float indicator_y = canvas_pos.y + window_size.y - 54.0f;
-		for (int lane = 0; lane < 5; ++lane)
-		{
-			const float x = canvas_pos.x + 32.0f + static_cast<float>(lane) * 42.0f;
-			const bool active = player.lane_held[static_cast<size_t>(lane)] || player.lane_sustaining[static_cast<size_t>(lane)];
-			draw_list->AddCircleFilled(ImVec2(x, indicator_y), 14.0f, active ? kLaneColors[lane] : IM_COL32(44, 52, 67, 225));
-			draw_list->AddCircle(ImVec2(x, indicator_y), 14.0f, IM_COL32(245, 245, 245, 210), 0, active ? 3.0f : 2.0f);
 		}
 
 		ImGui::Dummy(window_size);

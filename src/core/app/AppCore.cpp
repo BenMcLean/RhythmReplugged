@@ -763,19 +763,9 @@ namespace rhythmreplugged::core
 		return difficulty_select_menu_.view();
 	}
 
-	PrototypePlayerView AppCore::prototype_player_view() const
+	const GameplayFrameSnapshot &AppCore::gameplay_snapshot() const
 	{
-		if (mode_ != AppMode::Gameplay)
-			return {};
-		return song_session_.frame_snapshot().player;
-	}
-
-	GameplaySceneView AppCore::gameplay_scene_view() const
-	{
-		if (mode_ != AppMode::Gameplay)
-			return {};
-
-		return song_session_.frame_snapshot().scene;
+		return song_session_.frame_snapshot();
 	}
 
 	const ::rhythmreplugged::frontend_contract::AudioBatch &AppCore::audio_batch() const
