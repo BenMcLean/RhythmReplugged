@@ -185,21 +185,16 @@ namespace rhythmreplugged::core
 			return false;
 		}
 
-		std::string find_matching_file_in_directory(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
-			const std::string &song_directory,
-			std::string_view target_file_name)
+		bool is_album_cover_file(std::string_view lowered_name)
 		{
-			const std::string lowered_target = to_lower_copy(target_file_name);
-			for (const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &entry : file_system.list_directory(song_directory))
-			{
-				if (entry.is_directory)
-					continue;
-
-				if (to_lower_copy(entry.name) == lowered_target)
-					return entry.path;
-			}
-
-			return {};
+			return lowered_name == "album.png" ||
+				lowered_name == "album.jpg" ||
+				lowered_name == "album.jpeg" ||
+				lowered_name == "album.tga" ||
+				lowered_name == "album.bmp" ||
+				lowered_name == "album.psd" ||
+				lowered_name == "album.gif" ||
+				lowered_name == "album.pic";
 		}
 
 		template <typename T>
@@ -545,37 +540,33 @@ namespace rhythmreplugged::core
 	std::string resolve_cover_art_path(const ::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, const SongIniMetadata &metadata)
 	{
 		const std::string *cover = nullptr;
+		std::string lowered_cover_name;
 		if (metadata.try_get_string("cover", cover) && cover != nullptr && !cover->empty())
 		{
 			const std::string direct_path = song_directory + "/" + *cover;
 			if (file_system.path_exists(direct_path))
 				return direct_path;
-
-			const std::string matched_cover = find_matching_file_in_directory(file_system, song_directory, *cover);
-			if (!matched_cover.empty())
-				return matched_cover;
+			lowered_cover_name = to_lower_copy(*cover);
 		}
 
+		std::string matched_cover_path;
+		std::string fallback_album_cover_path;
 		for (const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &entry : file_system.list_directory(song_directory))
 		{
 			if (entry.is_directory || !has_supported_image_extension(entry.name))
 				continue;
 
 			const std::string lowered_name = to_lower_copy(entry.name);
-			if (lowered_name == "album.png" ||
-				lowered_name == "album.jpg" ||
-				lowered_name == "album.jpeg" ||
-				lowered_name == "album.tga" ||
-				lowered_name == "album.bmp" ||
-				lowered_name == "album.psd" ||
-				lowered_name == "album.gif" ||
-				lowered_name == "album.pic")
-			{
-				return entry.path;
-			}
+			if (!lowered_cover_name.empty() && lowered_name == lowered_cover_name)
+				matched_cover_path = entry.path;
+			else if (fallback_album_cover_path.empty() && is_album_cover_file(lowered_name))
+				fallback_album_cover_path = entry.path;
 		}
 
-		return {};
+		if (!matched_cover_path.empty())
+			return matched_cover_path;
+
+		return fallback_album_cover_path;
 	}
 
 	SongMetadataView make_song_metadata_view(const SongIniMetadata &metadata, const std::string &folder_name)

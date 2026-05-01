@@ -823,6 +823,8 @@ namespace rhythmreplugged::core
 
 	void AppCore::run_song_browser_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
 	{
+		song_browser_.update();
+
 		if (pressed(input_state.b, previous_input_.b))
 		{
 			std::string error_message;

@@ -1,8 +1,5 @@
 #include "core/menu/SongBrowser.h"
-#include "core/audio/StemCatalog.h"
-
 #include <algorithm>
-#include <array>
 #include <cctype>
 
 namespace rhythmreplugged::core
@@ -252,6 +249,9 @@ namespace rhythmreplugged::core
 			return load_directory(entry.path, error_message);
 		}
 
+		if (!entries_[static_cast<size_t>(selected_index_)].metadata_loaded)
+			hydrate_song_entry(static_cast<size_t>(selected_index_));
+
 		if (!entry.is_valid_song)
 		{
 			status_message_ = entry.error_message;
@@ -263,6 +263,24 @@ namespace rhythmreplugged::core
 		status_message_.clear();
 		rebuild_view();
 		return true;
+	}
+
+	void SongBrowser::update()
+	{
+		static constexpr size_t kHydrationBudgetPerUpdate = 2;
+
+		bool changed = false;
+		for (size_t processed = 0; processed < kHydrationBudgetPerUpdate; ++processed)
+		{
+			const std::optional<size_t> entry_index = next_song_entry_to_hydrate();
+			if (!entry_index.has_value())
+				break;
+
+			changed = hydrate_song_entry(*entry_index) || changed;
+		}
+
+		if (changed)
+			rebuild_view();
 	}
 
 	void SongBrowser::clear_status_message()
@@ -362,71 +380,116 @@ namespace rhythmreplugged::core
 		entry.name = directory_entry.name;
 		entry.sort_name = directory_entry.name;
 		entry.is_song = true;
+		entry.is_valid_song = true;
+		const auto cached_it = song_entry_cache_.find(directory_entry.path);
+		if (cached_it != song_entry_cache_.end())
+			apply_cached_song_entry_data(entry, cached_it->second);
+		return entry;
+	}
 
-		const SongIniParseResult parse_result = parse_song_ini(file_system_, directory_entry.path + "/song.ini");
+	bool SongBrowser::hydrate_song_entry(size_t index)
+	{
+		if (index >= entries_.size())
+			return false;
+
+		BrowserEntry &entry = entries_[index];
+		if (!entry.is_song || entry.metadata_loaded)
+			return false;
+
+		CachedSongEntryData cached_data;
+		cached_data.display_name = entry.name;
+		cached_data.is_valid_song = false;
+		cached_data.metadata_loaded = true;
+
+		const SongIniParseResult parse_result = parse_song_ini(file_system_, entry.path + "/song.ini");
 		if (!parse_result.has_song_section)
 		{
-			entry.error_message = parse_result.error_message;
-			return entry;
+			cached_data.error_message = parse_result.error_message;
+			song_entry_cache_[entry.path] = cached_data;
+			apply_cached_song_entry_data(entry, cached_data);
+			return true;
 		}
 
 		if (!parse_result.parsed_successfully)
 		{
-			entry.error_message = parse_result.error_message;
-			return entry;
+			cached_data.error_message = parse_result.error_message;
+			song_entry_cache_[entry.path] = cached_data;
+			apply_cached_song_entry_data(entry, cached_data);
+			return true;
 		}
 
-		const SongMetadataView metadata_view = make_song_metadata_view(parse_result.metadata, directory_entry.name);
-		entry.name = metadata_view.name;
-		entry.subtitle = metadata_view.artist;
-		entry.cover_art_path = resolve_cover_art_path(file_system_, directory_entry.path, parse_result.metadata);
+		const SongMetadataView metadata_view = make_song_metadata_view(parse_result.metadata, entry.name);
+		cached_data.display_name = metadata_view.name;
+		cached_data.subtitle = metadata_view.artist;
+		cached_data.cover_art_path = resolve_cover_art_path(file_system_, entry.path, parse_result.metadata);
 
 		const std::string *song_name = nullptr;
 		if (!parse_result.metadata.try_get_string("name", song_name) || song_name == nullptr || song_name->empty())
 		{
-			entry.error_message = "song.ini is missing a non-empty name field.";
-			return entry;
+			cached_data.error_message = "song.ini is missing a non-empty name field.";
+			song_entry_cache_[entry.path] = cached_data;
+			apply_cached_song_entry_data(entry, cached_data);
+			return true;
 		}
 
-		if (!contains_supported_chart(directory_entry.path))
-		{
-			entry.error_message = "No supported chart file was found.";
-			return entry;
-		}
-
-		if (!contains_supported_audio(directory_entry.path))
-		{
-			entry.error_message = "No supported audio stem was found.";
-			return entry;
-		}
-
-		entry.is_valid_song = true;
-		return entry;
+		cached_data.is_valid_song = true;
+		song_entry_cache_[entry.path] = cached_data;
+		apply_cached_song_entry_data(entry, cached_data);
+		return true;
 	}
 
-	bool SongBrowser::contains_supported_chart(const std::string &directory_path) const
+	void SongBrowser::apply_cached_song_entry_data(BrowserEntry &entry, const CachedSongEntryData &cached_data) const
 	{
-		static constexpr std::array<const char *, 4> k_chart_names = {
-			"notes.mid", "notes.midi", "notes.chart", "notes.txt"};
-
-		for (const char *name : k_chart_names)
-		{
-			if (file_system_.path_exists(directory_path + "/" + name))
-				return true;
-		}
-
-		return false;
+		entry.name = cached_data.display_name.empty() ? entry.name : cached_data.display_name;
+		entry.subtitle = cached_data.subtitle;
+		entry.cover_art_path = cached_data.cover_art_path;
+		entry.error_message = cached_data.error_message;
+		entry.is_valid_song = cached_data.is_valid_song;
+		entry.metadata_loaded = cached_data.metadata_loaded;
 	}
 
-	bool SongBrowser::contains_supported_audio(const std::string &directory_path) const
+	std::optional<size_t> SongBrowser::next_song_entry_to_hydrate() const
 	{
-		for (std::string_view stem : kPlayableStemNames)
+		if (entries_.empty())
+			return std::nullopt;
+
+		if (selected_index_ >= 0 && selected_index_ < static_cast<int>(entries_.size()))
 		{
-			if (file_system_.path_exists(directory_path + "/" + std::string(stem) + ".ogg"))
-				return true;
+			const BrowserEntry &selected = entries_[static_cast<size_t>(selected_index_)];
+			if (selected.is_song && !selected.metadata_loaded)
+				return static_cast<size_t>(selected_index_);
 		}
 
-		return false;
+		for (size_t distance = 1; distance < entries_.size(); ++distance)
+		{
+			if (selected_index_ >= 0)
+			{
+				const int forward = selected_index_ + static_cast<int>(distance);
+				if (forward >= 0 && forward < static_cast<int>(entries_.size()))
+				{
+					const BrowserEntry &entry = entries_[static_cast<size_t>(forward)];
+					if (entry.is_song && !entry.metadata_loaded)
+						return static_cast<size_t>(forward);
+				}
+
+				const int backward = selected_index_ - static_cast<int>(distance);
+				if (backward >= 0 && backward < static_cast<int>(entries_.size()))
+				{
+					const BrowserEntry &entry = entries_[static_cast<size_t>(backward)];
+					if (entry.is_song && !entry.metadata_loaded)
+						return static_cast<size_t>(backward);
+				}
+			}
+		}
+
+		for (size_t index = 0; index < entries_.size(); ++index)
+		{
+			const BrowserEntry &entry = entries_[index];
+			if (entry.is_song && !entry.metadata_loaded)
+				return index;
+		}
+
+		return std::nullopt;
 	}
 
 	int SongBrowser::first_selectable_index() const
