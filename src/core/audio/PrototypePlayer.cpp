@@ -280,6 +280,46 @@ namespace rhythmreplugged::core
 			track.current_gain = track.target_gain.load();
 	}
 
+	PrototypePlayer::PlaybackState PrototypePlayer::playback_state() const
+	{
+		PlaybackState state;
+		state.frame_index = frame_index_;
+		state.current_gains.reserve(stems_.size());
+		state.target_gains.reserve(stems_.size());
+		for (const StemTrack &track : stems_)
+		{
+			state.current_gains.push_back(track.current_gain);
+			state.target_gains.push_back(track.target_gain.load());
+		}
+		return state;
+	}
+
+	bool PrototypePlayer::restore_playback_state(const PlaybackState &state, std::string &error_message)
+	{
+		if (!is_loaded())
+		{
+			error_message = "Song audio is not loaded.";
+			return false;
+		}
+
+		if (state.current_gains.size() != stems_.size() || state.target_gains.size() != stems_.size())
+		{
+			error_message = "Playback state stem count does not match the loaded song.";
+			return false;
+		}
+
+		frame_index_ = (std::min)(state.frame_index, longest_track_frame_count());
+		for (size_t index = 0; index < stems_.size(); ++index)
+		{
+			StemTrack &track = stems_[index];
+			track.current_gain = std::clamp(state.current_gains[index], 0.0f, 1.0f);
+			track.target_gain.store(std::clamp(state.target_gains[index], 0.0f, 1.0f));
+		}
+
+		error_message.clear();
+		return true;
+	}
+
 	void PrototypePlayer::render_interleaved_s16(std::int16_t *output, size_t frame_count)
 	{
 		if (output == nullptr || frame_count == 0)

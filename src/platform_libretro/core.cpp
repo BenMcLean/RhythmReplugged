@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdarg>
+#include <cstring>
 #include <cstdio>
 #include <filesystem>
 #include <string>
@@ -37,6 +38,7 @@ namespace
 
 	constexpr unsigned kFrameWidth = 1280;
 	constexpr unsigned kFrameHeight = 720;
+	constexpr size_t kSerializedPlayStateMaxSize = 4096;
 	constexpr retro_usec_t kNominalFrameTimeUsec = 1000000 / kAppFramesPerSecond;
 	constexpr retro_usec_t kMinimumFrameTimeUsec = kNominalFrameTimeUsec / 2;
 	constexpr retro_usec_t kMaximumFrameTimeUsec = kNominalFrameTimeUsec * 2;
@@ -491,6 +493,12 @@ namespace
 		g_pending_audio_samples.clear();
 	}
 
+	void clear_pending_audio_queue()
+	{
+		g_pending_audio_samples.clear();
+		g_audio_frame_time_remainder = 0;
+	}
+
 	bool configure_hw_render()
 	{
 		if (g_environment == nullptr)
@@ -678,8 +686,7 @@ RR_LIBRETRO_EXPORT void retro_reset(void)
 
 	std::string error_message;
 	sync_frontend_options();
-	g_pending_audio_samples.clear();
-	g_audio_frame_time_remainder = 0;
+	clear_pending_audio_queue();
 	AppLaunchRequest launch_request;
 	launch_request.songs_root_path = g_root_path;
 	launch_request.restrict_to_startup_song = g_restrict_to_startup_song;
@@ -698,8 +705,7 @@ RR_LIBRETRO_EXPORT bool retro_load_game(const struct retro_game_info *game)
 
 	const ::rhythmreplugged::frontend_contract::FrontendOptions frontend_options = query_frontend_options();
 	g_app.set_frontend_options(frontend_options);
-	g_pending_audio_samples.clear();
-	g_audio_frame_time_remainder = 0;
+	clear_pending_audio_queue();
 
 	if (game == nullptr || game->path == nullptr)
 	{
@@ -751,8 +757,7 @@ RR_LIBRETRO_EXPORT void retro_unload_game(void)
 	g_root_path.clear();
 	g_restrict_to_startup_song = false;
 	g_is_loaded = false;
-	g_pending_audio_samples.clear();
-	g_audio_frame_time_remainder = 0;
+	clear_pending_audio_queue();
 }
 
 RR_LIBRETRO_EXPORT unsigned retro_get_region(void)
@@ -774,21 +779,49 @@ RR_LIBRETRO_EXPORT size_t retro_get_memory_size(unsigned id)
 
 RR_LIBRETRO_EXPORT size_t retro_serialize_size(void)
 {
-	return 0;
+	const size_t gameplay_size = g_app.gameplay_play_state_serialized_size();
+	return gameplay_size > 0 ? (std::max)(gameplay_size, kSerializedPlayStateMaxSize) : kSerializedPlayStateMaxSize;
 }
 
 RR_LIBRETRO_EXPORT bool retro_serialize(void *data, size_t size)
 {
-	(void)data;
-	(void)size;
-	return false;
+	if (data == nullptr)
+		return false;
+
+	std::vector<std::uint8_t> bytes;
+	std::string error_message;
+	if (!g_app.serialize_gameplay_play_state(bytes, error_message))
+	{
+		if (!error_message.empty())
+			log_message(RETRO_LOG_WARN, "Save-state serialize rejected: %s\n", error_message.c_str());
+		return false;
+	}
+	if (size < bytes.size())
+	{
+		log_message(RETRO_LOG_WARN, "Save-state buffer too small: need %zu bytes, got %zu.\n", bytes.size(), size);
+		return false;
+	}
+
+	std::memcpy(data, bytes.data(), bytes.size());
+	return true;
 }
 
 RR_LIBRETRO_EXPORT bool retro_unserialize(const void *data, size_t size)
 {
-	(void)data;
-	(void)size;
-	return false;
+	if (data == nullptr || size == 0)
+		return false;
+
+	clear_pending_audio_queue();
+
+	std::string error_message;
+	if (!g_app.deserialize_gameplay_play_state(static_cast<const std::uint8_t *>(data), size, error_message))
+	{
+		if (!error_message.empty())
+			log_message(RETRO_LOG_WARN, "Save-state restore rejected: %s\n", error_message.c_str());
+		return false;
+	}
+
+	return true;
 }
 
 RR_LIBRETRO_EXPORT void retro_cheat_reset(void)
@@ -841,7 +874,7 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 		framebuffer = static_cast<GLuint>(g_hw_render.get_current_framebuffer());
 	if (g_gl_bind_framebuffer != nullptr)
 		g_gl_bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
-	g_gameplay_renderer.render(g_app.gameplay_scene_view(), static_cast<int>(kFrameWidth), static_cast<int>(kFrameHeight));
+	g_gameplay_renderer.render(g_app.gameplay_snapshot().scene, static_cast<int>(kFrameWidth), static_cast<int>(kFrameHeight));
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 	if (g_video_refresh != nullptr)

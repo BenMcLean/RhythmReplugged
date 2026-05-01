@@ -20,6 +20,13 @@ namespace rhythmreplugged::core
 		static constexpr int kRuntimeSampleRate = 48000;
 		static constexpr int kRuntimeChannelCount = 2;
 
+		struct PlaybackState
+		{
+			size_t frame_index = 0;
+			std::vector<float> current_gains;
+			std::vector<float> target_gains;
+		};
+
 		struct PreloadedStemTrack
 		{
 			std::string stem_name;
@@ -52,6 +59,8 @@ namespace rhythmreplugged::core
 		const SongMetadataView &metadata() const;
 		bool playback_finished() const;
 		void rewind();
+		PlaybackState playback_state() const;
+		bool restore_playback_state(const PlaybackState &state, std::string &error_message);
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
 		::rhythmreplugged::frontend_contract::AudioBatch generate_audio_batch(size_t frame_count);
 		static bool preload(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,

@@ -12,7 +12,7 @@ hw_render = "true"
 required_hw_api = "OpenGL >= 3.3 | OpenGL ES >= 3.0"
 needs_fullpath = "true"
 
-savestate = "false"
+savestate = "true"
 cheats = "false"
 input_descriptors = "false"
 memory_descriptors = "false"

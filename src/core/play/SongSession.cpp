@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <optional>
 
 namespace rhythmreplugged::core
@@ -24,6 +25,83 @@ namespace rhythmreplugged::core
 			double start_seconds = 0.0;
 			double end_seconds = 0.0;
 		};
+
+		constexpr std::uint32_t kSerializedPlayStateMagic = 0x52525053u; // RRPS
+		constexpr std::uint32_t kSerializedPlayStateVersion = 3u;
+
+		struct SerializedPlayStateHeader
+		{
+			std::uint32_t magic = kSerializedPlayStateMagic;
+			std::uint32_t version = kSerializedPlayStateVersion;
+			std::uint32_t payload_size = 0;
+			std::uint64_t session_fingerprint = 0;
+			std::uint32_t gameplay_mode = 0;
+			std::uint32_t lane_count = 0;
+			std::int32_t active_lane_index = 0;
+			double timing_offset_seconds = 0.0;
+			std::int32_t sample_rate = 0;
+			std::uint64_t frame_remainder = 0;
+			std::uint64_t emitted_frames = 0;
+			std::uint64_t audio_frame_index = 0;
+			std::uint32_t audio_stem_count = 0;
+		};
+
+		struct SerializedLaneRuntimeState
+		{
+			std::uint8_t lane_held_mask = 0;
+			std::uint8_t reserved0 = 0;
+			std::uint8_t reserved1 = 0;
+			std::uint8_t reserved2 = 0;
+			double lane_sustain_end_times[5]{};
+			double lane_sustain_release_times[5]{};
+			std::uint64_t input_generation = 0;
+			std::uint64_t consumed_input_generation = 0;
+			std::uint64_t next_note_index = 0;
+			float stem_target_gain = 1.0f;
+		};
+
+		template <typename T>
+		void append_bytes(std::vector<std::uint8_t> &bytes, const T &value)
+		{
+			const size_t write_offset = bytes.size();
+			bytes.resize(write_offset + sizeof(T));
+			std::memcpy(bytes.data() + write_offset, &value, sizeof(T));
+		}
+
+		template <typename T>
+		bool read_bytes(const std::uint8_t *data, size_t size, size_t &offset, T &value)
+		{
+			if (offset > size || size - offset < sizeof(T))
+				return false;
+
+			std::memcpy(&value, data + offset, sizeof(T));
+			offset += sizeof(T);
+			return true;
+		}
+
+		void hash_bytes(std::uint64_t &hash, const void *data, size_t size)
+		{
+			const auto *bytes = static_cast<const std::uint8_t *>(data);
+			for (size_t index = 0; index < size; ++index)
+			{
+				hash ^= static_cast<std::uint64_t>(bytes[index]);
+				hash *= 1099511628211ull;
+			}
+		}
+
+		template <typename T>
+		void hash_value(std::uint64_t &hash, const T &value)
+		{
+			hash_bytes(hash, &value, sizeof(T));
+		}
+
+		void hash_string(std::uint64_t &hash, std::string_view value)
+		{
+			const std::uint64_t size = static_cast<std::uint64_t>(value.size());
+			hash_value(hash, size);
+			if (!value.empty())
+				hash_bytes(hash, value.data(), value.size());
+		}
 
 		bool is_displayable_lyric(const MidiChartTextEvent &event)
 		{
@@ -611,6 +689,222 @@ namespace rhythmreplugged::core
 	double SongSession::timing_offset_seconds() const
 	{
 		return play_state_.timing_offset_seconds;
+	}
+
+	size_t SongSession::play_state_serialized_size() const
+	{
+		if (!is_loaded())
+			return 0;
+
+		const PrototypePlayer::PlaybackState audio_state = prototype_player_.playback_state();
+		return sizeof(SerializedPlayStateHeader) +
+			play_state_.lanes.size() * sizeof(SerializedLaneRuntimeState) +
+			audio_state.current_gains.size() * sizeof(float) +
+			audio_state.target_gains.size() * sizeof(float);
+	}
+
+	bool SongSession::serialize_play_state(std::vector<std::uint8_t> &bytes, std::string &error_message) const
+	{
+		bytes.clear();
+		if (!is_loaded())
+		{
+			error_message = "Song session is not loaded.";
+			return false;
+		}
+
+		const PrototypePlayer::PlaybackState audio_state = prototype_player_.playback_state();
+		if (audio_state.current_gains.size() != audio_state.target_gains.size())
+		{
+			error_message = "Playback state gain vectors are inconsistent.";
+			return false;
+		}
+
+		const Transport::State transport_state = transport_.state();
+		SerializedPlayStateHeader header;
+		header.payload_size = static_cast<std::uint32_t>(play_state_serialized_size());
+		header.session_fingerprint = session_fingerprint();
+		header.gameplay_mode = static_cast<std::uint32_t>(play_state_.gameplay_mode);
+		header.lane_count = static_cast<std::uint32_t>(play_state_.lanes.size());
+		header.active_lane_index = play_state_.active_lane_index;
+		header.timing_offset_seconds = play_state_.timing_offset_seconds;
+		header.sample_rate = transport_state.sample_rate;
+		header.frame_remainder = static_cast<std::uint64_t>(transport_state.frame_remainder);
+		header.emitted_frames = static_cast<std::uint64_t>(transport_state.emitted_frames);
+		header.audio_frame_index = static_cast<std::uint64_t>(audio_state.frame_index);
+		header.audio_stem_count = static_cast<std::uint32_t>(audio_state.current_gains.size());
+
+		bytes.reserve(play_state_serialized_size());
+		append_bytes(bytes, header);
+		for (const GameplayLaneRuntimeState &lane : play_state_.lanes)
+		{
+			SerializedLaneRuntimeState serialized_lane;
+			serialized_lane.lane_held_mask = lane_mask_from_state(lane.lane_held);
+			for (size_t fret = 0; fret < lane.lane_sustain_end_times_.size(); ++fret)
+			{
+				serialized_lane.lane_sustain_end_times[fret] = lane.lane_sustain_end_times_[fret];
+				serialized_lane.lane_sustain_release_times[fret] = lane.lane_sustain_release_times_[fret];
+			}
+			serialized_lane.input_generation = lane.input_generation;
+			serialized_lane.consumed_input_generation = lane.consumed_input_generation;
+			serialized_lane.next_note_index = static_cast<std::uint64_t>(lane.next_note_index);
+			serialized_lane.stem_target_gain = lane.stem_target_gain;
+			append_bytes(bytes, serialized_lane);
+		}
+
+		for (const float gain : audio_state.current_gains)
+			append_bytes(bytes, gain);
+		for (const float gain : audio_state.target_gains)
+			append_bytes(bytes, gain);
+
+		error_message.clear();
+		return true;
+	}
+
+	bool SongSession::deserialize_play_state(const std::uint8_t *data, size_t size, std::string &error_message)
+	{
+		if (!is_loaded())
+		{
+			error_message = "Song session is not loaded.";
+			return false;
+		}
+		if (data == nullptr || size == 0)
+		{
+			error_message = "Serialized play-state data is empty.";
+			return false;
+		}
+
+		size_t offset = 0;
+		SerializedPlayStateHeader header;
+		if (!read_bytes(data, size, offset, header))
+		{
+			error_message = "Serialized play-state header is truncated.";
+			return false;
+		}
+		if (header.magic != kSerializedPlayStateMagic)
+		{
+			error_message = "Serialized play-state magic does not match.";
+			return false;
+		}
+		if (header.version != kSerializedPlayStateVersion)
+		{
+			error_message = "Serialized play-state version is not supported.";
+			return false;
+		}
+		if (header.payload_size < sizeof(SerializedPlayStateHeader) || header.payload_size > size)
+		{
+			error_message = "Serialized play-state payload size is invalid.";
+			return false;
+		}
+		if (header.session_fingerprint != session_fingerprint())
+		{
+			error_message = "Save state belongs to a different song or chart configuration.";
+			return false;
+		}
+		if (header.gameplay_mode > static_cast<std::uint32_t>(GameplayMode::Freeplay))
+		{
+			error_message = "Serialized play-state gameplay mode is invalid.";
+			return false;
+		}
+		if (header.lane_count != play_state_.lanes.size())
+		{
+			error_message = "Serialized play-state lane count does not match the loaded song session.";
+			return false;
+		}
+		if (header.active_lane_index < 0 ||
+			header.active_lane_index >= static_cast<std::int32_t>(play_state_.lanes.size()))
+		{
+			error_message = "Serialized play-state active lane index is out of range.";
+			return false;
+		}
+		if (header.sample_rate != transport_.sample_rate())
+		{
+			error_message = "Serialized play-state sample rate does not match the loaded song session.";
+			return false;
+		}
+
+		const PrototypePlayer::PlaybackState current_audio_state = prototype_player_.playback_state();
+		if (header.audio_stem_count != current_audio_state.current_gains.size())
+		{
+			error_message = "Serialized play-state audio stem count does not match the loaded song session.";
+			return false;
+		}
+
+		PlayState restored_play_state = play_state_;
+		restored_play_state.gameplay_mode = static_cast<GameplayMode>(header.gameplay_mode);
+		restored_play_state.active_lane_index = header.active_lane_index;
+		restored_play_state.timing_offset_seconds = std::clamp(header.timing_offset_seconds, -0.250, 0.250);
+		restored_play_state.lanes.resize(play_state_.lanes.size());
+
+		for (size_t lane_index = 0; lane_index < restored_play_state.lanes.size(); ++lane_index)
+		{
+			SerializedLaneRuntimeState serialized_lane;
+			if (!read_bytes(data, size, offset, serialized_lane))
+			{
+				error_message = "Serialized play-state lane data is truncated.";
+				return false;
+			}
+
+			GameplayLaneRuntimeState &lane = restored_play_state.lanes[lane_index];
+			for (size_t fret = 0; fret < lane.lane_held.size(); ++fret)
+			{
+				lane.lane_held[fret] = (serialized_lane.lane_held_mask & static_cast<std::uint8_t>(1u << fret)) != 0;
+				lane.lane_sustain_end_times_[fret] = serialized_lane.lane_sustain_end_times[fret];
+				lane.lane_sustain_release_times_[fret] = serialized_lane.lane_sustain_release_times[fret];
+			}
+			lane.input_generation = serialized_lane.input_generation;
+			lane.consumed_input_generation = serialized_lane.consumed_input_generation;
+			lane.next_note_index = static_cast<size_t>(serialized_lane.next_note_index);
+			lane.stem_target_gain = std::clamp(serialized_lane.stem_target_gain, 0.0f, 1.0f);
+
+			const size_t note_count = gameplay_lanes_[lane_index].midi_chart.notes().size();
+			if (lane.next_note_index > note_count)
+			{
+				error_message = "Serialized play-state note progress is out of range.";
+				return false;
+			}
+		}
+
+		PrototypePlayer::PlaybackState restored_audio_state;
+		restored_audio_state.frame_index = static_cast<size_t>(header.audio_frame_index);
+		restored_audio_state.current_gains.resize(header.audio_stem_count);
+		restored_audio_state.target_gains.resize(header.audio_stem_count);
+		for (float &gain : restored_audio_state.current_gains)
+		{
+			if (!read_bytes(data, size, offset, gain))
+			{
+				error_message = "Serialized play-state current audio gain data is truncated.";
+				return false;
+			}
+		}
+		for (float &gain : restored_audio_state.target_gains)
+		{
+			if (!read_bytes(data, size, offset, gain))
+			{
+				error_message = "Serialized play-state target audio gain data is truncated.";
+				return false;
+			}
+		}
+		if (offset != header.payload_size)
+		{
+			error_message = "Serialized play-state payload is truncated or malformed.";
+			return false;
+		}
+
+		play_state_ = std::move(restored_play_state);
+		Transport::State restored_transport_state;
+		restored_transport_state.sample_rate = header.sample_rate;
+		restored_transport_state.frame_remainder = static_cast<size_t>(header.frame_remainder);
+		restored_transport_state.emitted_frames = static_cast<size_t>(header.emitted_frames);
+		transport_.restore_state(restored_transport_state);
+		if (!prototype_player_.restore_playback_state(restored_audio_state, error_message))
+			return false;
+
+		for (size_t lane_index = 0; lane_index < play_state_.lanes.size(); ++lane_index)
+			set_lane_stem_target_gain(lane_index, play_state_.lanes[lane_index].stem_target_gain);
+
+		refresh_frame_snapshot({});
+		error_message.clear();
+		return true;
 	}
 
 	PrototypePlayerView SongSession::view(const std::string &status_message) const
@@ -1334,5 +1628,49 @@ namespace rhythmreplugged::core
 	double SongSession::adjusted_song_time_seconds() const
 	{
 		return (std::max)(0.0, transport_.song_time_seconds() - play_state_.timing_offset_seconds);
+	}
+
+	std::uint64_t SongSession::session_fingerprint() const
+	{
+		std::uint64_t hash = 1469598103934665603ull;
+		hash_string(hash, prototype_player_.metadata().name);
+		hash_string(hash, prototype_player_.metadata().artist);
+		hash_string(hash, prototype_player_.metadata().album);
+		hash_string(hash, prototype_player_.metadata().charter);
+		const double audio_duration_seconds = prototype_player_.duration_seconds();
+		hash_value(hash, audio_duration_seconds);
+		hash_value(hash, play_state_.gameplay_mode);
+		const std::uint64_t lane_count = static_cast<std::uint64_t>(gameplay_lanes_.size());
+		hash_value(hash, lane_count);
+
+		for (const GameplayLaneDefinition &lane : gameplay_lanes_)
+		{
+			hash_value(hash, lane.instrument);
+			hash_value(hash, lane.instrument_type);
+			hash_string(hash, lane.instrument_label);
+			hash_string(hash, lane.midi_chart.track_name());
+			hash_string(hash, lane.midi_chart.difficulty_name());
+			const double lane_duration_seconds = lane.midi_chart.duration_seconds();
+			hash_value(hash, lane_duration_seconds);
+
+			const std::uint64_t stem_count = static_cast<std::uint64_t>(lane.stem_names.size());
+			hash_value(hash, stem_count);
+			for (const std::string &stem_name : lane.stem_names)
+				hash_string(hash, stem_name);
+
+			const std::vector<MidiChartNote> &notes = lane.midi_chart.notes();
+			const std::uint64_t note_count = static_cast<std::uint64_t>(notes.size());
+			hash_value(hash, note_count);
+			for (const MidiChartNote &note : notes)
+			{
+				hash_value(hash, note.lane);
+				hash_value(hash, note.tick);
+				hash_value(hash, note.end_tick);
+				hash_value(hash, note.start_seconds);
+				hash_value(hash, note.end_seconds);
+			}
+		}
+
+		return hash;
 	}
 }

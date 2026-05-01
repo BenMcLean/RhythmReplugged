@@ -738,6 +738,34 @@ namespace rhythmreplugged::core
 		return preload_status.sample_rate;
 	}
 
+	size_t AppCore::gameplay_play_state_serialized_size() const
+	{
+		return mode_ == AppMode::Gameplay ? song_session_.play_state_serialized_size() : 0;
+	}
+
+	bool AppCore::serialize_gameplay_play_state(std::vector<std::uint8_t> &bytes, std::string &error_message) const
+	{
+		if (mode_ != AppMode::Gameplay)
+		{
+			bytes.clear();
+			error_message = "Gameplay is not active.";
+			return false;
+		}
+
+		return song_session_.serialize_play_state(bytes, error_message);
+	}
+
+	bool AppCore::deserialize_gameplay_play_state(const std::uint8_t *data, size_t size, std::string &error_message)
+	{
+		if (mode_ != AppMode::Gameplay)
+		{
+			error_message = "Gameplay is not active.";
+			return false;
+		}
+
+		return song_session_.deserialize_play_state(data, size, error_message);
+	}
+
 	AppMode AppCore::mode() const
 	{
 		return mode_;

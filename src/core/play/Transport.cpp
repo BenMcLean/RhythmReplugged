@@ -69,4 +69,26 @@ namespace rhythmreplugged::core
 	{
 		return beats_per_minute > 0.0 ? song_time_seconds() * (beats_per_minute / 60.0) : 0.0;
 	}
+
+	Transport::State Transport::state() const
+	{
+		State state;
+		state.sample_rate = sample_rate_.load();
+		state.frame_remainder = frame_remainder_;
+		state.emitted_frames = emitted_frames_.load();
+		return state;
+	}
+
+	void Transport::restore_state(const State &state)
+	{
+		if (state.sample_rate <= 0)
+		{
+			reset();
+			return;
+		}
+
+		sample_rate_.store(state.sample_rate);
+		frame_remainder_ = state.frame_remainder;
+		emitted_frames_.store(state.emitted_frames);
+	}
 }

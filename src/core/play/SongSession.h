@@ -64,6 +64,9 @@ namespace rhythmreplugged::core
 		bool playback_finished() const;
 		void set_timing_offset_seconds(double offset_seconds);
 		double timing_offset_seconds() const;
+		size_t play_state_serialized_size() const;
+		bool serialize_play_state(std::vector<std::uint8_t> &bytes, std::string &error_message) const;
+		bool deserialize_play_state(const std::uint8_t *data, size_t size, std::string &error_message);
 		PrototypePlayerView view(const std::string &status_message) const;
 		void refresh_frame_snapshot(const std::string &status_message);
 		const GameplayFrameSnapshot &frame_snapshot() const;
@@ -147,6 +150,7 @@ namespace rhythmreplugged::core
 		void advance_inactive_lane(size_t lane_index, double song_time_seconds);
 		size_t active_lane_index() const;
 		double adjusted_song_time_seconds() const;
+		std::uint64_t session_fingerprint() const;
 
 		PrototypePlayer prototype_player_;
 		Transport transport_;

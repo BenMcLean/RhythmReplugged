@@ -38,6 +38,9 @@ namespace rhythmreplugged::core
 		void finalize_audio_stop();
 		int sample_rate() const override;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count) override;
+		size_t gameplay_play_state_serialized_size() const;
+		bool serialize_gameplay_play_state(std::vector<std::uint8_t> &bytes, std::string &error_message) const;
+		bool deserialize_gameplay_play_state(const std::uint8_t *data, size_t size, std::string &error_message);
 
 		AppMode mode() const;
 		MenuScreen menu_screen() const;

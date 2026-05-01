@@ -256,7 +256,7 @@ if(RR_BUILD_LIBRETRO_CORE)
 
 	set_target_properties(platform_libretro PROPERTIES
 		PREFIX ""
-		OUTPUT_NAME "rhythmreplugged"
+		OUTPUT_NAME "rhythmreplugged_libretro"
 	)
 
 	add_custom_target(stage_libretro
@@ -265,11 +265,17 @@ if(RR_BUILD_LIBRETRO_CORE)
 			"$<TARGET_FILE:platform_libretro>"
 			"${RR_DIST_LIBRETRO_DIR}/$<TARGET_FILE_NAME:platform_libretro>"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-			"${CMAKE_CURRENT_SOURCE_DIR}/rhythmreplugged.info"
-			"${RR_DIST_LIBRETRO_DIR}/rhythmreplugged.info"
+			"${CMAKE_CURRENT_SOURCE_DIR}/rhythmreplugged_libretro.info"
+			"${RR_DIST_LIBRETRO_DIR}/rhythmreplugged_libretro.info"
 		DEPENDS platform_libretro
 		VERBATIM
 	)
+
+	if(RR_BUILD_SDL3_FRONTEND)
+		add_custom_target(windows_artifacts
+			DEPENDS RhythmReplugged platform_libretro
+		)
+	endif()
 endif()
 
 add_custom_target(stage)
