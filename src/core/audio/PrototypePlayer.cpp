@@ -13,6 +13,14 @@ namespace rhythmreplugged::core
 		constexpr float kStemFadeDurationSeconds = 0.012f;
 		constexpr size_t kProgressReportBytes = 1024u * 1024u;
 
+		struct DecodedStemPcm
+		{
+			std::vector<float> samples;
+			int channels = 0;
+			int sample_rate = 0;
+			size_t frame_count = 0;
+		};
+
 		std::string folder_name_from_path(const std::string &path)
 		{
 			const size_t slash = path.find_last_of("/\\");
@@ -80,6 +88,12 @@ namespace rhythmreplugged::core
 				return std::min(current + max_step, target);
 
 			return std::max(current - max_step, target);
+		}
+
+		std::int16_t clamp_float_to_s16(float sample)
+		{
+			const float clamped = std::clamp(sample, -1.0f, 1.0f);
+			return static_cast<std::int16_t>(std::lrintf(clamped * 32767.0f));
 		}
 	}
 
@@ -265,7 +279,8 @@ namespace rhythmreplugged::core
 				float mixed = 0.0f;
 				for (StemTrack &track : stems_)
 				{
-					mixed += sample_track_channel(track, frame_index_, channel) * track.current_gain;
+					const float sample = static_cast<float>(sample_track_channel(track, frame_index_, channel)) / 32767.0f;
+					mixed += sample * track.current_gain;
 				}
 				mixed = std::clamp(mixed, -1.0f, 1.0f);
 				output[output_index] = static_cast<std::int16_t>(std::lrintf(mixed * 32767.0f));
@@ -291,7 +306,10 @@ namespace rhythmreplugged::core
 		std::string &error_message,
 		const DecodeProgressCallback &progress_callback)
 	{
-		return decode_vorbis(bytes, track, error_message, progress_callback);
+		if (!decode_vorbis(bytes, track, error_message, progress_callback))
+			return false;
+
+		return normalize_runtime_audio(track, error_message);
 	}
 
 	bool PrototypePlayer::decode_vorbis(const std::vector<std::uint8_t> &bytes,
@@ -315,6 +333,7 @@ namespace rhythmreplugged::core
 		size_t last_reported_offset = 0;
 		do
 		{
+			DecodedStemPcm decoded_pcm;
 			vorbis_info *info = ov_info(&vorbis_file, -1);
 			if (info == nullptr)
 			{
@@ -322,9 +341,9 @@ namespace rhythmreplugged::core
 				break;
 			}
 
-			track.channels = info->channels;
-			track.sample_rate = static_cast<int>(info->rate);
-			if (track.channels <= 0 || track.sample_rate <= 0)
+			decoded_pcm.channels = info->channels;
+			decoded_pcm.sample_rate = static_cast<int>(info->rate);
+			if (decoded_pcm.channels <= 0 || decoded_pcm.sample_rate <= 0)
 			{
 				error_message = "OGG stream has an invalid channel count or sample rate.";
 				break;
@@ -348,14 +367,14 @@ namespace rhythmreplugged::core
 					break;
 				}
 
-				const size_t start_index = track.samples.size();
-				track.samples.resize(start_index + static_cast<size_t>(frames_read) * static_cast<size_t>(track.channels));
+				const size_t start_index = decoded_pcm.samples.size();
+				decoded_pcm.samples.resize(start_index + static_cast<size_t>(frames_read) * static_cast<size_t>(decoded_pcm.channels));
 
 				for (long frame = 0; frame < frames_read; ++frame)
 				{
-					for (int channel = 0; channel < track.channels; ++channel)
+					for (int channel = 0; channel < decoded_pcm.channels; ++channel)
 					{
-						track.samples[start_index + static_cast<size_t>(frame) * static_cast<size_t>(track.channels) + static_cast<size_t>(channel)] =
+						decoded_pcm.samples[start_index + static_cast<size_t>(frame) * static_cast<size_t>(decoded_pcm.channels) + static_cast<size_t>(channel)] =
 							pcm_channels[channel][frame];
 					}
 				}
@@ -366,12 +385,76 @@ namespace rhythmreplugged::core
 					progress_callback(source.offset, bytes.size());
 				}
 			}
+
+			track.channels = decoded_pcm.channels;
+			track.sample_rate = decoded_pcm.sample_rate;
+			track.frame_count = decoded_pcm.channels > 0 ? decoded_pcm.samples.size() / static_cast<size_t>(decoded_pcm.channels) : 0;
+			track.samples.resize(decoded_pcm.samples.size());
+			for (size_t index = 0; index < decoded_pcm.samples.size(); ++index)
+				track.samples[index] = clamp_float_to_s16(decoded_pcm.samples[index]);
 		}
 		while (false);
 
 		ov_clear(&vorbis_file);
-		track.frame_count = track.channels > 0 ? track.samples.size() / static_cast<size_t>(track.channels) : 0;
 		return success;
+	}
+
+	bool PrototypePlayer::normalize_runtime_audio(PreloadedStemTrack &track, std::string &error_message)
+	{
+		if (track.channels != 1 && track.channels != 2)
+		{
+			error_message = "OGG stems must decode to mono or stereo audio.";
+			return false;
+		}
+		if (track.sample_rate <= 0)
+		{
+			error_message = "OGG stem has an invalid sample rate.";
+			return false;
+		}
+
+		const size_t source_frame_count = track.frame_count;
+		if (source_frame_count == 0)
+		{
+			track.channels = kRuntimeChannelCount;
+			track.sample_rate = kRuntimeSampleRate;
+			track.samples.clear();
+			return true;
+		}
+
+		const double resample_ratio = static_cast<double>(kRuntimeSampleRate) / static_cast<double>(track.sample_rate);
+		const size_t output_frame_count = (std::max)(static_cast<size_t>(1), static_cast<size_t>(std::llround(static_cast<double>(source_frame_count) * resample_ratio)));
+		std::vector<std::int16_t> normalized_samples(output_frame_count * static_cast<size_t>(kRuntimeChannelCount));
+
+		auto source_sample = [&](size_t frame_index, int channel) -> float
+		{
+			const size_t clamped_frame = (std::min)(frame_index, source_frame_count - 1);
+			const int resolved_channel = track.channels == 1 ? 0 : channel;
+			const size_t sample_index = clamped_frame * static_cast<size_t>(track.channels) + static_cast<size_t>(resolved_channel);
+			return static_cast<float>(track.samples[sample_index]) / 32767.0f;
+		};
+
+		for (size_t output_frame = 0; output_frame < output_frame_count; ++output_frame)
+		{
+			const double source_position = static_cast<double>(output_frame) * static_cast<double>(track.sample_rate) / static_cast<double>(kRuntimeSampleRate);
+			const size_t source_index = static_cast<size_t>(source_position);
+			const size_t next_source_index = (std::min)(source_index + 1, source_frame_count - 1);
+			const float fraction = static_cast<float>(source_position - static_cast<double>(source_index));
+
+			for (int channel = 0; channel < kRuntimeChannelCount; ++channel)
+			{
+				const float start_sample = source_sample(source_index, channel);
+				const float end_sample = source_sample(next_source_index, channel);
+				const float interpolated = start_sample + (end_sample - start_sample) * fraction;
+				normalized_samples[output_frame * static_cast<size_t>(kRuntimeChannelCount) + static_cast<size_t>(channel)] =
+					clamp_float_to_s16(interpolated);
+			}
+		}
+
+		track.channels = kRuntimeChannelCount;
+		track.sample_rate = kRuntimeSampleRate;
+		track.frame_count = output_frame_count;
+		track.samples = std::move(normalized_samples);
+		return true;
 	}
 
 	bool PrototypePlayer::adopt_preloaded(PreloadedSongData preloaded_song_data, std::string &error_message)
@@ -381,21 +464,18 @@ namespace rhythmreplugged::core
 		stems_.clear();
 		stems_.reserve(preloaded_song_data.stems.size());
 
-		int session_sample_rate = 0;
 		for (PreloadedStemTrack &preloaded_track : preloaded_song_data.stems)
 		{
-			if (preloaded_track.channels != 1 && preloaded_track.channels != 2)
+			if (preloaded_track.channels != kRuntimeChannelCount)
 			{
-				error_message = preloaded_track.stem_name + ".ogg must be mono or stereo.";
+				error_message = preloaded_track.stem_name + ".ogg did not normalize to stereo runtime audio.";
 				unload();
 				return false;
 			}
 
-			if (session_sample_rate == 0)
-				session_sample_rate = preloaded_track.sample_rate;
-			else if (preloaded_track.sample_rate != session_sample_rate)
+			if (preloaded_track.sample_rate != kRuntimeSampleRate)
 			{
-				error_message = "All loaded OGG stems must share the same sample rate.";
+				error_message = "Loaded OGG stems must normalize to 48 kHz runtime audio.";
 				unload();
 				return false;
 			}
@@ -441,14 +521,14 @@ namespace rhythmreplugged::core
 		return nullptr;
 	}
 
-	float PrototypePlayer::sample_track_channel(const StemTrack &track, size_t frame_index, int channel) const
+	std::int16_t PrototypePlayer::sample_track_channel(const StemTrack &track, size_t frame_index, int channel) const
 	{
 		if (frame_index >= track.frame_count)
-			return 0.0f;
+			return 0;
 
 		const int resolved_channel = track.channels == 1 ? 0 : channel;
 		if (resolved_channel >= track.channels)
-			return 0.0f;
+			return 0;
 
 		return track.samples[frame_index * static_cast<size_t>(track.channels) + static_cast<size_t>(resolved_channel)];
 	}

@@ -18,6 +18,25 @@ namespace rhythmreplugged::core
 	class SongSession
 	{
 	public:
+		struct GameplayLaneRuntimeState
+		{
+			std::array<bool, 5> lane_held{};
+			std::array<double, 5> lane_sustain_end_times_{};
+			std::array<double, 5> lane_sustain_release_times_{};
+			std::uint64_t input_generation = 0;
+			std::uint64_t consumed_input_generation = 0;
+			size_t next_note_index = 0;
+			float stem_target_gain = 1.0f;
+		};
+
+		struct PlayState
+		{
+			GameplayMode gameplay_mode = GameplayMode::Classic;
+			int active_lane_index = 0;
+			double timing_offset_seconds = 0.0;
+			std::vector<GameplayLaneRuntimeState> lanes;
+		};
+
 		bool load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 			const std::string &song_directory,
 			const GameplayOptions &options,
@@ -46,6 +65,8 @@ namespace rhythmreplugged::core
 		void set_timing_offset_seconds(double offset_seconds);
 		double timing_offset_seconds() const;
 		PrototypePlayerView view(const std::string &status_message) const;
+		void refresh_frame_snapshot(const std::string &status_message);
+		const GameplayFrameSnapshot &frame_snapshot() const;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
 		::rhythmreplugged::frontend_contract::AudioBatch render_fixed_tick_audio(int ticks_per_second);
 		double song_time_seconds() const;
@@ -56,19 +77,31 @@ namespace rhythmreplugged::core
 		InstrumentLaneView gameplay_lane_view(size_t index) const;
 
 	private:
-		struct GameplayLaneState
+		struct LyricPhraseRange
+		{
+			double start_seconds = 0.0;
+			double end_seconds = 0.0;
+		};
+
+		struct CachedLyricToken
+		{
+			std::string text;
+			double start_seconds = 0.0;
+			double end_seconds = 0.0;
+			bool prepend_space = false;
+			bool append_hyphen = false;
+			int line_index = 0;
+		};
+
+		struct GameplayLaneDefinition
 		{
 			InstrumentOption instrument = InstrumentOption::Guitar;
 			HighwayInstrumentType instrument_type = HighwayInstrumentType::FiveFretGuitar;
 			std::vector<std::string> stem_names;
 			std::string instrument_label = "Guitar";
 			MidiChart midi_chart;
-			std::array<bool, 5> lane_held{};
-			std::array<double, 5> lane_sustain_end_times_{};
-			std::array<double, 5> lane_sustain_release_times_{};
-			std::uint64_t input_generation = 0;
-			std::uint64_t consumed_input_generation = 0;
-			size_t next_note_index = 0;
+			std::vector<CachedLyricToken> lyric_tokens;
+			std::vector<LyricPhraseRange> lyric_phrase_ranges;
 		};
 
 		static constexpr double kChartLookbehindSeconds = 0.35;
@@ -84,30 +117,35 @@ namespace rhythmreplugged::core
 			const std::string &song_directory,
 			const GameplayOptions &options,
 			std::string &error_message);
-		void reset_runtime_state(GameplayLaneState &lane);
-		void set_lane_stem_target_gain(const GameplayLaneState &lane, float gain);
-		float lane_stem_target_gain(const GameplayLaneState &lane) const;
-		bool has_lane_stem(const GameplayLaneState &lane) const;
-		size_t note_group_end_index(const GameplayLaneState &lane, size_t start_index) const;
-		std::uint8_t note_group_lane_mask(const GameplayLaneState &lane, size_t start_index, size_t end_index) const;
-		std::uint8_t imminent_note_lane_mask(const GameplayLaneState &lane, double song_time_seconds) const;
-		void refresh_active_sustains(GameplayLaneState &lane, double song_time_seconds, std::uint8_t held_mask);
-		std::uint8_t active_sustain_lane_mask(const GameplayLaneState &lane, double song_time_seconds) const;
-		void start_sustains_for_note_group(GameplayLaneState &lane, size_t start_index, size_t end_index);
-		void consume_missed_note_groups(GameplayLaneState &lane, double song_time_seconds);
-		void advance_inactive_lane(GameplayLaneState &lane, double song_time_seconds);
-		GameplayLaneState *active_lane();
-		const GameplayLaneState *active_lane() const;
+		void reset_runtime_state(GameplayLaneRuntimeState &lane);
+		void cache_lyric_data(GameplayLaneDefinition &lane);
+		void rebuild_cached_scene(GameplaySceneView &scene) const;
+		void rebuild_cached_player_view(PrototypePlayerView &player_view, const std::string &status_message) const;
+		void append_visible_notes(InstrumentLaneView &lane_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const;
+		void append_visible_measure_lines(InstrumentLaneView &lane_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const;
+		void append_visible_chart_data(PrototypePlayerView &player_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const;
+		void append_visible_lyrics(PrototypePlayerView &player_view, const GameplayLaneDefinition &lane_definition, double song_time_seconds) const;
+		void set_lane_stem_target_gain(size_t lane_index, float gain);
+		float lane_stem_target_gain(size_t lane_index) const;
+		bool has_lane_stem(size_t lane_index) const;
+		size_t note_group_end_index(size_t lane_index, size_t start_index) const;
+		std::uint8_t note_group_lane_mask(size_t lane_index, size_t start_index, size_t end_index) const;
+		std::uint8_t imminent_note_lane_mask(size_t lane_index, double song_time_seconds) const;
+		void refresh_active_sustains(size_t lane_index, double song_time_seconds, std::uint8_t held_mask);
+		std::uint8_t active_sustain_lane_mask(size_t lane_index, double song_time_seconds) const;
+		void start_sustains_for_note_group(size_t lane_index, size_t start_index, size_t end_index);
+		void consume_missed_note_groups(size_t lane_index, double song_time_seconds);
+		void advance_inactive_lane(size_t lane_index, double song_time_seconds);
+		size_t active_lane_index() const;
 		double adjusted_song_time_seconds() const;
 
 		PrototypePlayer prototype_player_;
 		Transport transport_;
 		AudioMixer audio_mixer_;
-		GameplayMode gameplay_mode_ = GameplayMode::Classic;
-		std::vector<GameplayLaneState> gameplay_lanes_;
-		int active_lane_index_ = 0;
+		std::vector<GameplayLaneDefinition> gameplay_lanes_;
+		PlayState play_state_;
+		GameplayFrameSnapshot frame_snapshot_;
 		std::string chart_status_message_;
-		double timing_offset_seconds_ = 0.0;
 		std::atomic<bool> loaded_{false};
 	};
 }

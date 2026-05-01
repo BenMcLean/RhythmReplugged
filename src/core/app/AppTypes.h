@@ -294,4 +294,10 @@ namespace rhythmreplugged::core
 		Color4 clear_color;
 		std::vector<PlayerGameplayView> players;
 	};
+
+	struct GameplayFrameSnapshot
+	{
+		PrototypePlayerView player;
+		GameplaySceneView scene;
+	};
 }

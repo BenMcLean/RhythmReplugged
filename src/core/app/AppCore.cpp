@@ -222,32 +222,6 @@ namespace rhythmreplugged::core
 				});
 		}
 
-		void layout_freeplay_lanes(std::vector<InstrumentLaneView> &lanes, int focused_lane_index)
-		{
-			if (lanes.empty())
-				return;
-
-			const float base_width = std::clamp(2.6f - 0.5f * static_cast<float>(lanes.size() - 1), 0.55f, 2.6f);
-			const float active_width = std::min(base_width + 0.9f, 3.2f);
-			const float gap = std::clamp(0.28f - 0.04f * static_cast<float>(lanes.size() - 1), 0.10f, 0.28f);
-
-			float cursor_x = 0.0f;
-			for (size_t index = 0; index < lanes.size(); ++index)
-			{
-				InstrumentLaneView &lane = lanes[index];
-				lane.lane_width = static_cast<int>(index) == focused_lane_index ? active_width : base_width;
-				lane.lane_center_x = cursor_x + lane.lane_width * 0.5f;
-				cursor_x += lane.lane_width + gap;
-				lane.lane_depth_offset = 0.0f;
-			}
-
-			const float focus_center = lanes[static_cast<size_t>(std::clamp(
-				focused_lane_index,
-				0,
-				static_cast<int>(lanes.size()) - 1))].lane_center_x;
-			for (InstrumentLaneView &lane : lanes)
-				lane.lane_center_x -= focus_center;
-		}
 	}
 
 	AppCore::AppCore(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system)
@@ -329,6 +303,9 @@ namespace rhythmreplugged::core
 			run_gameplay(input_state);
 			break;
 		}
+
+		if (mode_ == AppMode::Gameplay)
+			song_session_.refresh_frame_snapshot(player_status_message_);
 
 		if (audio_batch_enabled_ && mode_ == AppMode::Gameplay)
 			audio_batch_ = song_session_.render_fixed_tick_audio(kAppFramesPerSecond);
@@ -788,44 +765,17 @@ namespace rhythmreplugged::core
 
 	PrototypePlayerView AppCore::prototype_player_view() const
 	{
-		return song_session_.view(player_status_message_);
+		if (mode_ != AppMode::Gameplay)
+			return {};
+		return song_session_.frame_snapshot().player;
 	}
 
 	GameplaySceneView AppCore::gameplay_scene_view() const
 	{
-		GameplaySceneView scene;
-		scene.clear_color = {12.0f / 255.0f, 14.0f / 255.0f, 20.0f / 255.0f, 1.0f};
-
 		if (mode_ != AppMode::Gameplay)
-			return scene;
+			return {};
 
-		const PrototypePlayerView player = prototype_player_view();
-		PlayerGameplayView gameplay_player;
-		gameplay_player.normalized_rect = {0.0f, 0.0f, 1.0f, 1.0f};
-		gameplay_player.camera = make_default_guitar_camera_view();
-		gameplay_player.world.style = make_default_guitar_highway_style_view();
-		for (size_t index = 0; index < song_session_.gameplay_lane_count(); ++index)
-			gameplay_player.world.lanes.push_back(song_session_.gameplay_lane_view(index));
-		if (gameplay_player.world.lanes.empty())
-			gameplay_player.world.lanes.push_back(song_session_.gameplay_lane_view(0));
-		gameplay_player.world.focused_lane_index = song_session_.active_gameplay_lane_index();
-		gameplay_player.world.focus_blend = song_session_.gameplay_mode() == GameplayMode::Freeplay ? 0.35f : 1.0f;
-		if (song_session_.gameplay_mode() == GameplayMode::Freeplay)
-			layout_freeplay_lanes(gameplay_player.world.lanes, gameplay_player.world.focused_lane_index);
-		else if (!gameplay_player.world.lanes.empty())
-		{
-			gameplay_player.world.lanes[0].lane_center_x = 0.0f;
-			gameplay_player.world.lanes[0].lane_width = 5.0f;
-			gameplay_player.world.lanes[0].lane_depth_offset = 0.0f;
-		}
-
-		gameplay_player.hud.player_label = player.song_title.empty() ? "Player 1" : player.song_title;
-		gameplay_player.hud.status_message = player.status_message;
-		gameplay_player.hud.song_time_seconds = player.song_time_seconds;
-		gameplay_player.hud.failed = false;
-
-		scene.players.push_back(std::move(gameplay_player));
-		return scene;
+		return song_session_.frame_snapshot().scene;
 	}
 
 	const ::rhythmreplugged::frontend_contract::AudioBatch &AppCore::audio_batch() const

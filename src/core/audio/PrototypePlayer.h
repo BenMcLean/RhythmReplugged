@@ -17,12 +17,15 @@ namespace rhythmreplugged::core
 	class PrototypePlayer
 	{
 	public:
+		static constexpr int kRuntimeSampleRate = 48000;
+		static constexpr int kRuntimeChannelCount = 2;
+
 		struct PreloadedStemTrack
 		{
 			std::string stem_name;
-			std::vector<float> samples;
-			int channels = 0;
-			int sample_rate = 0;
+			std::vector<std::int16_t> samples;
+			int channels = kRuntimeChannelCount;
+			int sample_rate = kRuntimeSampleRate;
 			size_t frame_count = 0;
 		};
 
@@ -64,9 +67,9 @@ namespace rhythmreplugged::core
 		struct StemTrack
 		{
 			std::string stem_name;
-			std::vector<float> samples;
-			int channels = 0;
-			int sample_rate = 0;
+			std::vector<std::int16_t> samples;
+			int channels = kRuntimeChannelCount;
+			int sample_rate = kRuntimeSampleRate;
 			size_t frame_count = 0;
 			float current_gain = 1.0f;
 			std::atomic<float> target_gain{1.0f};
@@ -82,10 +85,11 @@ namespace rhythmreplugged::core
 			PreloadedStemTrack &track,
 			std::string &error_message,
 			const DecodeProgressCallback &progress_callback = {});
+		static bool normalize_runtime_audio(PreloadedStemTrack &track, std::string &error_message);
 		bool adopt_preloaded(PreloadedSongData preloaded_song_data, std::string &error_message);
 		StemTrack *find_stem(std::string_view stem_name);
 		const StemTrack *find_stem(std::string_view stem_name) const;
-		float sample_track_channel(const StemTrack &track, size_t frame_index, int channel) const;
+		std::int16_t sample_track_channel(const StemTrack &track, size_t frame_index, int channel) const;
 		size_t longest_track_frame_count() const;
 
 		std::vector<StemTrack> stems_;
