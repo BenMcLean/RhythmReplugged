@@ -61,7 +61,6 @@ namespace
 	AppCore g_app(g_file_system);
 	OpenGlCoverTextures g_cover_textures(g_file_system);
 	GameplayRendererGl g_gameplay_renderer;
-	::rhythmreplugged::frontend_contract::RetroInputState g_previous_input{};
 	std::string g_root_path;
 	bool g_restrict_to_startup_song = false;
 	bool g_is_loaded = false;
@@ -187,11 +186,6 @@ namespace
 		default:
 			return "#version 330 core";
 		}
-	}
-
-	bool pressed(bool current, bool previous)
-	{
-		return current && !previous;
 	}
 
 	::rhythmreplugged::frontend_contract::RetroInputState poll_input()
@@ -823,19 +817,9 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 
 	sync_frontend_options();
 	const ::rhythmreplugged::frontend_contract::RetroInputState input = poll_input();
-	if (g_app.mode() == AppMode::Gameplay)
-	{
-		if (pressed(input.l, g_previous_input.l))
-			g_app.nudge_timing_offset_seconds(-0.005);
-		if (pressed(input.r, g_previous_input.r))
-			g_app.nudge_timing_offset_seconds(0.005);
-		if (pressed(input.select, g_previous_input.select))
-			g_app.reset_timing_offset();
-	}
 
 	g_app.retro_run(input);
 	sync_frontend_sample_rate();
-	g_previous_input = input;
 	submit_audio();
 	if (g_app.mode() != AppMode::Gameplay)
 		g_app.finalize_audio_stop();
