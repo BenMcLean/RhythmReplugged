@@ -4,6 +4,7 @@
 #include "platform_sdl3/MiniaudioOutput.h"
 #include "platform_sdl3/FileSystem.h"
 #include "render_gl/GameplayRendererGl.h"
+#include "ui/AppUi.h"
 #include "ui/AppUiHost.h"
 
 #include <SDL3/SDL.h>
@@ -14,13 +15,16 @@
 #include <imgui_impl_opengl3.h>
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 namespace
 {
 	using namespace rhythmreplugged::core;
+	using namespace rhythmreplugged::frontend_contract;
 	using namespace rhythmreplugged::render_gl;
 	using namespace rhythmreplugged::ui;
 	using namespace rhythmreplugged::platform_sdl3;
@@ -35,8 +39,18 @@ namespace
 		std::string songs_root_path;
 		std::string content_root_path;
 		std::string content_path;
-		::rhythmreplugged::frontend_contract::FrontendOptions frontend_options;
+		FrontendOptions frontend_options;
 		std::string error_message;
+	};
+
+	struct SdlFrontendOptionsState
+	{
+		FrontendOptions persisted_options;
+		FrontendOptions runtime_options;
+		std::string config_path;
+		std::string status_message;
+		FrontendOptionsUiState ui_state;
+		bool menu_open = false;
 	};
 
 	std::string find_songs_root(const char *argv0)
@@ -67,9 +81,96 @@ namespace
 		return {};
 	}
 
-	SdlLaunchArguments parse_launch_arguments(int argc, char *argv[])
+	std::string frontend_options_config_path()
+	{
+		char *pref_path = SDL_GetPrefPath("RhythmReplugged", "RhythmReplugged");
+		if (pref_path == nullptr)
+			return {};
+
+		std::filesystem::path config_path(pref_path);
+		SDL_free(pref_path);
+		config_path /= "retroarch-core-options.cfg";
+		return config_path.generic_string();
+	}
+
+	bool load_frontend_options_config(const std::string &path, FrontendOptions &options, std::string &status_message)
+	{
+		if (path.empty())
+		{
+			status_message = "SDL preference path unavailable. Options will not persist.";
+			return false;
+		}
+
+		std::ifstream stream(std::filesystem::path(path), std::ios::binary);
+		if (!stream)
+		{
+			status_message.clear();
+			return false;
+		}
+
+		const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+		const bool parsed_all_values = parse_frontend_options_config(text, options);
+		status_message = parsed_all_values
+			? std::string("Loaded RetroArch-style core options file.")
+			: std::string("Loaded core options file with some unrecognized entries.");
+		return true;
+	}
+
+	bool save_frontend_options_config(const std::string &path, const FrontendOptions &options, std::string &status_message)
+	{
+		if (path.empty())
+		{
+			status_message = "SDL preference path unavailable. Changes are session-only.";
+			return false;
+		}
+
+		std::error_code error_code;
+		const std::filesystem::path config_path(path);
+		std::filesystem::create_directories(config_path.parent_path(), error_code);
+		if (error_code)
+		{
+			status_message = "Could not create the SDL config directory.";
+			return false;
+		}
+
+		std::ofstream stream(config_path, std::ios::binary | std::ios::trunc);
+		if (!stream)
+		{
+			status_message = "Could not write the SDL core options config file.";
+			return false;
+		}
+
+		stream << serialize_frontend_options_config(options);
+		if (!stream.good())
+		{
+			status_message = "Failed while writing the SDL core options config file.";
+			return false;
+		}
+
+		status_message = "Saved RetroArch-style core options file.";
+		return true;
+	}
+
+	void apply_frontend_option_change(
+		SdlFrontendOptionsState &state,
+		AppCore &app,
+		const FrontendOptionDefinition &definition,
+		std::string_view value)
+	{
+		if (!set_frontend_option_value(state.persisted_options, definition.id, value))
+			return;
+
+		if (definition.apply_timing != FrontendOptionApplyTiming::NextLaunch)
+			copy_frontend_option_value(state.runtime_options, state.persisted_options, definition.id);
+
+		app.set_frontend_options(state.runtime_options);
+		save_frontend_options_config(state.config_path, state.persisted_options, state.status_message);
+	}
+
+	SdlLaunchArguments parse_launch_arguments(int argc, char *argv[], const FrontendOptions &initial_options)
 	{
 		SdlLaunchArguments arguments;
+		arguments.frontend_options = initial_options;
 		for (int index = 1; index < argc; ++index)
 		{
 			const std::string argument = argv[index] != nullptr ? argv[index] : "";
@@ -212,7 +313,19 @@ int main(int argc, char *argv[])
 	FileSystem file_system;
 	AppCore app(file_system);
 	std::string init_error;
-	const SdlLaunchArguments launch_arguments = parse_launch_arguments(argc, argv);
+	SdlFrontendOptionsState frontend_options_state;
+	frontend_options_state.config_path = frontend_options_config_path();
+	const bool loaded_frontend_options = load_frontend_options_config(
+		frontend_options_state.config_path,
+		frontend_options_state.persisted_options,
+		frontend_options_state.status_message);
+	if (!loaded_frontend_options && !frontend_options_state.config_path.empty())
+		save_frontend_options_config(
+			frontend_options_state.config_path,
+			frontend_options_state.persisted_options,
+			frontend_options_state.status_message);
+	frontend_options_state.runtime_options = frontend_options_state.persisted_options;
+	const SdlLaunchArguments launch_arguments = parse_launch_arguments(argc, argv, frontend_options_state.runtime_options);
 	if (!launch_arguments.error_message.empty())
 	{
 		std::cerr << launch_arguments.error_message << "\n";
@@ -224,6 +337,8 @@ int main(int argc, char *argv[])
 		SDL_Quit();
 		return 1;
 	}
+	frontend_options_state.persisted_options = launch_arguments.frontend_options;
+	frontend_options_state.runtime_options = launch_arguments.frontend_options;
 	AppLaunchInputs launch_inputs;
 	launch_inputs.songs_root_path = launch_arguments.songs_root_path;
 	launch_inputs.content_root_path = launch_arguments.content_root_path;
@@ -369,6 +484,11 @@ int main(int argc, char *argv[])
 			{
 				const bool is_down = event.type == SDL_EVENT_KEY_DOWN;
 				const SDL_Scancode scancode = event.key.scancode;
+				if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && scancode == SDL_SCANCODE_ESCAPE)
+				{
+					frontend_options_state.menu_open = !frontend_options_state.menu_open;
+					continue;
+				}
 				if (scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z)
 					held_input.letter_keys[static_cast<size_t>(scancode - SDL_SCANCODE_A)] = is_down;
 
@@ -407,14 +527,16 @@ int main(int argc, char *argv[])
 		}
 
 		size_t retro_steps = 0;
-		while (retro_time_accumulator >= kFrameDurationNs && retro_steps < 4)
+		while (!frontend_options_state.menu_open && retro_time_accumulator >= kFrameDurationNs && retro_steps < 4)
 		{
 			app.retro_run(held_input);
 			retro_time_accumulator -= kFrameDurationNs;
 			++retro_steps;
 		}
+		if (frontend_options_state.menu_open)
+			retro_time_accumulator = 0;
 
-		if (app.mode() == AppMode::Gameplay)
+		if (!frontend_options_state.menu_open && app.mode() == AppMode::Gameplay)
 		{
 			audio_output.set_stream(&app);
 			audio_output.initialize(&app);
@@ -436,6 +558,23 @@ int main(int argc, char *argv[])
 			ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height)),
 			kDefaultUiScale,
 			cover_textures);
+		if (frontend_options_state.menu_open)
+		{
+			FrontendOptionsUiActions actions;
+			actions.set_option_value = [&](const FrontendOptionDefinition &definition, std::string_view value)
+			{
+				apply_frontend_option_change(frontend_options_state, app, definition, value);
+				return true;
+			};
+			render_frontend_options_ui(
+				frontend_options_state.persisted_options,
+				frontend_options_state.ui_state,
+				actions,
+				ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height)),
+				kDefaultUiScale,
+				frontend_options_state.config_path.c_str(),
+				frontend_options_state.status_message.c_str());
+		}
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

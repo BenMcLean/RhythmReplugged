@@ -17,6 +17,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdarg>
 #include <cstring>
@@ -81,108 +82,48 @@ namespace
 		{nullptr, false, false},
 	};
 
-	const retro_core_option_v2_category kOptionCategories[] = {
-		{
-			"gameplay",
-			"Gameplay",
-			"Default song startup preferences.",
-		},
-		{nullptr, nullptr, nullptr},
-	};
+	std::vector<retro_core_option_v2_category> g_option_categories;
+	std::vector<retro_core_option_v2_definition> g_core_option_definitions;
+	retro_core_options_v2 g_core_options{};
 
-	const retro_core_option_v2_definition kCoreOptionDefinitions[] = {
-		{
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[0].libretro_key,
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[0].display_name,
-			nullptr,
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[0].description,
-			nullptr,
-			"gameplay",
-			{
-				{
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[0].value,
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[0].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[1].value,
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[1].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[2].value,
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[2].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[3].value,
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[3].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[4].value,
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[4].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[5].value,
-					::rhythmreplugged::frontend_contract::kFrontendInstrumentChoices[5].label,
-				},
-			},
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[0].default_value,
-		},
-		{
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[1].libretro_key,
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[1].display_name,
-			nullptr,
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[1].description,
-			nullptr,
-			"gameplay",
-			{
-				{
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[0].value,
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[0].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[1].value,
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[1].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[2].value,
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[2].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[3].value,
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[3].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[4].value,
-					::rhythmreplugged::frontend_contract::kFrontendDifficultyChoices[4].label,
-				},
-			},
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[1].default_value,
-		},
-		{
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[2].libretro_key,
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[2].display_name,
-			nullptr,
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[2].description,
-			nullptr,
-			"gameplay",
-			{
-				{
-					::rhythmreplugged::frontend_contract::kFrontendMultithreadedFileLoadingChoices[0].value,
-					::rhythmreplugged::frontend_contract::kFrontendMultithreadedFileLoadingChoices[0].label,
-				},
-				{
-					::rhythmreplugged::frontend_contract::kFrontendMultithreadedFileLoadingChoices[1].value,
-					::rhythmreplugged::frontend_contract::kFrontendMultithreadedFileLoadingChoices[1].label,
-				},
-			},
-			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[2].default_value,
-		},
-		{},
-	};
+	void build_core_options()
+	{
+		if (!g_core_option_definitions.empty())
+			return;
 
-	const retro_core_options_v2 kCoreOptions = {
-		const_cast<retro_core_option_v2_category *>(kOptionCategories),
-		const_cast<retro_core_option_v2_definition *>(kCoreOptionDefinitions),
-	};
+		g_option_categories.reserve(::rhythmreplugged::frontend_contract::frontend_option_categories().size() + 1);
+		for (const auto &category : ::rhythmreplugged::frontend_contract::frontend_option_categories())
+		{
+			retro_core_option_v2_category retro_category{};
+			retro_category.key = category.libretro_key;
+			retro_category.desc = category.display_name;
+			retro_category.info = category.description;
+			g_option_categories.push_back(retro_category);
+		}
+		g_option_categories.push_back({});
+
+		g_core_option_definitions.reserve(::rhythmreplugged::frontend_contract::frontend_option_definitions().size() + 1);
+		for (const auto &definition : ::rhythmreplugged::frontend_contract::frontend_option_definitions())
+		{
+			retro_core_option_v2_definition retro_definition{};
+			retro_definition.key = definition.libretro_key;
+			retro_definition.desc = definition.display_name;
+			retro_definition.info = definition.description;
+			if (const auto *category = ::rhythmreplugged::frontend_contract::find_frontend_option_category_by_id(definition.category_id))
+				retro_definition.category_key = category->libretro_key;
+			retro_definition.default_value = definition.default_value;
+			for (size_t index = 0; index < definition.choice_count && index < std::size(retro_definition.values); ++index)
+			{
+				retro_definition.values[index].value = definition.choices[index].value;
+				retro_definition.values[index].label = definition.choices[index].label;
+			}
+			g_core_option_definitions.push_back(retro_definition);
+		}
+		g_core_option_definitions.push_back({});
+
+		g_core_options.categories = g_option_categories.data();
+		g_core_options.definitions = g_core_option_definitions.data();
+	}
 
 	void log_message(retro_log_level level, const char *format, ...)
 	{
@@ -370,7 +311,8 @@ namespace
 		if (g_environment == nullptr)
 			return;
 
-		g_environment(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2, const_cast<retro_core_options_v2 *>(&kCoreOptions));
+		build_core_options();
+		g_environment(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2, &g_core_options);
 	}
 
 	::rhythmreplugged::frontend_contract::FrontendOptions query_frontend_options()

@@ -8,6 +8,18 @@
 
 namespace rhythmreplugged::frontend_contract
 {
+	enum class FrontendOptionApplyTiming
+	{
+		Immediate,
+		NextSong,
+		NextLaunch,
+	};
+
+	enum class FrontendOptionCategoryId
+	{
+		Gameplay,
+	};
+
 	enum class FrontendOptionId
 	{
 		DefaultInstrument,
@@ -21,9 +33,18 @@ namespace rhythmreplugged::frontend_contract
 		const char *label = nullptr;
 	};
 
+	struct FrontendOptionCategoryDefinition
+	{
+		FrontendOptionCategoryId id = FrontendOptionCategoryId::Gameplay;
+		const char *libretro_key = nullptr;
+		const char *display_name = nullptr;
+		const char *description = nullptr;
+	};
+
 	struct FrontendOptionDefinition
 	{
 		FrontendOptionId id = FrontendOptionId::DefaultInstrument;
+		FrontendOptionCategoryId category_id = FrontendOptionCategoryId::Gameplay;
 		const char *command_line_flag = nullptr;
 		const char *libretro_key = nullptr;
 		const char *display_name = nullptr;
@@ -31,6 +52,7 @@ namespace rhythmreplugged::frontend_contract
 		const FrontendOptionChoice *choices = nullptr;
 		size_t choice_count = 0;
 		const char *default_value = nullptr;
+		FrontendOptionApplyTiming apply_timing = FrontendOptionApplyTiming::Immediate;
 	};
 
 	struct FrontendOptions
@@ -62,9 +84,19 @@ namespace rhythmreplugged::frontend_contract
 		{"disabled", "Disabled"},
 	}};
 
+	inline constexpr std::array<FrontendOptionCategoryDefinition, 1> kFrontendOptionCategories{{
+		{
+			FrontendOptionCategoryId::Gameplay,
+			"gameplay",
+			"Gameplay",
+			"Default song startup preferences.",
+		},
+	}};
+
 	inline constexpr std::array<FrontendOptionDefinition, 3> kFrontendOptionDefinitions{{
 		{
 			FrontendOptionId::DefaultInstrument,
+			FrontendOptionCategoryId::Gameplay,
 			"--instrument",
 			"rhythmreplugged_instrument",
 			"Startup Instrument",
@@ -72,9 +104,11 @@ namespace rhythmreplugged::frontend_contract
 			kFrontendInstrumentChoices.data(),
 			kFrontendInstrumentChoices.size(),
 			"ask",
+			FrontendOptionApplyTiming::NextSong,
 		},
 		{
 			FrontendOptionId::DefaultDifficulty,
+			FrontendOptionCategoryId::Gameplay,
 			"--difficulty",
 			"rhythmreplugged_difficulty",
 			"Startup Difficulty",
@@ -82,9 +116,11 @@ namespace rhythmreplugged::frontend_contract
 			kFrontendDifficultyChoices.data(),
 			kFrontendDifficultyChoices.size(),
 			"ask",
+			FrontendOptionApplyTiming::NextSong,
 		},
 		{
 			FrontendOptionId::MultithreadedFileLoading,
+			FrontendOptionCategoryId::Gameplay,
 			"--multithreaded-file-loading",
 			"rhythmreplugged_multithreaded_file_loading",
 			"Multithreaded File Loading",
@@ -92,12 +128,40 @@ namespace rhythmreplugged::frontend_contract
 			kFrontendMultithreadedFileLoadingChoices.data(),
 			kFrontendMultithreadedFileLoadingChoices.size(),
 			"enabled",
+			FrontendOptionApplyTiming::Immediate,
 		},
 	}};
+
+	inline std::span<const FrontendOptionCategoryDefinition> frontend_option_categories()
+	{
+		return kFrontendOptionCategories;
+	}
 
 	inline std::span<const FrontendOptionDefinition> frontend_option_definitions()
 	{
 		return kFrontendOptionDefinitions;
+	}
+
+	inline const FrontendOptionDefinition *find_frontend_option_by_id(FrontendOptionId id)
+	{
+		for (const FrontendOptionDefinition &definition : kFrontendOptionDefinitions)
+		{
+			if (definition.id == id)
+				return &definition;
+		}
+
+		return nullptr;
+	}
+
+	inline const FrontendOptionCategoryDefinition *find_frontend_option_category_by_id(FrontendOptionCategoryId id)
+	{
+		for (const FrontendOptionCategoryDefinition &definition : kFrontendOptionCategories)
+		{
+			if (definition.id == id)
+				return &definition;
+		}
+
+		return nullptr;
 	}
 
 	inline const FrontendOptionDefinition *find_frontend_option_by_command_line_flag(std::string_view flag)
@@ -105,6 +169,17 @@ namespace rhythmreplugged::frontend_contract
 		for (const FrontendOptionDefinition &definition : kFrontendOptionDefinitions)
 		{
 			if (flag == definition.command_line_flag)
+				return &definition;
+		}
+
+		return nullptr;
+	}
+
+	inline const FrontendOptionDefinition *find_frontend_option_by_libretro_key(std::string_view key)
+	{
+		for (const FrontendOptionDefinition &definition : kFrontendOptionDefinitions)
+		{
+			if (key == definition.libretro_key)
 				return &definition;
 		}
 
@@ -124,16 +199,7 @@ namespace rhythmreplugged::frontend_contract
 
 	inline bool set_frontend_option_value(FrontendOptions &options, FrontendOptionId id, std::string_view value)
 	{
-		const FrontendOptionDefinition *definition = nullptr;
-		for (const FrontendOptionDefinition &candidate : kFrontendOptionDefinitions)
-		{
-			if (candidate.id == id)
-			{
-				definition = &candidate;
-				break;
-			}
-		}
-
+		const FrontendOptionDefinition *definition = find_frontend_option_by_id(id);
 		if (definition == nullptr || !frontend_option_accepts_value(*definition, value))
 			return false;
 
@@ -152,4 +218,10 @@ namespace rhythmreplugged::frontend_contract
 
 		return false;
 	}
+
+	std::string_view frontend_option_value(const FrontendOptions &options, FrontendOptionId id);
+	bool copy_frontend_option_value(FrontendOptions &destination, const FrontendOptions &source, FrontendOptionId id);
+	bool set_frontend_option_value_by_key(FrontendOptions &options, std::string_view key, std::string_view value);
+	bool parse_frontend_options_config(std::string_view text, FrontendOptions &options);
+	std::string serialize_frontend_options_config(const FrontendOptions &options);
 }

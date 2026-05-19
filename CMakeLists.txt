@@ -148,6 +148,8 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/songs/SongIni.cpp
 	${RR_SRC_DIR}/core/songs/SongIni.h
 	${RR_SRC_DIR}/frontend_contract/AudioTypes.h
+	${RR_SRC_DIR}/frontend_contract/FrontendOptions.cpp
+	${RR_SRC_DIR}/frontend_contract/FrontendOptions.h
 	${RR_SRC_DIR}/frontend_contract/RetroFileSystem.h
 	${RR_SRC_DIR}/frontend_contract/RetroInput.h
 )

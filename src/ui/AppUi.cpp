@@ -821,4 +821,118 @@ namespace rhythmreplugged::ui
 		ImGui::End();
 		ImGui::PopStyleVar();
 	}
+
+	void render_frontend_options_ui(
+		const ::rhythmreplugged::frontend_contract::FrontendOptions &options,
+		FrontendOptionsUiState &ui_state,
+		const FrontendOptionsUiActions &actions,
+		ImVec2 window_size,
+		float ui_scale,
+		const char *config_path,
+		const char *config_status_message)
+	{
+		using namespace ::rhythmreplugged::frontend_contract;
+
+		const std::span<const FrontendOptionCategoryDefinition> categories = frontend_option_categories();
+		if (categories.empty())
+			return;
+
+		ui_state.selected_category_index = (std::clamp)(ui_state.selected_category_index, 0, static_cast<int>(categories.size()) - 1);
+
+		ImGui::SetNextWindowPos(ImVec2(window_size.x * 0.12f, window_size.y * 0.10f), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(ImVec2(window_size.x * 0.76f, window_size.y * 0.80f), ImGuiCond_Always);
+		ImGui::Begin("Core Options", nullptr,
+			ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse);
+
+		ImGui::TextUnformatted("Core Options");
+		ImGui::TextDisabled("SDL3 frontend menu mirroring libretro core options. Press Esc to resume.");
+		if (config_path != nullptr && config_path[0] != '\0')
+			ImGui::TextDisabled("Config: %s", config_path);
+		if (config_status_message != nullptr && config_status_message[0] != '\0')
+			ImGui::TextWrapped("%s", config_status_message);
+		ImGui::Spacing();
+
+		const float category_width = 240.0f * ui_scale;
+		ImGui::BeginChild("core_option_categories", ImVec2(category_width, 0.0f), true);
+		for (int index = 0; index < static_cast<int>(categories.size()); ++index)
+		{
+			const FrontendOptionCategoryDefinition &category = categories[static_cast<size_t>(index)];
+			if (ImGui::Selectable(category.display_name, ui_state.selected_category_index == index))
+				ui_state.selected_category_index = index;
+		}
+		ImGui::EndChild();
+
+		ImGui::SameLine();
+		ImGui::BeginChild("core_option_values", ImVec2(0.0f, 0.0f), true);
+		const FrontendOptionCategoryDefinition &selected_category = categories[static_cast<size_t>(ui_state.selected_category_index)];
+		ImGui::TextUnformatted(selected_category.display_name);
+		if (selected_category.description != nullptr && selected_category.description[0] != '\0')
+			ImGui::TextWrapped("%s", selected_category.description);
+		ImGui::Separator();
+
+		bool rendered_any_options = false;
+		for (const FrontendOptionDefinition &definition : frontend_option_definitions())
+		{
+			if (definition.category_id != selected_category.id)
+				continue;
+
+			rendered_any_options = true;
+			ImGui::PushID(definition.libretro_key);
+			ImGui::TextUnformatted(definition.display_name);
+			if (definition.description != nullptr && definition.description[0] != '\0')
+				ImGui::TextWrapped("%s", definition.description);
+
+			int current_choice_index = 0;
+			const std::string_view current_value = frontend_option_value(options, definition.id);
+			for (size_t choice_index = 0; choice_index < definition.choice_count; ++choice_index)
+			{
+				if (current_value == definition.choices[choice_index].value)
+				{
+					current_choice_index = static_cast<int>(choice_index);
+					break;
+				}
+			}
+
+			if (ImGui::BeginCombo("##value", definition.choices[current_choice_index].label))
+			{
+				for (size_t choice_index = 0; choice_index < definition.choice_count; ++choice_index)
+				{
+					const bool selected = current_choice_index == static_cast<int>(choice_index);
+					if (ImGui::Selectable(definition.choices[choice_index].label, selected) &&
+						actions.set_option_value != nullptr)
+					{
+						actions.set_option_value(definition, definition.choices[choice_index].value);
+					}
+					if (selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+
+			const char *timing_text = "Applies immediately.";
+			switch (definition.apply_timing)
+			{
+			case FrontendOptionApplyTiming::Immediate:
+				timing_text = "Applies immediately.";
+				break;
+			case FrontendOptionApplyTiming::NextSong:
+				timing_text = "Applies the next time a song setup begins.";
+				break;
+			case FrontendOptionApplyTiming::NextLaunch:
+				timing_text = "Stored now and applied on next launch.";
+				break;
+			}
+			ImGui::TextDisabled("%s", timing_text);
+			ImGui::Spacing();
+			ImGui::PopID();
+		}
+
+		if (!rendered_any_options)
+			ImGui::TextDisabled("No options are currently assigned to this category.");
+
+		ImGui::EndChild();
+		ImGui::End();
+	}
 }

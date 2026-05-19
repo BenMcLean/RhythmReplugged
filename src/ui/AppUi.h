@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/app/AppTypes.h"
+#include "frontend_contract/FrontendOptions.h"
 
 #include <imgui.h>
 
@@ -29,6 +30,18 @@ namespace rhythmreplugged::ui
 		std::function<void()> activate_selection;
 	};
 
+	struct FrontendOptionsUiState
+	{
+		int selected_category_index = 0;
+	};
+
+	struct FrontendOptionsUiActions
+	{
+		std::function<bool(
+			const ::rhythmreplugged::frontend_contract::FrontendOptionDefinition &definition,
+			std::string_view value)> set_option_value;
+	};
+
 	void apply_imgui_style(float ui_scale);
 	void render_song_browser_ui(
 		const core::SongBrowserView &browser,
@@ -52,4 +65,12 @@ namespace rhythmreplugged::ui
 	void render_prototype_player_ui(
 		const core::GameplayFrameSnapshot &snapshot,
 		ImVec2 window_size);
+	void render_frontend_options_ui(
+		const ::rhythmreplugged::frontend_contract::FrontendOptions &options,
+		FrontendOptionsUiState &ui_state,
+		const FrontendOptionsUiActions &actions,
+		ImVec2 window_size,
+		float ui_scale,
+		const char *config_path,
+		const char *config_status_message);
 }
