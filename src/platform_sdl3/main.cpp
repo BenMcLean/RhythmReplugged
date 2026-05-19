@@ -14,6 +14,8 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
 
+#include <array>
+#include <cfloat>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -52,6 +54,48 @@ namespace
 		FrontendOptionsUiState ui_state;
 		bool menu_open = false;
 	};
+
+	bool is_menu_navigation_scancode(SDL_Scancode scancode)
+	{
+		switch (scancode)
+		{
+		case SDL_SCANCODE_UP:
+		case SDL_SCANCODE_DOWN:
+		case SDL_SCANCODE_LEFT:
+		case SDL_SCANCODE_RIGHT:
+		case SDL_SCANCODE_RETURN:
+		case SDL_SCANCODE_SPACE:
+		case SDL_SCANCODE_BACKSPACE:
+		case SDL_SCANCODE_0:
+		case SDL_SCANCODE_X:
+		case SDL_SCANCODE_Y:
+		case SDL_SCANCODE_LEFTBRACKET:
+		case SDL_SCANCODE_RIGHTBRACKET:
+			return true;
+		default:
+			return scancode >= SDL_SCANCODE_A && scancode <= SDL_SCANCODE_Z;
+		}
+	}
+
+	bool has_mouse_buttons_down(const std::array<bool, 3> &mouse_buttons_down)
+	{
+		for (const bool button_down : mouse_buttons_down)
+		{
+			if (button_down)
+				return true;
+		}
+
+		return false;
+	}
+
+	void suppress_imgui_mouse(const std::array<bool, 3> &mouse_buttons_down)
+	{
+		ImGuiIO &io = ImGui::GetIO();
+		io.MouseDrawCursor = false;
+		io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+		for (int button_index = 0; button_index < static_cast<int>(mouse_buttons_down.size()); ++button_index)
+			io.AddMouseButtonEvent(button_index, false);
+	}
 
 	std::string find_songs_root(const char *argv0)
 	{
@@ -417,6 +461,11 @@ int main(int argc, char *argv[])
 		int drawable_width = kWindowWidth;
 		int drawable_height = kWindowHeight;
 		SDL_GetWindowSizeInPixels(window, &drawable_width, &drawable_height);
+		float mouse_wheel_x = 0.0f;
+		float mouse_wheel_y = 0.0f;
+		bool imgui_mouse_activity_this_frame = false;
+		bool imgui_nav_activity_this_frame = false;
+		static std::array<bool, 3> imgui_mouse_buttons_down{};
 
 		SDL_Event event{};
 		while (SDL_PollEvent(&event))
@@ -438,6 +487,26 @@ int main(int argc, char *argv[])
 			else if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || event.type == SDL_EVENT_GAMEPAD_BUTTON_UP)
 			{
 				const bool is_down = event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+				switch (static_cast<SDL_GamepadButton>(event.gbutton.button))
+				{
+				case SDL_GAMEPAD_BUTTON_DPAD_UP:
+				case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+				case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+				case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+				case SDL_GAMEPAD_BUTTON_SOUTH:
+				case SDL_GAMEPAD_BUTTON_EAST:
+				case SDL_GAMEPAD_BUTTON_WEST:
+				case SDL_GAMEPAD_BUTTON_NORTH:
+				case SDL_GAMEPAD_BUTTON_BACK:
+				case SDL_GAMEPAD_BUTTON_START:
+				case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
+				case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
+					imgui_nav_activity_this_frame = true;
+					break;
+				default:
+					break;
+				}
+
 				switch (static_cast<SDL_GamepadButton>(event.gbutton.button))
 				{
 				case SDL_GAMEPAD_BUTTON_DPAD_UP:
@@ -484,6 +553,8 @@ int main(int argc, char *argv[])
 			{
 				const bool is_down = event.type == SDL_EVENT_KEY_DOWN;
 				const SDL_Scancode scancode = event.key.scancode;
+				if (is_menu_navigation_scancode(scancode))
+					imgui_nav_activity_this_frame = true;
 				if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && scancode == SDL_SCANCODE_ESCAPE)
 				{
 					frontend_options_state.menu_open = !frontend_options_state.menu_open;
@@ -524,12 +595,37 @@ int main(int argc, char *argv[])
 					held_input.lane_5 = is_down;
 
 			}
+			else if (event.type == SDL_EVENT_MOUSE_MOTION)
+			{
+				imgui_mouse_activity_this_frame = true;
+			}
+			else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+			{
+				imgui_mouse_activity_this_frame = true;
+				const bool is_down = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+				if (event.button.button >= 1 && event.button.button <= 3)
+					imgui_mouse_buttons_down[static_cast<size_t>(event.button.button - 1)] = is_down;
+			}
+			else if (event.type == SDL_EVENT_MOUSE_WHEEL)
+			{
+				imgui_mouse_activity_this_frame = true;
+				mouse_wheel_x += event.wheel.x;
+				mouse_wheel_y += event.wheel.y;
+			}
 		}
+
+		const bool use_imgui_mouse = !imgui_nav_activity_this_frame &&
+			(imgui_mouse_activity_this_frame || has_mouse_buttons_down(imgui_mouse_buttons_down));
 
 		size_t retro_steps = 0;
 		while (!frontend_options_state.menu_open && retro_time_accumulator >= kFrameDurationNs && retro_steps < 4)
 		{
-			app.retro_run(held_input);
+			RetroInputState frame_input = held_input;
+			frame_input.mouse_wheel_x = mouse_wheel_x;
+			frame_input.mouse_wheel_y = mouse_wheel_y;
+			app.retro_run(frame_input);
+			mouse_wheel_x = 0.0f;
+			mouse_wheel_y = 0.0f;
 			retro_time_accumulator -= kFrameDurationNs;
 			++retro_steps;
 		}
@@ -549,6 +645,10 @@ int main(int argc, char *argv[])
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
+		if (!use_imgui_mouse)
+			suppress_imgui_mouse(imgui_mouse_buttons_down);
+		else
+			ImGui::GetIO().MouseDrawCursor = true;
 		ImGui::NewFrame();
 
 		gameplay_renderer.render(app.gameplay_snapshot().scene, drawable_width, drawable_height);

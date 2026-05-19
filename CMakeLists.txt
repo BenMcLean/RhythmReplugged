@@ -174,6 +174,8 @@ add_library(rr_ui
 	${RR_SRC_DIR}/ui/AppUiHost.h
 	${RR_SRC_DIR}/ui/OpenGlCoverTextures.cpp
 	${RR_SRC_DIR}/ui/OpenGlCoverTextures.h
+	${RR_SRC_DIR}/ui/UiNavigation.cpp
+	${RR_SRC_DIR}/ui/UiNavigation.h
 )
 
 target_include_directories(rr_ui PUBLIC

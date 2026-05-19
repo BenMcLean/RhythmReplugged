@@ -1,4 +1,5 @@
 #include "ui/AppUi.h"
+#include "ui/UiNavigation.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,6 +31,19 @@ namespace
 		char buffer[32];
 		std::snprintf(buffer, sizeof(buffer), "%d:%02d", minutes, seconds);
 		return std::string(buffer);
+	}
+
+	int next_choice_index(int current_choice_index, int delta, int choice_count)
+	{
+		if (choice_count <= 0)
+			return current_choice_index;
+
+		int next_index = current_choice_index + delta;
+		while (next_index < 0)
+			next_index += choice_count;
+		while (next_index >= choice_count)
+			next_index -= choice_count;
+		return next_index;
 	}
 
 	void draw_status_pill(const char *id, const ImVec2 &position, const char *text, ImU32 background_color)
@@ -429,10 +443,10 @@ namespace rhythmreplugged::ui
 			? std::string("Song Browser")
 			: browser.current_path + "##Song Browser";
 		const ImGuiIO &io = ImGui::GetIO();
+		const int wheel_steps = wheel_steps_from_delta(io.MouseWheel);
 		const bool browser_changed = browser.current_path != last_browser_path;
 		const bool selected_index_changed = browser.selected_index != last_selected_index;
-		const bool mouse_scrolling = io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f;
-		const bool should_follow_selection = (browser_changed || selected_index_changed) && !mouse_scrolling;
+		const bool follow_selection = should_follow_selection(browser_changed, selected_index_changed, io);
 
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
@@ -482,13 +496,9 @@ namespace rhythmreplugged::ui
 			const float text_start_y = ImGui::GetCursorPosY();
 			const bool activated = ImGui::Selectable(label.c_str(), selected, 0, ImVec2(0.0f, 0.0f));
 			const bool title_hovered = ImGui::IsItemHovered();
-			if (selected && should_follow_selection)
+			if (selected && follow_selection)
 				ImGui::SetScrollHereY(0.5f);
-			if (activated &&
-				actions.set_selected_index != nullptr)
-			{
-				pending_selected_index = index;
-			}
+			queue_selected_index_change(activated, index, pending_selected_index);
 
 			if (title_hovered &&
 				ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) &&
@@ -582,20 +592,28 @@ namespace rhythmreplugged::ui
 			ImGui::TextWrapped("%s", browser.status_message.c_str());
 		}
 
-			ImGui::EndGroup();
-			ImGui::End();
+		ImGui::EndGroup();
+		ImGui::End();
 
-			if (pending_selected_index >= 0 &&
-				actions.set_selected_index != nullptr)
-			{
-				actions.set_selected_index(pending_selected_index);
-			}
+		if (wheel_steps != 0 && !browser.entries.empty() && actions.set_selected_index != nullptr)
+		{
+			pending_selected_index = wrap_menu_index(
+				browser.selected_index,
+				-wheel_steps,
+				static_cast<int>(browser.entries.size()));
+		}
 
-			if (pending_activate_selection &&
-				actions.activate_selection != nullptr)
-			{
-				actions.activate_selection();
-			}
+		if (pending_selected_index >= 0 &&
+			actions.set_selected_index != nullptr)
+		{
+			actions.set_selected_index(pending_selected_index);
+		}
+
+		if (pending_activate_selection &&
+			actions.activate_selection != nullptr)
+		{
+			actions.activate_selection();
+		}
 
 		last_browser_path = browser.current_path;
 		last_selected_index = browser.selected_index;
@@ -609,6 +627,7 @@ namespace rhythmreplugged::ui
 	{
 		int pending_selected_index = -1;
 		bool pending_activate_selection = false;
+		const int wheel_steps = wheel_steps_from_delta(ImGui::GetIO().MouseWheel);
 
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
@@ -629,11 +648,8 @@ namespace rhythmreplugged::ui
 		{
 			const DifficultyListItem &entry = menu.entries[index];
 			const bool selected = index == menu.selected_index;
-			if (ImGui::Selectable(entry.label.c_str(), selected, 0, ImVec2(0.0f, 36.0f * ui_scale)) &&
-				actions.set_selected_index != nullptr)
-			{
-				pending_selected_index = index;
-			}
+			const bool activated = ImGui::Selectable(entry.label.c_str(), selected, 0, ImVec2(0.0f, 36.0f * ui_scale));
+			queue_selected_index_change(activated, index, pending_selected_index);
 		}
 
 		ImGui::Spacing();
@@ -652,6 +668,14 @@ namespace rhythmreplugged::ui
 		ImGui::Spacing();
 		ImGui::TextDisabled("B: Back    A / Start: Confirm");
 		ImGui::End();
+
+		if (wheel_steps != 0 && !menu.entries.empty() && actions.set_selected_index != nullptr)
+		{
+			pending_selected_index = clamp_menu_index(
+				menu.selected_index,
+				-wheel_steps,
+				static_cast<int>(menu.entries.size()));
+		}
 
 		render_preload_progress_overlay(menu, window_size, ui_scale);
 
@@ -676,6 +700,7 @@ namespace rhythmreplugged::ui
 	{
 		int pending_selected_index = -1;
 		bool pending_activate_selection = false;
+		const int wheel_steps = wheel_steps_from_delta(ImGui::GetIO().MouseWheel);
 
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
@@ -696,11 +721,8 @@ namespace rhythmreplugged::ui
 		{
 			const InstrumentListItem &entry = menu.entries[index];
 			const bool selected = index == menu.selected_index;
-			if (ImGui::Selectable(entry.label.c_str(), selected, 0, ImVec2(0.0f, 36.0f * ui_scale)) &&
-				actions.set_selected_index != nullptr)
-			{
-				pending_selected_index = index;
-			}
+			const bool activated = ImGui::Selectable(entry.label.c_str(), selected, 0, ImVec2(0.0f, 36.0f * ui_scale));
+			queue_selected_index_change(activated, index, pending_selected_index);
 		}
 
 		ImGui::Spacing();
@@ -719,6 +741,14 @@ namespace rhythmreplugged::ui
 		ImGui::Spacing();
 		ImGui::TextDisabled("B: Back    A / Start: Confirm");
 		ImGui::End();
+
+		if (wheel_steps != 0 && !menu.entries.empty() && actions.set_selected_index != nullptr)
+		{
+			pending_selected_index = clamp_menu_index(
+				menu.selected_index,
+				-wheel_steps,
+				static_cast<int>(menu.entries.size()));
+		}
 
 		if (pending_selected_index >= 0 &&
 			actions.set_selected_index != nullptr)
@@ -838,6 +868,8 @@ namespace rhythmreplugged::ui
 			return;
 
 		ui_state.selected_category_index = (std::clamp)(ui_state.selected_category_index, 0, static_cast<int>(categories.size()) - 1);
+		const ImGuiIO &io = ImGui::GetIO();
+		const int wheel_steps = wheel_steps_from_delta(io.MouseWheel);
 
 		ImGui::SetNextWindowPos(ImVec2(window_size.x * 0.12f, window_size.y * 0.10f), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(ImVec2(window_size.x * 0.76f, window_size.y * 0.80f), ImGuiCond_Always);
@@ -856,16 +888,29 @@ namespace rhythmreplugged::ui
 
 		const float category_width = 240.0f * ui_scale;
 		ImGui::BeginChild("core_option_categories", ImVec2(category_width, 0.0f), true);
+		const bool category_window_hovered = ImGui::IsWindowHovered();
 		for (int index = 0; index < static_cast<int>(categories.size()); ++index)
 		{
 			const FrontendOptionCategoryDefinition &category = categories[static_cast<size_t>(index)];
 			if (ImGui::Selectable(category.display_name, ui_state.selected_category_index == index))
+			{
 				ui_state.selected_category_index = index;
+				ui_state.selected_option_index = 0;
+			}
 		}
 		ImGui::EndChild();
+		if (category_window_hovered && wheel_steps != 0)
+		{
+			ui_state.selected_category_index = (std::clamp)(
+				ui_state.selected_category_index - wheel_steps,
+				0,
+				static_cast<int>(categories.size()) - 1);
+			ui_state.selected_option_index = 0;
+		}
 
 		ImGui::SameLine();
 		ImGui::BeginChild("core_option_values", ImVec2(0.0f, 0.0f), true);
+		const bool values_window_hovered = ImGui::IsWindowHovered();
 		const FrontendOptionCategoryDefinition &selected_category = categories[static_cast<size_t>(ui_state.selected_category_index)];
 		ImGui::TextUnformatted(selected_category.display_name);
 		if (selected_category.description != nullptr && selected_category.description[0] != '\0')
@@ -873,14 +918,22 @@ namespace rhythmreplugged::ui
 		ImGui::Separator();
 
 		bool rendered_any_options = false;
+		int option_count = 0;
+		int hovered_option_index = -1;
+		const FrontendOptionDefinition *selected_definition = nullptr;
+		int selected_choice_index = 0;
 		for (const FrontendOptionDefinition &definition : frontend_option_definitions())
 		{
 			if (definition.category_id != selected_category.id)
 				continue;
 
+			const int option_index = option_count++;
 			rendered_any_options = true;
 			ImGui::PushID(definition.libretro_key);
-			ImGui::TextUnformatted(definition.display_name);
+			const bool option_selected = ui_state.selected_option_index == option_index;
+			if (ImGui::Selectable(definition.display_name, option_selected, ImGuiSelectableFlags_AllowOverlap))
+				ui_state.selected_option_index = option_index;
+			sync_hovered_index(ImGui::IsItemHovered(), option_index, ui_state.selected_option_index, hovered_option_index);
 			if (definition.description != nullptr && definition.description[0] != '\0')
 				ImGui::TextWrapped("%s", definition.description);
 
@@ -910,6 +963,12 @@ namespace rhythmreplugged::ui
 				}
 				ImGui::EndCombo();
 			}
+			sync_hovered_index(ImGui::IsItemHovered(), option_index, ui_state.selected_option_index, hovered_option_index);
+			if (option_selected)
+			{
+				selected_definition = &definition;
+				selected_choice_index = current_choice_index;
+			}
 
 			const char *timing_text = "Applies immediately.";
 			switch (definition.apply_timing)
@@ -927,6 +986,31 @@ namespace rhythmreplugged::ui
 			ImGui::TextDisabled("%s", timing_text);
 			ImGui::Spacing();
 			ImGui::PopID();
+		}
+
+		if (option_count > 0)
+			ui_state.selected_option_index = (std::clamp)(ui_state.selected_option_index, 0, option_count - 1);
+		else
+			ui_state.selected_option_index = 0;
+
+		if (values_window_hovered && wheel_steps != 0 && option_count > 0)
+		{
+			if (hovered_option_index >= 0)
+				ui_state.selected_option_index = hovered_option_index;
+
+			if (selected_definition != nullptr && actions.set_option_value != nullptr)
+			{
+				const int next_index = next_choice_index(
+					selected_choice_index,
+					-wheel_steps,
+					static_cast<int>(selected_definition->choice_count));
+				if (next_index != selected_choice_index)
+				{
+					actions.set_option_value(
+						*selected_definition,
+						selected_definition->choices[static_cast<size_t>(next_index)].value);
+				}
+			}
 		}
 
 		if (!rendered_any_options)

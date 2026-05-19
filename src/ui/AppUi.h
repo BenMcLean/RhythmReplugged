@@ -33,6 +33,7 @@ namespace rhythmreplugged::ui
 	struct FrontendOptionsUiState
 	{
 		int selected_category_index = 0;
+		int selected_option_index = 0;
 	};
 
 	struct FrontendOptionsUiActions
