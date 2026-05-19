@@ -157,6 +157,25 @@ namespace
 			},
 			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[1].default_value,
 		},
+		{
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[2].libretro_key,
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[2].display_name,
+			nullptr,
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[2].description,
+			nullptr,
+			"gameplay",
+			{
+				{
+					::rhythmreplugged::frontend_contract::kFrontendMultithreadedFileLoadingChoices[0].value,
+					::rhythmreplugged::frontend_contract::kFrontendMultithreadedFileLoadingChoices[0].label,
+				},
+				{
+					::rhythmreplugged::frontend_contract::kFrontendMultithreadedFileLoadingChoices[1].value,
+					::rhythmreplugged::frontend_contract::kFrontendMultithreadedFileLoadingChoices[1].label,
+				},
+			},
+			::rhythmreplugged::frontend_contract::kFrontendOptionDefinitions[2].default_value,
+		},
 		{},
 	};
 

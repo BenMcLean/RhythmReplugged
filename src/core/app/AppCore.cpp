@@ -241,6 +241,7 @@ namespace rhythmreplugged::core
 	bool AppCore::retro_init(const AppLaunchRequest &launch_request, std::string &error_message)
 	{
 		frontend_options_ = launch_request.frontend_options;
+		song_preloader_.set_multithreaded_file_loading_enabled(frontend_options_.multithreaded_file_loading);
 		restrict_to_startup_song_ = launch_request.restrict_to_startup_song;
 		mode_ = AppMode::Menu;
 		menu_screen_ = MenuScreen::SongBrowser;
@@ -284,6 +285,7 @@ namespace rhythmreplugged::core
 	void AppCore::set_frontend_options(const ::rhythmreplugged::frontend_contract::FrontendOptions &options)
 	{
 		frontend_options_ = options;
+		song_preloader_.set_multithreaded_file_loading_enabled(frontend_options_.multithreaded_file_loading);
 		if (pending_song_path_.empty())
 			pending_gameplay_options_ = make_default_gameplay_options();
 	}

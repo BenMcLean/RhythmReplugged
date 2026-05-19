@@ -39,6 +39,7 @@ namespace rhythmreplugged::core
 		SongPreloader(const SongPreloader &) = delete;
 		SongPreloader &operator=(const SongPreloader &) = delete;
 
+		void set_multithreaded_file_loading_enabled(bool enabled);
 		void begin(const std::string &song_directory);
 		void cancel();
 		SongPreloadStatus status() const;
@@ -76,6 +77,8 @@ namespace rhythmreplugged::core
 
 		::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system_;
 		BackgroundWorker worker_;
+		bool multithreaded_file_loading_enabled_ = true;
+		size_t configured_thread_count_ = 0;
 		std::atomic<std::uint64_t> generation_{0};
 		mutable std::mutex state_mutex_;
 		std::shared_ptr<RequestState> current_request_;

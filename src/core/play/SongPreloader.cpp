@@ -27,6 +27,11 @@ namespace rhythmreplugged::core
 		worker_.stop();
 	}
 
+	void SongPreloader::set_multithreaded_file_loading_enabled(bool enabled)
+	{
+		multithreaded_file_loading_enabled_ = enabled;
+	}
+
 	void SongPreloader::begin(const std::string &song_directory)
 	{
 		cancel();
@@ -82,8 +87,19 @@ namespace rhythmreplugged::core
 			return;
 		}
 
+		const size_t desired_thread_count = multithreaded_file_loading_enabled_
+			? BackgroundWorker::automatic_thread_count(available_stems.size())
+			: 1;
+		if (worker_.running() && configured_thread_count_ != desired_thread_count)
+		{
+			worker_.stop();
+			configured_thread_count_ = 0;
+		}
 		if (!worker_.running())
-			worker_.start(BackgroundWorker::automatic_thread_count(available_stems.size()));
+		{
+			worker_.start(desired_thread_count);
+			configured_thread_count_ = desired_thread_count;
+		}
 
 		for (const auto &[order_index, stem_name] : available_stems)
 		{

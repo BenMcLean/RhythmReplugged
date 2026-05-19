@@ -12,6 +12,7 @@ namespace rhythmreplugged::frontend_contract
 	{
 		DefaultInstrument,
 		DefaultDifficulty,
+		MultithreadedFileLoading,
 	};
 
 	struct FrontendOptionChoice
@@ -36,6 +37,7 @@ namespace rhythmreplugged::frontend_contract
 	{
 		std::string default_instrument;
 		std::string default_difficulty;
+		bool multithreaded_file_loading = true;
 	};
 
 	inline constexpr std::array<FrontendOptionChoice, 6> kFrontendInstrumentChoices{{
@@ -55,7 +57,12 @@ namespace rhythmreplugged::frontend_contract
 		{"expert", "Expert"},
 	}};
 
-	inline constexpr std::array<FrontendOptionDefinition, 2> kFrontendOptionDefinitions{{
+	inline constexpr std::array<FrontendOptionChoice, 2> kFrontendMultithreadedFileLoadingChoices{{
+		{"enabled", "Enabled"},
+		{"disabled", "Disabled"},
+	}};
+
+	inline constexpr std::array<FrontendOptionDefinition, 3> kFrontendOptionDefinitions{{
 		{
 			FrontendOptionId::DefaultInstrument,
 			"--instrument",
@@ -75,6 +82,16 @@ namespace rhythmreplugged::frontend_contract
 			kFrontendDifficultyChoices.data(),
 			kFrontendDifficultyChoices.size(),
 			"ask",
+		},
+		{
+			FrontendOptionId::MultithreadedFileLoading,
+			"--multithreaded-file-loading",
+			"rhythmreplugged_multithreaded_file_loading",
+			"Multithreaded File Loading",
+			"Controls whether song stems are loaded on multiple worker threads. Disable this for frontends whose file I/O callbacks are not safe to call concurrently.",
+			kFrontendMultithreadedFileLoadingChoices.data(),
+			kFrontendMultithreadedFileLoadingChoices.size(),
+			"enabled",
 		},
 	}};
 
@@ -127,6 +144,9 @@ namespace rhythmreplugged::frontend_contract
 			return true;
 		case FrontendOptionId::DefaultDifficulty:
 			options.default_difficulty = value == "ask" ? std::string() : std::string(value);
+			return true;
+		case FrontendOptionId::MultithreadedFileLoading:
+			options.multithreaded_file_loading = value != "disabled";
 			return true;
 		}
 
