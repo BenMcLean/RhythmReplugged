@@ -440,6 +440,7 @@ int main(int argc, char *argv[])
 
 	MiniaudioOutput audio_output;
 	::rhythmreplugged::frontend_contract::RetroInputState held_input{};
+	::rhythmreplugged::frontend_contract::RetroInputState previous_frontend_options_input{};
 	std::unordered_map<SDL_JoystickID, SDL_Gamepad *> open_gamepads;
 	OpenGlCoverTextures cover_textures(file_system);
 	GameplayRendererGl gameplay_renderer;
@@ -653,6 +654,20 @@ int main(int argc, char *argv[])
 		const bool use_imgui_mouse = !imgui_nav_activity_this_frame &&
 			(imgui_mouse_activity_this_frame || has_mouse_buttons_down(imgui_mouse_buttons_down));
 
+		auto pressed = [](bool current, bool previous) { return current && !previous; };
+		FrontendOptionsNavInput frontend_options_nav_input{};
+		if (frontend_options_state.menu_open)
+		{
+			frontend_options_nav_input.up_pressed = pressed(held_input.up, previous_frontend_options_input.up);
+			frontend_options_nav_input.down_pressed = pressed(held_input.down, previous_frontend_options_input.down);
+			frontend_options_nav_input.left_pressed = pressed(held_input.left, previous_frontend_options_input.left);
+			frontend_options_nav_input.right_pressed = pressed(held_input.right, previous_frontend_options_input.right);
+			frontend_options_nav_input.confirm_pressed = pressed(held_input.a, previous_frontend_options_input.a) ||
+				pressed(held_input.start, previous_frontend_options_input.start);
+			frontend_options_nav_input.previous_value_pressed = pressed(held_input.l, previous_frontend_options_input.l);
+			frontend_options_nav_input.next_value_pressed = pressed(held_input.r, previous_frontend_options_input.r);
+		}
+
 		size_t retro_steps = 0;
 		while (!frontend_options_state.menu_open && retro_time_accumulator >= kFrameDurationNs && retro_steps < 4)
 		{
@@ -687,15 +702,12 @@ int main(int argc, char *argv[])
 			ImGui::GetIO().MouseDrawCursor = true;
 		ImGui::NewFrame();
 
-		gameplay_renderer.render(app.gameplay_snapshot().scene, drawable_width, drawable_height);
-
-		render_app_ui(
-			app,
-			ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height)),
-			kDefaultUiScale,
-			cover_textures);
 		if (frontend_options_state.menu_open)
 		{
+			glViewport(0, 0, drawable_width, drawable_height);
+			glClearColor(0.04f, 0.05f, 0.08f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT);
+
 			FrontendOptionsUiActions actions;
 			actions.set_option_value = [&](const FrontendOptionDefinition &definition, std::string_view value)
 			{
@@ -705,12 +717,28 @@ int main(int argc, char *argv[])
 			render_frontend_options_ui(
 				frontend_options_state.persisted_options,
 				frontend_options_state.ui_state,
+				frontend_options_nav_input,
 				actions,
 				ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height)),
 				kDefaultUiScale,
 				frontend_options_state.config_path.c_str(),
 				frontend_options_state.status_message.c_str());
 		}
+		else
+		{
+			gameplay_renderer.render(app.gameplay_snapshot().scene, drawable_width, drawable_height);
+
+			render_app_ui(
+				app,
+				ImVec2(static_cast<float>(drawable_width), static_cast<float>(drawable_height)),
+				kDefaultUiScale,
+				cover_textures);
+		}
+
+		if (frontend_options_state.menu_open)
+			previous_frontend_options_input = held_input;
+		else
+			previous_frontend_options_input = {};
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

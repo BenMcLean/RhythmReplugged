@@ -32,8 +32,20 @@ namespace rhythmreplugged::ui
 
 	struct FrontendOptionsUiState
 	{
+		bool categories_focused = false;
 		int selected_category_index = 0;
 		int selected_option_index = 0;
+	};
+
+	struct FrontendOptionsNavInput
+	{
+		bool up_pressed = false;
+		bool down_pressed = false;
+		bool left_pressed = false;
+		bool right_pressed = false;
+		bool confirm_pressed = false;
+		bool previous_value_pressed = false;
+		bool next_value_pressed = false;
 	};
 
 	struct FrontendOptionsUiActions
@@ -69,6 +81,7 @@ namespace rhythmreplugged::ui
 	void render_frontend_options_ui(
 		const ::rhythmreplugged::frontend_contract::FrontendOptions &options,
 		FrontendOptionsUiState &ui_state,
+		const FrontendOptionsNavInput &nav_input,
 		const FrontendOptionsUiActions &actions,
 		ImVec2 window_size,
 		float ui_scale,

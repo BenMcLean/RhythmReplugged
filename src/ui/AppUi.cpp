@@ -46,6 +46,20 @@ namespace
 		return next_index;
 	}
 
+	int selected_choice_index_for_option(
+		const ::rhythmreplugged::frontend_contract::FrontendOptions &options,
+		const ::rhythmreplugged::frontend_contract::FrontendOptionDefinition &definition)
+	{
+		const std::string_view current_value = frontend_option_value(options, definition.id);
+		for (size_t choice_index = 0; choice_index < definition.choice_count; ++choice_index)
+		{
+			if (current_value == definition.choices[choice_index].value)
+				return static_cast<int>(choice_index);
+		}
+
+		return 0;
+	}
+
 	void draw_status_pill(const char *id, const ImVec2 &position, const char *text, ImU32 background_color)
 	{
 		(void)id;
@@ -855,6 +869,7 @@ namespace rhythmreplugged::ui
 	void render_frontend_options_ui(
 		const ::rhythmreplugged::frontend_contract::FrontendOptions &options,
 		FrontendOptionsUiState &ui_state,
+		const FrontendOptionsNavInput &nav_input,
 		const FrontendOptionsUiActions &actions,
 		ImVec2 window_size,
 		float ui_scale,
@@ -871,36 +886,171 @@ namespace rhythmreplugged::ui
 		const ImGuiIO &io = ImGui::GetIO();
 		const int wheel_steps = wheel_steps_from_delta(io.MouseWheel);
 
-		ImGui::SetNextWindowPos(ImVec2(window_size.x * 0.12f, window_size.y * 0.10f), ImGuiCond_Always);
-		ImGui::SetNextWindowSize(ImVec2(window_size.x * 0.76f, window_size.y * 0.80f), ImGuiCond_Always);
-		ImGui::Begin("Core Options", nullptr,
+		std::vector<const FrontendOptionDefinition *> category_options;
+		for (const FrontendOptionDefinition &definition : frontend_option_definitions())
+		{
+			if (definition.category_id == categories[static_cast<size_t>(ui_state.selected_category_index)].id)
+				category_options.push_back(&definition);
+		}
+
+		if (category_options.empty())
+		{
+			ui_state.selected_option_index = 0;
+		}
+		else
+		{
+			ui_state.selected_option_index = (std::clamp)(
+				ui_state.selected_option_index,
+				0,
+				static_cast<int>(category_options.size()) - 1);
+		}
+
+		const bool categories_were_focused = ui_state.categories_focused;
+		if (nav_input.left_pressed)
+			ui_state.categories_focused = true;
+		if (nav_input.right_pressed)
+			ui_state.categories_focused = false;
+		const bool category_selection_changed = nav_input.up_pressed || nav_input.down_pressed;
+		const bool option_selection_changed = nav_input.up_pressed || nav_input.down_pressed;
+
+		if (ui_state.categories_focused)
+		{
+			if (nav_input.up_pressed)
+			{
+				ui_state.selected_category_index = clamp_menu_index(
+					ui_state.selected_category_index,
+					-1,
+					static_cast<int>(categories.size()));
+				ui_state.selected_option_index = 0;
+			}
+			if (nav_input.down_pressed)
+			{
+				ui_state.selected_category_index = clamp_menu_index(
+					ui_state.selected_category_index,
+					1,
+					static_cast<int>(categories.size()));
+				ui_state.selected_option_index = 0;
+			}
+		}
+		else if (!category_options.empty())
+		{
+			if (nav_input.up_pressed)
+			{
+				ui_state.selected_option_index = clamp_menu_index(
+					ui_state.selected_option_index,
+					-1,
+					static_cast<int>(category_options.size()));
+			}
+			if (nav_input.down_pressed)
+			{
+				ui_state.selected_option_index = clamp_menu_index(
+					ui_state.selected_option_index,
+					1,
+					static_cast<int>(category_options.size()));
+			}
+
+			const FrontendOptionDefinition &selected_definition = *category_options[static_cast<size_t>(ui_state.selected_option_index)];
+			const int current_choice_index = selected_choice_index_for_option(options, selected_definition);
+			int choice_delta = 0;
+			const bool consumed_focus_move_right = categories_were_focused && nav_input.right_pressed;
+			const bool consumed_focus_move_left = !categories_were_focused && nav_input.left_pressed;
+			if (!consumed_focus_move_left && (nav_input.left_pressed || nav_input.previous_value_pressed))
+				choice_delta -= 1;
+			if (!consumed_focus_move_right && (nav_input.right_pressed || nav_input.next_value_pressed || nav_input.confirm_pressed))
+				choice_delta += 1;
+			if (choice_delta != 0 && actions.set_option_value != nullptr)
+			{
+				const int next_index = next_choice_index(
+					current_choice_index,
+					choice_delta,
+					static_cast<int>(selected_definition.choice_count));
+				actions.set_option_value(
+					selected_definition,
+					selected_definition.choices[static_cast<size_t>(next_index)].value);
+			}
+		}
+
+		ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+		ImGui::Begin("Core Options Screen", nullptr,
+			ImGuiWindowFlags_NoTitleBar |
 			ImGuiWindowFlags_NoResize |
 			ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoCollapse);
+			ImGuiWindowFlags_NoCollapse |
+			ImGuiWindowFlags_NoScrollbar |
+			ImGuiWindowFlags_NoScrollWithMouse |
+			ImGuiWindowFlags_NoSavedSettings |
+			ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-		ImGui::TextUnformatted("Core Options");
-		ImGui::TextDisabled("SDL3 frontend menu mirroring libretro core options. Press Esc to resume.");
-		if (config_path != nullptr && config_path[0] != '\0')
-			ImGui::TextDisabled("Config: %s", config_path);
+		ImDrawList *screen_draw_list = ImGui::GetWindowDrawList();
+		const ImVec2 screen_origin = ImGui::GetWindowPos();
+		const ImVec2 screen_max(screen_origin.x + window_size.x, screen_origin.y + window_size.y);
+		screen_draw_list->AddRectFilled(screen_origin, screen_max, IM_COL32(10, 13, 20, 255));
+
+		const ImVec2 content_origin(screen_origin.x + 40.0f * ui_scale, screen_origin.y + 28.0f * ui_scale);
+		const float header_height = 104.0f * ui_scale;
+		const float category_width = (std::max)(260.0f * ui_scale, window_size.x * 0.24f);
+		const float panel_gap = 24.0f * ui_scale;
+		const float content_height = window_size.y - content_origin.y + screen_origin.y - 34.0f * ui_scale;
+		const ImVec2 category_panel_min(content_origin.x, content_origin.y + header_height);
+		const ImVec2 category_panel_size(category_width, (std::max)(120.0f * ui_scale, content_height - header_height));
+		const ImVec2 values_panel_min(category_panel_min.x + category_panel_size.x + panel_gap, category_panel_min.y);
+		const ImVec2 values_panel_size(
+			(std::max)(160.0f * ui_scale, window_size.x - (values_panel_min.x - screen_origin.x) - 40.0f * ui_scale),
+			category_panel_size.y);
+
+		screen_draw_list->AddText(ImVec2(content_origin.x, content_origin.y), IM_COL32(240, 243, 248, 255), "Core Options");
 		if (config_status_message != nullptr && config_status_message[0] != '\0')
-			ImGui::TextWrapped("%s", config_status_message);
-		ImGui::Spacing();
+			screen_draw_list->AddText(ImVec2(content_origin.x, content_origin.y + 28.0f * ui_scale), IM_COL32(208, 214, 224, 255), config_status_message);
 
-		const float category_width = 240.0f * ui_scale;
-		ImGui::BeginChild("core_option_categories", ImVec2(category_width, 0.0f), true);
+		screen_draw_list->AddRectFilled(
+			category_panel_min,
+			ImVec2(category_panel_min.x + category_panel_size.x, category_panel_min.y + category_panel_size.y),
+			IM_COL32(20, 25, 36, 255),
+			12.0f);
+		screen_draw_list->AddRectFilled(
+			values_panel_min,
+			ImVec2(values_panel_min.x + values_panel_size.x, values_panel_min.y + values_panel_size.y),
+			IM_COL32(16, 20, 29, 255),
+			12.0f);
+		screen_draw_list->AddRect(
+			category_panel_min,
+			ImVec2(category_panel_min.x + category_panel_size.x, category_panel_min.y + category_panel_size.y),
+			ui_state.categories_focused ? IM_COL32(126, 168, 255, 255) : IM_COL32(52, 62, 82, 255),
+			12.0f,
+			0,
+			ui_state.categories_focused ? 3.0f : 1.0f);
+		screen_draw_list->AddRect(
+			values_panel_min,
+			ImVec2(values_panel_min.x + values_panel_size.x, values_panel_min.y + values_panel_size.y),
+			!ui_state.categories_focused ? IM_COL32(126, 168, 255, 255) : IM_COL32(52, 62, 82, 255),
+			12.0f,
+			0,
+			!ui_state.categories_focused ? 3.0f : 1.0f);
+
+		ImGui::SetCursorScreenPos(ImVec2(category_panel_min.x + 12.0f * ui_scale, category_panel_min.y + 12.0f * ui_scale));
+		ImGui::BeginChild("core_option_categories", ImVec2(category_panel_size.x - 24.0f * ui_scale, category_panel_size.y - 24.0f * ui_scale), false);
 		const bool category_window_hovered = ImGui::IsWindowHovered();
 		for (int index = 0; index < static_cast<int>(categories.size()); ++index)
 		{
 			const FrontendOptionCategoryDefinition &category = categories[static_cast<size_t>(index)];
-			if (ImGui::Selectable(category.display_name, ui_state.selected_category_index == index))
+			const bool selected = ui_state.selected_category_index == index;
+			if (ImGui::Selectable(category.display_name, selected))
 			{
+				ui_state.categories_focused = true;
 				ui_state.selected_category_index = index;
 				ui_state.selected_option_index = 0;
 			}
+			if (selected && ui_state.categories_focused && category_selection_changed)
+				ImGui::SetScrollHereY(0.5f);
 		}
 		ImGui::EndChild();
 		if (category_window_hovered && wheel_steps != 0)
 		{
+			ui_state.categories_focused = true;
 			ui_state.selected_category_index = (std::clamp)(
 				ui_state.selected_category_index - wheel_steps,
 				0,
@@ -908,66 +1058,73 @@ namespace rhythmreplugged::ui
 			ui_state.selected_option_index = 0;
 		}
 
-		ImGui::SameLine();
-		ImGui::BeginChild("core_option_values", ImVec2(0.0f, 0.0f), true);
+		ImGui::SetCursorScreenPos(ImVec2(values_panel_min.x + 18.0f * ui_scale, values_panel_min.y + 16.0f * ui_scale));
+		ImGui::BeginChild("core_option_values", ImVec2(values_panel_size.x - 36.0f * ui_scale, values_panel_size.y - 32.0f * ui_scale), false);
 		const bool values_window_hovered = ImGui::IsWindowHovered();
 		const FrontendOptionCategoryDefinition &selected_category = categories[static_cast<size_t>(ui_state.selected_category_index)];
 		ImGui::TextUnformatted(selected_category.display_name);
-		if (selected_category.description != nullptr && selected_category.description[0] != '\0')
-			ImGui::TextWrapped("%s", selected_category.description);
+		ImGui::TextDisabled("%s", ui_state.categories_focused ? "Left panel focused" : "Right panel focused");
 		ImGui::Separator();
 
 		bool rendered_any_options = false;
-		int option_count = 0;
-		int hovered_option_index = -1;
-		const FrontendOptionDefinition *selected_definition = nullptr;
-		int selected_choice_index = 0;
-		for (const FrontendOptionDefinition &definition : frontend_option_definitions())
+		for (int option_index = 0; option_index < static_cast<int>(category_options.size()); ++option_index)
 		{
-			if (definition.category_id != selected_category.id)
-				continue;
-
-			const int option_index = option_count++;
+			const FrontendOptionDefinition &definition = *category_options[static_cast<size_t>(option_index)];
 			rendered_any_options = true;
 			ImGui::PushID(definition.libretro_key);
 			const bool option_selected = ui_state.selected_option_index == option_index;
-			if (ImGui::Selectable(definition.display_name, option_selected, ImGuiSelectableFlags_AllowOverlap))
+			if (ImGui::Selectable(definition.display_name, option_selected))
+			{
+				ui_state.categories_focused = false;
 				ui_state.selected_option_index = option_index;
-			sync_hovered_index(ImGui::IsItemHovered(), option_index, ui_state.selected_option_index, hovered_option_index);
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ui_state.categories_focused = false;
+				ui_state.selected_option_index = option_index;
+			}
 			if (definition.description != nullptr && definition.description[0] != '\0')
 				ImGui::TextWrapped("%s", definition.description);
+			if (option_selected && !ui_state.categories_focused && option_selection_changed)
+				ImGui::SetScrollHereY(0.35f);
 
-			int current_choice_index = 0;
-			const std::string_view current_value = frontend_option_value(options, definition.id);
-			for (size_t choice_index = 0; choice_index < definition.choice_count; ++choice_index)
+			const int current_choice_index = selected_choice_index_for_option(options, definition);
+			if (ImGui::ArrowButton("##prev", ImGuiDir_Left) &&
+				actions.set_option_value != nullptr)
 			{
-				if (current_value == definition.choices[choice_index].value)
-				{
-					current_choice_index = static_cast<int>(choice_index);
-					break;
-				}
+				const int next_index = next_choice_index(current_choice_index, -1, static_cast<int>(definition.choice_count));
+				actions.set_option_value(definition, definition.choices[static_cast<size_t>(next_index)].value);
 			}
+			if (ImGui::IsItemHovered())
+			{
+				ui_state.categories_focused = false;
+				ui_state.selected_option_index = option_index;
+			}
+			ImGui::SameLine();
 
-			if (ImGui::BeginCombo("##value", definition.choices[current_choice_index].label))
+			const float value_button_width = 220.0f * ui_scale;
+			if (ImGui::Button(definition.choices[static_cast<size_t>(current_choice_index)].label, ImVec2(value_button_width, 0.0f)) &&
+				actions.set_option_value != nullptr)
 			{
-				for (size_t choice_index = 0; choice_index < definition.choice_count; ++choice_index)
-				{
-					const bool selected = current_choice_index == static_cast<int>(choice_index);
-					if (ImGui::Selectable(definition.choices[choice_index].label, selected) &&
-						actions.set_option_value != nullptr)
-					{
-						actions.set_option_value(definition, definition.choices[choice_index].value);
-					}
-					if (selected)
-						ImGui::SetItemDefaultFocus();
-				}
-				ImGui::EndCombo();
+				const int next_index = next_choice_index(current_choice_index, 1, static_cast<int>(definition.choice_count));
+				actions.set_option_value(definition, definition.choices[static_cast<size_t>(next_index)].value);
 			}
-			sync_hovered_index(ImGui::IsItemHovered(), option_index, ui_state.selected_option_index, hovered_option_index);
-			if (option_selected)
+			if (ImGui::IsItemHovered())
 			{
-				selected_definition = &definition;
-				selected_choice_index = current_choice_index;
+				ui_state.categories_focused = false;
+				ui_state.selected_option_index = option_index;
+			}
+			ImGui::SameLine();
+			if (ImGui::ArrowButton("##next", ImGuiDir_Right) &&
+				actions.set_option_value != nullptr)
+			{
+				const int next_index = next_choice_index(current_choice_index, 1, static_cast<int>(definition.choice_count));
+				actions.set_option_value(definition, definition.choices[static_cast<size_t>(next_index)].value);
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ui_state.categories_focused = false;
+				ui_state.selected_option_index = option_index;
 			}
 
 			const char *timing_text = "Applies immediately.";
@@ -988,28 +1145,20 @@ namespace rhythmreplugged::ui
 			ImGui::PopID();
 		}
 
-		if (option_count > 0)
-			ui_state.selected_option_index = (std::clamp)(ui_state.selected_option_index, 0, option_count - 1);
-		else
-			ui_state.selected_option_index = 0;
-
-		if (values_window_hovered && wheel_steps != 0 && option_count > 0)
+		if (values_window_hovered && wheel_steps != 0 && !category_options.empty() && actions.set_option_value != nullptr)
 		{
-			if (hovered_option_index >= 0)
-				ui_state.selected_option_index = hovered_option_index;
-
-			if (selected_definition != nullptr && actions.set_option_value != nullptr)
+			ui_state.categories_focused = false;
+			const FrontendOptionDefinition &wheel_definition = *category_options[static_cast<size_t>(ui_state.selected_option_index)];
+			const int current_choice_index = selected_choice_index_for_option(options, wheel_definition);
+			const int next_index = next_choice_index(
+				current_choice_index,
+				-wheel_steps,
+				static_cast<int>(wheel_definition.choice_count));
+			if (next_index != current_choice_index)
 			{
-				const int next_index = next_choice_index(
-					selected_choice_index,
-					-wheel_steps,
-					static_cast<int>(selected_definition->choice_count));
-				if (next_index != selected_choice_index)
-				{
-					actions.set_option_value(
-						*selected_definition,
-						selected_definition->choices[static_cast<size_t>(next_index)].value);
-				}
+				actions.set_option_value(
+					wheel_definition,
+					wheel_definition.choices[static_cast<size_t>(next_index)].value);
 			}
 		}
 
@@ -1018,5 +1167,7 @@ namespace rhythmreplugged::ui
 
 		ImGui::EndChild();
 		ImGui::End();
+		ImGui::PopStyleColor();
+		ImGui::PopStyleVar(2);
 	}
 }
