@@ -2,14 +2,108 @@
 
 #include "core/utils/TextDecoding.h"
 
-#include <filesystem>
-#include <fstream>
+#include <cstring>
+#include <cstdio>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <vector>
 
 namespace rhythmreplugged::platform_libretro
 {
 	namespace
 	{
+		std::string normalize_generic_path(std::string path)
+		{
+			if (path.empty())
+				return {};
+
+			for (char &ch : path)
+			{
+				if (ch == '\\')
+					ch = '/';
+			}
+
+			std::vector<std::string> parts;
+			parts.reserve(16);
+			const bool is_absolute = !path.empty() && path.front() == '/';
+			size_t index = 0;
+			while (index < path.size())
+			{
+				while (index < path.size() && path[index] == '/')
+					++index;
+				if (index >= path.size())
+					break;
+
+				size_t next = index;
+				while (next < path.size() && path[next] != '/')
+					++next;
+
+				const std::string_view component(path.data() + index, next - index);
+				if (component == ".")
+				{
+					index = next;
+					continue;
+				}
+
+				if (component == "..")
+				{
+					if (!parts.empty() && parts.back() != "..")
+						parts.pop_back();
+					else if (!is_absolute)
+						parts.emplace_back(component);
+					index = next;
+					continue;
+				}
+
+				parts.emplace_back(component);
+				index = next;
+			}
+
+			std::string normalized;
+			if (is_absolute)
+				normalized.push_back('/');
+
+			for (size_t part_index = 0; part_index < parts.size(); ++part_index)
+			{
+				if (part_index > 0)
+					normalized.push_back('/');
+				normalized.append(parts[part_index]);
+			}
+
+			if (normalized.empty())
+				return is_absolute ? std::string("/") : std::string(".");
+
+			return normalized;
+		}
+
+		std::string join_generic_paths(std::string_view base, std::string_view child)
+		{
+			if (base.empty())
+				return normalize_generic_path(std::string(child));
+			if (child.empty())
+				return normalize_generic_path(std::string(base));
+
+			std::string joined(base);
+			if (joined.back() != '/' && joined.back() != '\\')
+				joined.push_back('/');
+			joined.append(child);
+			return normalize_generic_path(std::move(joined));
+		}
+
+		std::string generic_parent_path(const std::string &path)
+		{
+			const std::string normalized = normalize_generic_path(path);
+			if (normalized.empty() || normalized == "." || normalized == "/")
+				return normalized;
+
+			const size_t slash = normalized.find_last_of('/');
+			if (slash == std::string::npos)
+				return ".";
+			if (slash == 0)
+				return "/";
+			return normalized.substr(0, slash);
+		}
+
 		std::optional<int64_t> stat_path_with_vfs(uint32_t vfs_interface_version, const retro_vfs_interface *vfs_interface, const std::string &path, bool &is_directory)
 		{
 			if (vfs_interface == nullptr)
@@ -57,12 +151,12 @@ namespace rhythmreplugged::platform_libretro
 		if (path.empty())
 			return {};
 
-		return std::filesystem::path(path).lexically_normal().generic_string();
+		return normalize_generic_path(path);
 	}
 
 	std::string FileSystem::parent_path(const std::string &path) const
 	{
-		return std::filesystem::path(path).parent_path().generic_string();
+		return generic_parent_path(path);
 	}
 
 	bool FileSystem::path_exists(const std::string &path) const
@@ -71,8 +165,8 @@ namespace rhythmreplugged::platform_libretro
 		if (stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value())
 			return true;
 
-		std::error_code error_code;
-		return std::filesystem::exists(std::filesystem::path(path), error_code) && !error_code;
+		struct stat path_stat {};
+		return ::stat(path.c_str(), &path_stat) == 0;
 	}
 
 	bool FileSystem::path_is_directory(const std::string &path) const
@@ -81,8 +175,8 @@ namespace rhythmreplugged::platform_libretro
 		if (stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value())
 			return is_directory;
 
-		std::error_code error_code;
-		return std::filesystem::is_directory(std::filesystem::path(path), error_code) && !error_code;
+		struct stat path_stat {};
+		return ::stat(path.c_str(), &path_stat) == 0 && S_ISDIR(path_stat.st_mode);
 	}
 
 	std::optional<std::uint64_t> FileSystem::file_size(const std::string &path) const
@@ -97,12 +191,11 @@ namespace rhythmreplugged::platform_libretro
 			return static_cast<std::uint64_t>(*size);
 		}
 
-		std::error_code error_code;
-		const auto native_size = std::filesystem::file_size(std::filesystem::path(path), error_code);
-		if (error_code)
+		struct stat path_stat {};
+		if (::stat(path.c_str(), &path_stat) != 0 || !S_ISREG(path_stat.st_mode))
 			return std::nullopt;
 
-		return static_cast<std::uint64_t>(native_size);
+		return static_cast<std::uint64_t>(path_stat.st_size);
 	}
 
 	std::vector<::rhythmreplugged::frontend_contract::RetroDirectoryEntry> FileSystem::list_directory(const std::string &path) const
@@ -124,7 +217,7 @@ namespace rhythmreplugged::platform_libretro
 
 				::rhythmreplugged::frontend_contract::RetroDirectoryEntry entry;
 				entry.name = name;
-				entry.path = (std::filesystem::path(path) / entry.name).generic_string();
+				entry.path = join_generic_paths(path, entry.name);
 				entry.is_directory = vfs_interface_->dirent_is_dir(directory);
 				entries.push_back(std::move(entry));
 			}
@@ -133,18 +226,26 @@ namespace rhythmreplugged::platform_libretro
 			return entries;
 		}
 
-		std::error_code error_code;
-		for (const auto &entry : std::filesystem::directory_iterator(std::filesystem::path(path), error_code))
+		DIR *directory = ::opendir(path.c_str());
+		if (directory == nullptr)
+			return entries;
+
+		while (const dirent *raw_entry = ::readdir(directory))
 		{
-			if (error_code)
-				break;
+			const char *name = raw_entry->d_name;
+			if (name == nullptr)
+				continue;
+			if (std::strcmp(name, ".") == 0 || std::strcmp(name, "..") == 0)
+				continue;
 
 			::rhythmreplugged::frontend_contract::RetroDirectoryEntry directory_entry;
-			directory_entry.path = entry.path().generic_string();
-			directory_entry.name = entry.path().filename().string();
-			directory_entry.is_directory = entry.is_directory(error_code) && !error_code;
+			directory_entry.name = name;
+			directory_entry.path = join_generic_paths(path, directory_entry.name);
+			directory_entry.is_directory = path_is_directory(directory_entry.path);
 			entries.push_back(std::move(directory_entry));
 		}
+
+		::closedir(directory);
 
 		return entries;
 	}
@@ -166,14 +267,35 @@ namespace rhythmreplugged::platform_libretro
 		if (vfs_interface_ == nullptr || vfs_interface_->open == nullptr || vfs_interface_->close == nullptr ||
 			vfs_interface_->size == nullptr || vfs_interface_->read == nullptr)
 		{
-			std::ifstream stream(std::filesystem::path(path), std::ios::binary);
-			if (!stream)
+			FILE *file = std::fopen(path.c_str(), "rb");
+			if (file == nullptr)
 				return std::nullopt;
 
-			const std::vector<char> bytes((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-			std::vector<std::uint8_t> output(bytes.size());
-			for (size_t i = 0; i < bytes.size(); ++i)
-				output[i] = static_cast<std::uint8_t>(bytes[i]);
+			if (std::fseek(file, 0, SEEK_END) != 0)
+			{
+				std::fclose(file);
+				return std::nullopt;
+			}
+
+			const long raw_size = std::ftell(file);
+			if (raw_size < 0 || std::fseek(file, 0, SEEK_SET) != 0)
+			{
+				std::fclose(file);
+				return std::nullopt;
+			}
+
+			std::vector<std::uint8_t> output(static_cast<size_t>(raw_size));
+			if (!output.empty())
+			{
+				const size_t read_size = std::fread(output.data(), 1, output.size(), file);
+				if (read_size != output.size())
+				{
+					std::fclose(file);
+					return std::nullopt;
+				}
+			}
+
+			std::fclose(file);
 
 			return output;
 		}

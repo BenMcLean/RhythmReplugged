@@ -33,6 +33,8 @@ The current build is organized around a strict host split:
 
 Rendering code is written to the OpenGL ES 3.0 feature set. The SDL desktop host uses an OpenGL 3.3 Core context as a compatibility backend. Desktop libretro builds ask RetroArch for OpenGL ES 3.0 first and fall back to OpenGL 3.3 Core, while ARM/SBC libretro builds use an actual OpenGL ES 3.0 context only.
 
+When `RR_RENDER_USE_GLES=ON`, the SDL desktop host also requests an OpenGL ES 3.0 context and uses the GLES-flavored Dear ImGui shader path. That keeps the SDL host aligned with the same GLES3 renderer subset used by the ARM/libretro builds.
+
 For Dear ImGui specifically:
 
 - `platform_sdl3` builds the SDL3 platform backend and the OpenGL renderer backend for OpenGL 3.3 Core.
@@ -175,14 +177,16 @@ The first Linux configure may need a few system packages before `vcpkg` can fini
 
 ### Cross-Platform Notes
 
-These presets are meant for native builds on each platform:
+These presets cover three workflows:
 
 - use `windows-x64` on Windows
-- use `linux-debug` or `linux-release` on Linux
+- use `linux-debug` or `linux-release` for native x64 Linux builds
+- use `linux-arm64-release` or `linux-arm64-debug` for ARM64 SDL3 desktop output from WSL or another x64 Linux host
+- use `linux-arm64-libretro-release` or `linux-arm64-libretro-debug` for ARM64 libretro core output from WSL or another x64 Linux host
 
 The checked-in presets expect `VCPKG_ROOT` to be defined. If you do not want to set it globally on your machine, put it in an untracked `CMakeUserPresets.json` instead. That is also the safest fallback if VS Code configures with a broken toolchain path such as `/scripts/buildsystems/vcpkg.cmake`.
 
-The repo is set up so both workflows can live side by side in one checkout, but it does not currently provide a cross-compilation toolchain for producing Windows binaries from Linux or Linux binaries from Windows.
+The repository now includes a GNU `aarch64-linux-gnu` chainload toolchain under `cmake/toolchains/linux-aarch64-gcc.cmake` for Linux-on-Linux cross-compiles such as WSL Ubuntu on x64 Windows.
 
 ### RetroArch / libretro builds
 
@@ -208,9 +212,15 @@ The current x64 release core builds as a single drop-in DLL without extra third-
 
 ### Raspberry Pi / ARM64 libretro builds
 
-The project also includes native Linux ARM64 libretro presets for Raspberry Pi 4/5 class systems running a 64-bit OS. These presets are libretro-only, disable the SDL3 desktop frontend, and compile the renderer against OpenGL ES 3 headers.
+The project also includes Linux ARM64 libretro presets for Raspberry Pi 4/5 class systems running a 64-bit OS. These presets are libretro-only, disable the SDL3 desktop frontend, and compile the renderer against OpenGL ES 3 headers.
 
-On the target ARM64 machine, set `VCPKG_ROOT` and build:
+For a WSL or other x64 Linux host cross-build, install the ARM64 GNU cross toolchain first. On Ubuntu or Debian that typically means:
+
+```bash
+sudo apt install cmake ninja-build pkg-config gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+```
+
+Then set `VCPKG_ROOT` inside the Linux environment and build:
 
 ```bash
 cmake --preset linux-arm64-libretro-release
@@ -219,10 +229,29 @@ cmake --build --preset linux-arm64-libretro-release --target stage_libretro
 
 This produces and stages:
 
-- `build/linux-arm64-libretro-release/rhythmreplugged.so`
-- `dist/Release/libretro/rhythmreplugged.so`
-- `dist/Release/libretro/rhythmreplugged.info`
+- `build/linux-arm64-libretro-release/rhythmreplugged_libretro.so`
+- `dist/Release/libretro/rhythmreplugged_libretro.so`
+- `dist/Release/libretro/rhythmreplugged_libretro.info`
 
 The ARM64 presets assume a 64-bit Linux userland and the vcpkg `arm64-linux` triplet. A 32-bit RetroPie image may need a separate `arm-linux` triplet or a custom vcpkg triplet/toolchain file.
 
 For ARM/SBC targets, OpenGL ES 3 is the expected path and the ARM64 libretro presets are GLES-only. Desktop x64 libretro builds are more flexible: they try GLES3 first, then OpenGL 3.3 Core, while renderer features stay inside the OpenGL ES 3.0 feature set.
+
+### ARM64 Linux desktop builds
+
+The repo also provides cross-compiled ARM64 Linux desktop presets. These presets are SDL3-only, leave the libretro core disabled, and enable `RR_RENDER_USE_GLES=ON` so the standalone host targets an OpenGL ES 3.0 rendering path:
+
+```bash
+cmake --preset linux-arm64-release
+cmake --build --preset linux-arm64-release
+```
+
+This builds:
+
+- `build/linux-arm64-release/RhythmReplugged`
+
+and stages:
+
+- `dist/Release/desktop/RhythmReplugged`
+
+Important caveat: even though the SDL3 frontend can now build against GLES3, that still does not make Lakka a normal standalone-desktop target. Lakka is mainly relevant to the `libretro` core path, and that is still the recommended ARM64 deployment target for Raspberry Pi systems.

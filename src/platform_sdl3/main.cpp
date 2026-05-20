@@ -34,7 +34,11 @@ namespace
 	constexpr int kWindowWidth = 1280;
 	constexpr int kWindowHeight = 720;
 	constexpr Uint64 kFrameDurationNs = 1000000000ull / kAppFramesPerSecond;
+#if defined(RR_RENDER_OPENGL_ES3)
+	constexpr char kOpenGlGlslVersion[] = "#version 300 es";
+#else
 	constexpr char kOpenGlGlslVersion[] = "#version 330 core";
+#endif
 
 	struct SdlLaunchArguments
 	{
@@ -54,6 +58,36 @@ namespace
 		FrontendOptionsUiState ui_state;
 		bool menu_open = false;
 	};
+
+	struct SdlGraphicsConfiguration
+	{
+		GameplayRendererGl::GraphicsApi graphics_api = GameplayRendererGl::GraphicsApi::OpenGl33Core;
+		int context_major_version = 3;
+		int context_minor_version = 3;
+		SDL_GLProfile context_profile = SDL_GL_CONTEXT_PROFILE_CORE;
+		const char *graphics_label = "OpenGL 3.3 Core";
+	};
+
+	SdlGraphicsConfiguration sdl_graphics_configuration()
+	{
+#if defined(RR_RENDER_OPENGL_ES3)
+		return {
+			GameplayRendererGl::GraphicsApi::OpenGlEs3,
+			3,
+			0,
+			SDL_GL_CONTEXT_PROFILE_ES,
+			"OpenGL ES 3.0"
+		};
+#else
+		return {
+			GameplayRendererGl::GraphicsApi::OpenGl33Core,
+			3,
+			3,
+			SDL_GL_CONTEXT_PROFILE_CORE,
+			"OpenGL 3.3 Core"
+		};
+#endif
+	}
 
 	bool is_menu_navigation_scancode(SDL_Scancode scancode)
 	{
@@ -272,15 +306,17 @@ namespace
 
 int main(int argc, char *argv[])
 {
+	const SdlGraphicsConfiguration graphics_configuration = sdl_graphics_configuration();
+
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD))
 	{
 		std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
 		return 1;
 	}
 
-	if (!SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3) ||
-		!SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3) ||
-		!SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE) ||
+	if (!SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, graphics_configuration.context_major_version) ||
+		!SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, graphics_configuration.context_minor_version) ||
+		!SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, graphics_configuration.context_profile) ||
 		!SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1) ||
 		!SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24) ||
 		!SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8))
@@ -305,7 +341,7 @@ int main(int argc, char *argv[])
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	if (gl_context == nullptr)
 	{
-		std::cerr << "SDL_GL_CreateContext failed: " << SDL_GetError() << "\n";
+		std::cerr << "SDL_GL_CreateContext failed for " << graphics_configuration.graphics_label << ": " << SDL_GetError() << "\n";
 		SDL_DestroyWindow(window);
 		SDL_Quit();
 		return 1;
@@ -345,7 +381,7 @@ int main(int argc, char *argv[])
 
 	if (!ImGui_ImplOpenGL3_Init(kOpenGlGlslVersion))
 	{
-		std::cerr << "ImGui OpenGL init failed.\n";
+		std::cerr << "ImGui OpenGL init failed for " << graphics_configuration.graphics_label << ".\n";
 		ImGui_ImplSDL3_Shutdown();
 		ImGui::DestroyContext();
 		SDL_GL_DestroyContext(gl_context);
@@ -407,11 +443,11 @@ int main(int argc, char *argv[])
 	std::unordered_map<SDL_JoystickID, SDL_Gamepad *> open_gamepads;
 	OpenGlCoverTextures cover_textures(file_system);
 	GameplayRendererGl gameplay_renderer;
-	gameplay_renderer.set_graphics_api(GameplayRendererGl::GraphicsApi::OpenGl33Core);
+	gameplay_renderer.set_graphics_api(graphics_configuration.graphics_api);
 	std::string gameplay_renderer_error;
 	if (!gameplay_renderer.initialize(gameplay_renderer_error))
 	{
-		std::cerr << "Gameplay renderer init failed: " << gameplay_renderer_error << "\n";
+		std::cerr << "Gameplay renderer init failed for " << graphics_configuration.graphics_label << ": " << gameplay_renderer_error << "\n";
 		cover_textures.clear();
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplSDL3_Shutdown();

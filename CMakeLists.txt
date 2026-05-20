@@ -27,10 +27,6 @@ option(RR_BUILD_SDL3_FRONTEND "Build the SDL3 desktop frontend." ON)
 option(RR_BUILD_LIBRETRO_CORE "Build the libretro core." ON)
 option(RR_RENDER_USE_GLES "Build the OpenGL renderer against OpenGL ES 3 headers instead of desktop OpenGL." OFF)
 
-if(RR_RENDER_USE_GLES AND RR_BUILD_SDL3_FRONTEND)
-	message(FATAL_ERROR "RR_RENDER_USE_GLES currently supports libretro-only builds. Set RR_BUILD_SDL3_FRONTEND=OFF.")
-endif()
-
 add_subdirectory(external/midifile)
 
 set(RR_GL_LIBRARIES "")

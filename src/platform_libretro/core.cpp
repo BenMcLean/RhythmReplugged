@@ -292,12 +292,10 @@ namespace
 
 	void update_frontend_av_info()
 	{
-		if (g_environment == nullptr)
-			return;
-
-		retro_system_av_info info{};
-		fill_system_av_info(info);
-		g_environment(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+		// Lakka on Raspberry Pi is crashing inside the frontend callback when the
+		// core tries to push updated AV info during or after load. The static
+		// retro_get_system_av_info() path already provides valid geometry, fps,
+		// and a usable fallback sample rate, so avoid runtime AV renegotiation.
 	}
 
 	void frame_time_callback(retro_usec_t usec)
