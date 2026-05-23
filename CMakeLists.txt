@@ -9,9 +9,30 @@ endif()
 
 project(RhythmReplugged LANGUAGES C CXX)
 
+set(RR_ARCH_DIR "")
+if(DEFINED VCPKG_TARGET_TRIPLET AND NOT VCPKG_TARGET_TRIPLET STREQUAL "")
+	string(REPLACE "-windows-static" "" RR_ARCH_DIR "${VCPKG_TARGET_TRIPLET}")
+	string(REPLACE "-windows" "" RR_ARCH_DIR "${RR_ARCH_DIR}")
+	string(REPLACE "-linux" "" RR_ARCH_DIR "${RR_ARCH_DIR}")
+else()
+	if(CMAKE_GENERATOR_PLATFORM)
+		set(RR_ARCH_DIR "${CMAKE_GENERATOR_PLATFORM}")
+	else()
+		set(RR_ARCH_DIR "${CMAKE_SYSTEM_PROCESSOR}")
+	endif()
+endif()
+
+if(RR_ARCH_DIR STREQUAL "")
+	set(RR_ARCH_DIR "unknown-arch")
+endif()
+
+string(TOLOWER "${CMAKE_SYSTEM_NAME}" RR_OS_DIR)
+string(TOLOWER "${RR_ARCH_DIR}" RR_ARCH_DIR)
+set(RR_DIST_PLATFORM_DIR "${RR_OS_DIR}-${RR_ARCH_DIR}")
+
 set(RR_DIST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dist")
-set(RR_DIST_DESKTOP_DIR "${RR_DIST_DIR}/$<CONFIG>/desktop")
-set(RR_DIST_LIBRETRO_DIR "${RR_DIST_DIR}/$<CONFIG>/libretro")
+set(RR_DIST_SDL3_DIR "${RR_DIST_DIR}/$<CONFIG>/sdl3/${RR_DIST_PLATFORM_DIR}")
+set(RR_DIST_LIBRETRO_DIR "${RR_DIST_DIR}/$<CONFIG>/libretro/${RR_DIST_PLATFORM_DIR}")
 
 if(MSVC AND DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "-windows-static$")
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -223,18 +244,18 @@ if(RR_BUILD_SDL3_FRONTEND)
 		SDL3::SDL3
 	)
 
-	add_custom_target(stage_desktop
-		COMMAND ${CMAKE_COMMAND} -E make_directory "${RR_DIST_DESKTOP_DIR}"
+	add_custom_target(stage_sdl3
+		COMMAND ${CMAKE_COMMAND} -E make_directory "${RR_DIST_SDL3_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
 			"$<TARGET_FILE:RhythmReplugged>"
-			"${RR_DIST_DESKTOP_DIR}/$<TARGET_FILE_NAME:RhythmReplugged>"
+			"${RR_DIST_SDL3_DIR}/$<TARGET_FILE_NAME:RhythmReplugged>"
 		DEPENDS RhythmReplugged
 		VERBATIM
 	)
 endif()
 
 if(RR_BUILD_LIBRETRO_CORE)
-	add_library(platform_libretro MODULE
+	add_library(rhythmreplugged_libretro MODULE
 		${RR_SRC_DIR}/platform_libretro/core.cpp
 		${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.cpp
 		${RR_SRC_DIR}/platform_libretro/ImGuiLibretroPlatform.h
@@ -243,18 +264,18 @@ if(RR_BUILD_LIBRETRO_CORE)
 		${RR_IMGUI_OPENGL3_BACKEND_SOURCE}
 	)
 
-	target_include_directories(platform_libretro PRIVATE
+	target_include_directories(rhythmreplugged_libretro PRIVATE
 		${RR_SRC_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}/external/libretro-common/include
 	)
 
-	target_link_libraries(platform_libretro PRIVATE
+	target_link_libraries(rhythmreplugged_libretro PRIVATE
 		rr_core
 		rr_render_gl
 		rr_ui
 	)
 
-	set_target_properties(platform_libretro PROPERTIES
+	set_target_properties(rhythmreplugged_libretro PROPERTIES
 		PREFIX ""
 		OUTPUT_NAME "rhythmreplugged_libretro"
 	)
@@ -262,25 +283,25 @@ if(RR_BUILD_LIBRETRO_CORE)
 	add_custom_target(stage_libretro
 		COMMAND ${CMAKE_COMMAND} -E make_directory "${RR_DIST_LIBRETRO_DIR}"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-			"$<TARGET_FILE:platform_libretro>"
-			"${RR_DIST_LIBRETRO_DIR}/$<TARGET_FILE_NAME:platform_libretro>"
+			"$<TARGET_FILE:rhythmreplugged_libretro>"
+			"${RR_DIST_LIBRETRO_DIR}/$<TARGET_FILE_NAME:rhythmreplugged_libretro>"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
 			"${CMAKE_CURRENT_SOURCE_DIR}/rhythmreplugged_libretro.info"
 			"${RR_DIST_LIBRETRO_DIR}/rhythmreplugged_libretro.info"
-		DEPENDS platform_libretro
+		DEPENDS rhythmreplugged_libretro
 		VERBATIM
 	)
 
 	if(RR_BUILD_SDL3_FRONTEND)
 		add_custom_target(windows_artifacts
-			DEPENDS RhythmReplugged platform_libretro
+			DEPENDS RhythmReplugged rhythmreplugged_libretro
 		)
 	endif()
 endif()
 
 add_custom_target(stage)
-if(TARGET stage_desktop)
-	add_dependencies(stage stage_desktop)
+if(TARGET stage_sdl3)
+	add_dependencies(stage stage_sdl3)
 endif()
 if(TARGET stage_libretro)
 	add_dependencies(stage stage_libretro)

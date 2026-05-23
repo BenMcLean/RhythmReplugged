@@ -183,7 +183,7 @@
 			"displayName": "Linux ARM64 Debug",
 			"configurePreset": "linux-arm64-debug",
 			"targets": [
-				"stage_desktop"
+				"stage_sdl3"
 			]
 		},
 		{
@@ -191,7 +191,7 @@
 			"displayName": "Linux ARM64 Release",
 			"configurePreset": "linux-arm64-release",
 			"targets": [
-				"stage_desktop"
+				"stage_sdl3"
 			]
 		},
 		{
