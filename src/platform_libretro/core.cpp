@@ -43,6 +43,7 @@ namespace
 	constexpr retro_usec_t kNominalFrameTimeUsec = 1000000 / kAppFramesPerSecond;
 	constexpr retro_usec_t kMinimumFrameTimeUsec = kNominalFrameTimeUsec / 2;
 	constexpr retro_usec_t kMaximumFrameTimeUsec = kNominalFrameTimeUsec * 2;
+	constexpr int kFallbackAudioSampleRate = 48000;
 
 	#if defined(_WIN32)
 	#define RR_LIBRETRO_EXPORT extern "C" __declspec(dllexport)
@@ -276,7 +277,7 @@ namespace
 	int current_output_sample_rate()
 	{
 		const int sample_rate = g_app.sample_rate();
-		return sample_rate > 0 ? sample_rate : 44100;
+		return sample_rate > 0 ? sample_rate : kFallbackAudioSampleRate;
 	}
 
 	void fill_system_av_info(retro_system_av_info &info)
@@ -542,6 +543,9 @@ RR_LIBRETRO_EXPORT void retro_set_environment(retro_environment_t cb)
 		register_core_options();
 		retro_vfs_interface_info vfs_info{};
 		vfs_info.required_interface_version = 3;
+		// Libretro is this frontend's only allowed filesystem boundary. We
+		// still cache a null interface here so startup/load paths can emit a
+		// user-facing error and abort cleanly instead of touching the host FS.
 		if (g_environment(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_info) && vfs_info.iface != nullptr)
 			g_file_system.set_vfs_interface(vfs_info.required_interface_version, vfs_info.iface);
 		else

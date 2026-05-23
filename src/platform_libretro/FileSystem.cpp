@@ -3,9 +3,6 @@
 #include "core/utils/TextDecoding.h"
 
 #include <cstring>
-#include <cstdio>
-#include <dirent.h>
-#include <sys/stat.h>
 #include <vector>
 
 namespace rhythmreplugged::platform_libretro
@@ -104,7 +101,11 @@ namespace rhythmreplugged::platform_libretro
 			return normalized.substr(0, slash);
 		}
 
-		std::optional<int64_t> stat_path_with_vfs(uint32_t vfs_interface_version, const retro_vfs_interface *vfs_interface, const std::string &path, bool &is_directory)
+		std::optional<int64_t> stat_path_with_vfs(
+			uint32_t vfs_interface_version,
+			const retro_vfs_interface *vfs_interface,
+			const std::string &path,
+			bool &is_directory)
 		{
 			if (vfs_interface == nullptr)
 				return std::nullopt;
@@ -162,91 +163,58 @@ namespace rhythmreplugged::platform_libretro
 	bool FileSystem::path_exists(const std::string &path) const
 	{
 		bool is_directory = false;
-		if (stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value())
-			return true;
-
-		struct stat path_stat {};
-		return ::stat(path.c_str(), &path_stat) == 0;
+		return stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value();
 	}
 
 	bool FileSystem::path_is_directory(const std::string &path) const
 	{
 		bool is_directory = false;
-		if (stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value())
-			return is_directory;
-
-		struct stat path_stat {};
-		return ::stat(path.c_str(), &path_stat) == 0 && S_ISDIR(path_stat.st_mode);
+		return stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value() && is_directory;
 	}
 
 	std::optional<std::uint64_t> FileSystem::file_size(const std::string &path) const
 	{
 		bool is_directory = false;
 		const std::optional<int64_t> size = stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory);
-		if (size.has_value())
-		{
-			if (is_directory || *size < 0)
-				return std::nullopt;
-
-			return static_cast<std::uint64_t>(*size);
-		}
-
-		struct stat path_stat {};
-		if (::stat(path.c_str(), &path_stat) != 0 || !S_ISREG(path_stat.st_mode))
+		if (!size.has_value() || is_directory || *size < 0)
 			return std::nullopt;
 
-		return static_cast<std::uint64_t>(path_stat.st_size);
+		return static_cast<std::uint64_t>(*size);
 	}
 
 	std::vector<::rhythmreplugged::frontend_contract::RetroDirectoryEntry> FileSystem::list_directory(const std::string &path) const
 	{
 		std::vector<::rhythmreplugged::frontend_contract::RetroDirectoryEntry> entries;
-		if (vfs_interface_ != nullptr && vfs_interface_->opendir != nullptr && vfs_interface_->readdir != nullptr &&
-			vfs_interface_->dirent_get_name != nullptr && vfs_interface_->dirent_is_dir != nullptr &&
-			vfs_interface_->closedir != nullptr)
+		// Do not fall back to host directory APIs here. Libretro content access
+		// is defined entirely in terms of VFS, and missing VFS support should be
+		// surfaced as a frontend contract failure by higher-level startup code.
+		if (vfs_interface_ == nullptr || vfs_interface_->opendir == nullptr || vfs_interface_->readdir == nullptr ||
+			vfs_interface_->dirent_get_name == nullptr || vfs_interface_->dirent_is_dir == nullptr ||
+			vfs_interface_->closedir == nullptr)
 		{
-			retro_vfs_dir_handle *directory = vfs_interface_->opendir(path.c_str(), false);
-			if (directory == nullptr)
-				return entries;
-
-			while (vfs_interface_->readdir(directory))
-			{
-				const char *name = vfs_interface_->dirent_get_name(directory);
-				if (name == nullptr)
-					continue;
-
-				::rhythmreplugged::frontend_contract::RetroDirectoryEntry entry;
-				entry.name = name;
-				entry.path = join_generic_paths(path, entry.name);
-				entry.is_directory = vfs_interface_->dirent_is_dir(directory);
-				entries.push_back(std::move(entry));
-			}
-
-			vfs_interface_->closedir(directory);
 			return entries;
 		}
 
-		DIR *directory = ::opendir(path.c_str());
+		retro_vfs_dir_handle *directory = vfs_interface_->opendir(path.c_str(), false);
 		if (directory == nullptr)
 			return entries;
 
-		while (const dirent *raw_entry = ::readdir(directory))
+		while (vfs_interface_->readdir(directory))
 		{
-			const char *name = raw_entry->d_name;
+			const char *name = vfs_interface_->dirent_get_name(directory);
 			if (name == nullptr)
 				continue;
 			if (std::strcmp(name, ".") == 0 || std::strcmp(name, "..") == 0)
 				continue;
 
-			::rhythmreplugged::frontend_contract::RetroDirectoryEntry directory_entry;
-			directory_entry.name = name;
-			directory_entry.path = join_generic_paths(path, directory_entry.name);
-			directory_entry.is_directory = path_is_directory(directory_entry.path);
-			entries.push_back(std::move(directory_entry));
+			::rhythmreplugged::frontend_contract::RetroDirectoryEntry entry;
+			entry.name = name;
+			entry.path = join_generic_paths(path, entry.name);
+			entry.is_directory = vfs_interface_->dirent_is_dir(directory);
+			entries.push_back(std::move(entry));
 		}
 
-		::closedir(directory);
-
+		vfs_interface_->closedir(directory);
 		return entries;
 	}
 
@@ -264,40 +232,13 @@ namespace rhythmreplugged::platform_libretro
 
 	std::optional<std::vector<std::uint8_t>> FileSystem::read_binary_file(const std::string &path) const
 	{
+		// The libretro core must only read files through the frontend-provided
+		// VFS interface. Returning nullopt here allows startup/load code to log
+		// and fail hard instead of silently escaping to native file APIs.
 		if (vfs_interface_ == nullptr || vfs_interface_->open == nullptr || vfs_interface_->close == nullptr ||
 			vfs_interface_->size == nullptr || vfs_interface_->read == nullptr)
 		{
-			FILE *file = std::fopen(path.c_str(), "rb");
-			if (file == nullptr)
-				return std::nullopt;
-
-			if (std::fseek(file, 0, SEEK_END) != 0)
-			{
-				std::fclose(file);
-				return std::nullopt;
-			}
-
-			const long raw_size = std::ftell(file);
-			if (raw_size < 0 || std::fseek(file, 0, SEEK_SET) != 0)
-			{
-				std::fclose(file);
-				return std::nullopt;
-			}
-
-			std::vector<std::uint8_t> output(static_cast<size_t>(raw_size));
-			if (!output.empty())
-			{
-				const size_t read_size = std::fread(output.data(), 1, output.size(), file);
-				if (read_size != output.size())
-				{
-					std::fclose(file);
-					return std::nullopt;
-				}
-			}
-
-			std::fclose(file);
-
-			return output;
+			return std::nullopt;
 		}
 
 		retro_vfs_file_handle *file = vfs_interface_->open(

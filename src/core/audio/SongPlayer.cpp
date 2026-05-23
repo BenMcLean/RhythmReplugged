@@ -1,4 +1,4 @@
-#include "core/audio/PrototypePlayer.h"
+#include "core/audio/SongPlayer.h"
 
 #include <vorbis/vorbisfile.h>
 
@@ -119,7 +119,7 @@ namespace rhythmreplugged::core
 		}
 	}
 
-	PrototypePlayer::StemTrack::StemTrack(StemTrack &&other) noexcept
+	SongPlayer::StemTrack::StemTrack(StemTrack &&other) noexcept
 		: stem_name(std::move(other.stem_name)),
 		  samples(std::move(other.samples)),
 		  channels(other.channels),
@@ -130,7 +130,7 @@ namespace rhythmreplugged::core
 	{
 	}
 
-	PrototypePlayer::StemTrack &PrototypePlayer::StemTrack::operator=(StemTrack &&other) noexcept
+	SongPlayer::StemTrack &SongPlayer::StemTrack::operator=(StemTrack &&other) noexcept
 	{
 		if (this == &other)
 			return *this;
@@ -145,7 +145,7 @@ namespace rhythmreplugged::core
 		return *this;
 	}
 
-	bool PrototypePlayer::load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
+	bool SongPlayer::load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system, const std::string &song_directory, std::string &error_message)
 	{
 		PreloadedSongData preloaded_song_data;
 		if (!preload(file_system, song_directory, preloaded_song_data, error_message))
@@ -153,12 +153,12 @@ namespace rhythmreplugged::core
 		return load_preloaded(std::move(preloaded_song_data), error_message);
 	}
 
-	bool PrototypePlayer::load_preloaded(PreloadedSongData preloaded_song_data, std::string &error_message)
+	bool SongPlayer::load_preloaded(PreloadedSongData preloaded_song_data, std::string &error_message)
 	{
 		return adopt_preloaded(std::move(preloaded_song_data), error_message);
 	}
 
-	bool PrototypePlayer::preload(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+	bool SongPlayer::preload(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 		const std::string &song_directory,
 		PreloadedSongData &preloaded_song_data,
 		std::string &error_message)
@@ -204,57 +204,57 @@ namespace rhythmreplugged::core
 		return true;
 	}
 
-	void PrototypePlayer::unload()
+	void SongPlayer::unload()
 	{
 		stems_.clear();
 		frame_index_ = 0;
 		metadata_ = {};
 	}
 
-	bool PrototypePlayer::is_loaded() const
+	bool SongPlayer::is_loaded() const
 	{
 		return !stems_.empty();
 	}
 
-	void PrototypePlayer::toggle_guitar_mute()
+	void SongPlayer::toggle_guitar_mute()
 	{
 		set_stem_target_gain("guitar", stem_target_gain("guitar") > 0.5f ? 0.0f : 1.0f);
 	}
 
-	bool PrototypePlayer::guitar_muted() const
+	bool SongPlayer::guitar_muted() const
 	{
 		return has_stem("guitar") && stem_target_gain("guitar") < 0.5f;
 	}
 
-	bool PrototypePlayer::has_stem(std::string_view stem_name) const
+	bool SongPlayer::has_stem(std::string_view stem_name) const
 	{
 		return find_stem(stem_name) != nullptr;
 	}
 
-	size_t PrototypePlayer::loaded_stem_count() const
+	size_t SongPlayer::loaded_stem_count() const
 	{
 		return stems_.size();
 	}
 
-	void PrototypePlayer::set_stem_target_gain(std::string_view stem_name, float gain)
+	void SongPlayer::set_stem_target_gain(std::string_view stem_name, float gain)
 	{
 		if (StemTrack *track = find_stem(stem_name))
 			track->target_gain.store(std::clamp(gain, 0.0f, 1.0f));
 	}
 
-	float PrototypePlayer::stem_target_gain(std::string_view stem_name) const
+	float SongPlayer::stem_target_gain(std::string_view stem_name) const
 	{
 		if (const StemTrack *track = find_stem(stem_name))
 			return track->target_gain.load();
 		return 0.0f;
 	}
 
-	int PrototypePlayer::sample_rate() const
+	int SongPlayer::sample_rate() const
 	{
 		return stems_.empty() ? 0 : stems_.front().sample_rate;
 	}
 
-	double PrototypePlayer::duration_seconds() const
+	double SongPlayer::duration_seconds() const
 	{
 		const int rate = sample_rate();
 		if (rate <= 0)
@@ -263,24 +263,24 @@ namespace rhythmreplugged::core
 		return static_cast<double>(longest_track_frame_count()) / static_cast<double>(rate);
 	}
 
-	const SongMetadataView &PrototypePlayer::metadata() const
+	const SongMetadataView &SongPlayer::metadata() const
 	{
 		return metadata_;
 	}
 
-	bool PrototypePlayer::playback_finished() const
+	bool SongPlayer::playback_finished() const
 	{
 		return !stems_.empty() && frame_index_ >= longest_track_frame_count();
 	}
 
-	void PrototypePlayer::rewind()
+	void SongPlayer::rewind()
 	{
 		frame_index_ = 0;
 		for (StemTrack &track : stems_)
 			track.current_gain = track.target_gain.load();
 	}
 
-	PrototypePlayer::PlaybackState PrototypePlayer::playback_state() const
+	SongPlayer::PlaybackState SongPlayer::playback_state() const
 	{
 		PlaybackState state;
 		state.frame_index = frame_index_;
@@ -294,7 +294,7 @@ namespace rhythmreplugged::core
 		return state;
 	}
 
-	bool PrototypePlayer::restore_playback_state(const PlaybackState &state, std::string &error_message)
+	bool SongPlayer::restore_playback_state(const PlaybackState &state, std::string &error_message)
 	{
 		if (!is_loaded())
 		{
@@ -320,7 +320,7 @@ namespace rhythmreplugged::core
 		return true;
 	}
 
-	void PrototypePlayer::render_interleaved_s16(std::int16_t *output, size_t frame_count)
+	void SongPlayer::render_interleaved_s16(std::int16_t *output, size_t frame_count)
 	{
 		if (output == nullptr || frame_count == 0)
 			return;
@@ -353,7 +353,7 @@ namespace rhythmreplugged::core
 		}
 	}
 
-	::rhythmreplugged::frontend_contract::AudioBatch PrototypePlayer::generate_audio_batch(size_t frame_count)
+	::rhythmreplugged::frontend_contract::AudioBatch SongPlayer::generate_audio_batch(size_t frame_count)
 	{
 		::rhythmreplugged::frontend_contract::AudioBatch batch;
 		batch.sample_rate = sample_rate();
@@ -363,7 +363,7 @@ namespace rhythmreplugged::core
 		return batch;
 	}
 
-	bool PrototypePlayer::decode_preloaded_stem(const std::vector<std::uint8_t> &bytes,
+	bool SongPlayer::decode_preloaded_stem(const std::vector<std::uint8_t> &bytes,
 		PreloadedStemTrack &track,
 		std::string &error_message,
 		const DecodeProgressCallback &progress_callback)
@@ -374,7 +374,7 @@ namespace rhythmreplugged::core
 		return normalize_runtime_audio(track, error_message);
 	}
 
-	bool PrototypePlayer::decode_vorbis(const std::vector<std::uint8_t> &bytes,
+	bool SongPlayer::decode_vorbis(const std::vector<std::uint8_t> &bytes,
 		PreloadedStemTrack &track,
 		std::string &error_message,
 		const DecodeProgressCallback &progress_callback)
@@ -461,7 +461,7 @@ namespace rhythmreplugged::core
 		return success;
 	}
 
-	bool PrototypePlayer::normalize_runtime_audio(PreloadedStemTrack &track, std::string &error_message)
+	bool SongPlayer::normalize_runtime_audio(PreloadedStemTrack &track, std::string &error_message)
 	{
 		if (track.channels != 1 && track.channels != 2)
 		{
@@ -519,7 +519,7 @@ namespace rhythmreplugged::core
 		return true;
 	}
 
-	bool PrototypePlayer::adopt_preloaded(PreloadedSongData preloaded_song_data, std::string &error_message)
+	bool SongPlayer::adopt_preloaded(PreloadedSongData preloaded_song_data, std::string &error_message)
 	{
 		unload();
 		metadata_ = std::move(preloaded_song_data.metadata);
@@ -561,7 +561,7 @@ namespace rhythmreplugged::core
 		return true;
 	}
 
-	PrototypePlayer::StemTrack *PrototypePlayer::find_stem(std::string_view stem_name)
+	SongPlayer::StemTrack *SongPlayer::find_stem(std::string_view stem_name)
 	{
 		for (StemTrack &track : stems_)
 		{
@@ -572,7 +572,7 @@ namespace rhythmreplugged::core
 		return nullptr;
 	}
 
-	const PrototypePlayer::StemTrack *PrototypePlayer::find_stem(std::string_view stem_name) const
+	const SongPlayer::StemTrack *SongPlayer::find_stem(std::string_view stem_name) const
 	{
 		for (const StemTrack &track : stems_)
 		{
@@ -583,7 +583,7 @@ namespace rhythmreplugged::core
 		return nullptr;
 	}
 
-	std::int16_t PrototypePlayer::sample_track_channel(const StemTrack &track, size_t frame_index, int channel) const
+	std::int16_t SongPlayer::sample_track_channel(const StemTrack &track, size_t frame_index, int channel) const
 	{
 		if (frame_index >= track.frame_count)
 			return 0;
@@ -595,7 +595,7 @@ namespace rhythmreplugged::core
 		return track.samples[frame_index * static_cast<size_t>(track.channels) + static_cast<size_t>(resolved_channel)];
 	}
 
-	size_t PrototypePlayer::longest_track_frame_count() const
+	size_t SongPlayer::longest_track_frame_count() const
 	{
 		size_t longest = 0;
 		for (const StemTrack &track : stems_)

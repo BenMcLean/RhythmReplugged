@@ -11,7 +11,7 @@ namespace
 	using namespace rhythmreplugged::core;
 	using namespace rhythmreplugged::ui;
 
-	float lyric_strip_panel_height(const PrototypePlayerView &player)
+	float lyric_strip_panel_height(const SongPlayerView &player)
 	{
 		if (player.visible_lyric_tokens.empty())
 			return 0.0f;
@@ -77,7 +77,7 @@ namespace
 			text);
 	}
 
-	void draw_lyric_strip(const PrototypePlayerView &player, const ImVec2 &canvas_pos, ImVec2 window_size)
+	void draw_lyric_strip(const SongPlayerView &player, const ImVec2 &canvas_pos, ImVec2 window_size)
 	{
 		if (player.visible_lyric_tokens.empty())
 			return;
@@ -103,7 +103,7 @@ namespace
 			IM_COL32(80, 92, 116, 180),
 			12.0f);
 
-		auto rendered_token_text = [](const PrototypePlayerView::LyricTokenView &token)
+		auto rendered_token_text = [](const SongPlayerView::LyricTokenView &token)
 		{
 			std::string rendered;
 			if (token.prepend_space)
@@ -114,7 +114,7 @@ namespace
 			return rendered;
 		};
 
-		auto token_color = [](const PrototypePlayerView::LyricTokenView &token)
+		auto token_color = [](const SongPlayerView::LyricTokenView &token)
 		{
 			if (token.is_current)
 				return IM_COL32(255, 238, 154, 255);
@@ -125,8 +125,8 @@ namespace
 
 		auto collect_line_tokens = [&](int line_index)
 		{
-			std::vector<const PrototypePlayerView::LyricTokenView *> line_tokens;
-			for (const PrototypePlayerView::LyricTokenView &token : player.visible_lyric_tokens)
+			std::vector<const SongPlayerView::LyricTokenView *> line_tokens;
+			for (const SongPlayerView::LyricTokenView &token : player.visible_lyric_tokens)
 			{
 				if (token.line_index == line_index)
 					line_tokens.push_back(&token);
@@ -134,9 +134,9 @@ namespace
 			return line_tokens;
 		};
 
-		auto wrap_line = [&](const std::vector<const PrototypePlayerView::LyricTokenView *> &line_tokens)
+		auto wrap_line = [&](const std::vector<const SongPlayerView::LyricTokenView *> &line_tokens)
 		{
-			std::vector<std::vector<const PrototypePlayerView::LyricTokenView *>> rows;
+			std::vector<std::vector<const SongPlayerView::LyricTokenView *>> rows;
 			if (line_tokens.empty())
 				return rows;
 
@@ -144,7 +144,7 @@ namespace
 			std::vector<float> token_widths;
 			token_widths.reserve(line_tokens.size());
 			float total_width = 0.0f;
-			for (const PrototypePlayerView::LyricTokenView *token : line_tokens)
+			for (const SongPlayerView::LyricTokenView *token : line_tokens)
 			{
 				const std::string rendered = rendered_token_text(*token);
 				const float token_width = ImGui::CalcTextSize(rendered.c_str()).x;
@@ -180,8 +180,8 @@ namespace
 
 			if (best_split_index >= 0)
 			{
-				std::vector<const PrototypePlayerView::LyricTokenView *> first_row;
-				std::vector<const PrototypePlayerView::LyricTokenView *> second_row;
+				std::vector<const SongPlayerView::LyricTokenView *> first_row;
+				std::vector<const SongPlayerView::LyricTokenView *> second_row;
 				first_row.reserve(static_cast<size_t>(best_split_index) + 1);
 				second_row.reserve(line_tokens.size() - static_cast<size_t>(best_split_index) - 1);
 				for (int index = 0; index <= best_split_index; ++index)
@@ -193,11 +193,11 @@ namespace
 				return rows;
 			}
 
-			std::vector<const PrototypePlayerView::LyricTokenView *> current_row;
+			std::vector<const SongPlayerView::LyricTokenView *> current_row;
 			float current_width = 0.0f;
 			for (size_t index = 0; index < line_tokens.size(); ++index)
 			{
-				const PrototypePlayerView::LyricTokenView *token = line_tokens[index];
+				const SongPlayerView::LyricTokenView *token = line_tokens[index];
 				const float token_width = token_widths[index];
 				if (!current_row.empty() && current_width + token_width > max_width)
 				{
@@ -215,20 +215,20 @@ namespace
 			return rows;
 		};
 
-		auto draw_row = [&](const std::vector<const PrototypePlayerView::LyricTokenView *> &row, float baseline_y)
+		auto draw_row = [&](const std::vector<const SongPlayerView::LyricTokenView *> &row, float baseline_y)
 		{
 			if (row.empty())
 				return;
 
 			float line_width = 0.0f;
-			for (const PrototypePlayerView::LyricTokenView *token : row)
+			for (const SongPlayerView::LyricTokenView *token : row)
 			{
 				const std::string rendered = rendered_token_text(*token);
 				line_width += ImGui::CalcTextSize(rendered.c_str()).x;
 			}
 
 			float cursor_x = panel_pos.x + (panel_size.x - line_width) * 0.5f;
-			for (const PrototypePlayerView::LyricTokenView *token : row)
+			for (const SongPlayerView::LyricTokenView *token : row)
 			{
 				const std::string rendered = rendered_token_text(*token);
 				const ImVec2 text_size = ImGui::CalcTextSize(rendered.c_str());
@@ -240,9 +240,9 @@ namespace
 		const auto current_line_rows = wrap_line(collect_line_tokens(current_line_index));
 		const auto next_line_rows = next_line_index >= 0
 			? wrap_line(collect_line_tokens(next_line_index))
-			: std::vector<std::vector<const PrototypePlayerView::LyricTokenView *>>{};
+			: std::vector<std::vector<const SongPlayerView::LyricTokenView *>>{};
 
-		std::vector<std::vector<const PrototypePlayerView::LyricTokenView *>> display_rows;
+		std::vector<std::vector<const SongPlayerView::LyricTokenView *>> display_rows;
 		if (!current_line_rows.empty())
 			display_rows.push_back(current_line_rows.front());
 		if (current_line_rows.size() > 1)
@@ -256,7 +256,7 @@ namespace
 			draw_row(display_rows[1], panel_pos.y + panel_padding_y + font_size + line_gap);
 	}
 
-	void draw_song_countdown(const PrototypePlayerView &player, const ImVec2 &canvas_pos, ImVec2 window_size)
+	void draw_song_countdown(const SongPlayerView &player, const ImVec2 &canvas_pos, ImVec2 window_size)
 	{
 		if (player.song_duration_seconds <= 0.0)
 			return;
@@ -815,13 +815,13 @@ namespace rhythmreplugged::ui
 		render_preload_progress_overlay(menu, window_size, ui_scale);
 	}
 
-	void render_prototype_player_ui(const GameplayFrameSnapshot &snapshot, ImVec2 window_size)
+	void render_song_player_ui(const GameplayFrameSnapshot &snapshot, ImVec2 window_size)
 	{
-		const PrototypePlayerView &player = snapshot.player;
+		const SongPlayerView &player = snapshot.player;
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-		ImGui::Begin("Multitrack Prototype", nullptr,
+		ImGui::Begin("Multitrack", nullptr,
 			ImGuiWindowFlags_NoResize |
 			ImGuiWindowFlags_NoMove |
 			ImGuiWindowFlags_NoCollapse |
@@ -831,7 +831,7 @@ namespace rhythmreplugged::ui
 		const ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
 		ImDrawList *draw_list = ImGui::GetWindowDrawList();
 
-		std::string title = player.song_title.empty() ? "Gameplay Prototype" : player.song_title;
+		std::string title = player.song_title.empty() ? "Gameplay" : player.song_title;
 		if (!player.song_artist.empty())
 			title += " - " + player.song_artist;
 

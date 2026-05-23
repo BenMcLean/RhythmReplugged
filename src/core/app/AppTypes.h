@@ -102,7 +102,7 @@ namespace rhythmreplugged::core
 		size_t total_read_file_count = 0;
 	};
 
-	struct PrototypePlayerView
+	struct SongPlayerView
 	{
 		struct ChartNoteView
 		{
@@ -297,7 +297,7 @@ namespace rhythmreplugged::core
 
 	struct GameplayFrameSnapshot
 	{
-		PrototypePlayerView player;
+		SongPlayerView player;
 		GameplaySceneView scene;
 	};
 }

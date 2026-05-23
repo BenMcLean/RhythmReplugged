@@ -6,6 +6,9 @@
 
 namespace rhythmreplugged::platform_libretro
 {
+	// The libretro frontend is intentionally sandboxed behind libretro VFS.
+	// This adapter must never grow native filesystem fallbacks; if VFS is
+	// unavailable, core startup should treat that as a fatal frontend error.
 	class FileSystem : public ::rhythmreplugged::frontend_contract::IRetroFileSystem
 	{
 	public:

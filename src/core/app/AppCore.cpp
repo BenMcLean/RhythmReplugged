@@ -501,7 +501,7 @@ namespace rhythmreplugged::core
 	bool AppCore::try_finish_song_preload(std::string &error_message)
 	{
 		error_message.clear();
-		PrototypePlayer::PreloadedSongData preloaded_song_data;
+		SongPlayer::PreloadedSongData preloaded_song_data;
 		std::string preloaded_song_path;
 		if (!song_preloader_.try_take_ready_data(preloaded_song_path, preloaded_song_data))
 		{

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/app/AppTypes.h"
-#include "core/audio/PrototypePlayer.h"
+#include "core/audio/SongPlayer.h"
 #include "core/concurrency/BackgroundWorker.h"
 #include "frontend_contract/RetroFileSystem.h"
 
@@ -43,7 +43,7 @@ namespace rhythmreplugged::core
 		void begin(const std::string &song_directory);
 		void cancel();
 		SongPreloadStatus status() const;
-		bool try_take_ready_data(std::string &song_directory, PrototypePlayer::PreloadedSongData &preloaded_song_data);
+		bool try_take_ready_data(std::string &song_directory, SongPlayer::PreloadedSongData &preloaded_song_data);
 
 	private:
 		struct StagedStemJob
@@ -58,7 +58,7 @@ namespace rhythmreplugged::core
 			std::string song_directory;
 			SongMetadataView metadata;
 			std::vector<std::shared_ptr<StagedStemJob>> staged_jobs;
-			std::vector<PrototypePlayer::PreloadedStemTrack> stems;
+			std::vector<SongPlayer::PreloadedStemTrack> stems;
 			std::vector<size_t> stem_order_indices;
 			std::atomic<size_t> processed_decode_bytes{0};
 			size_t total_bytes = 0;
@@ -82,6 +82,6 @@ namespace rhythmreplugged::core
 		std::atomic<std::uint64_t> generation_{0};
 		mutable std::mutex state_mutex_;
 		std::shared_ptr<RequestState> current_request_;
-		std::optional<std::pair<std::string, PrototypePlayer::PreloadedSongData>> ready_result_;
+		std::optional<std::pair<std::string, SongPlayer::PreloadedSongData>> ready_result_;
 	};
 }

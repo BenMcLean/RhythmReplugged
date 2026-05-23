@@ -6,12 +6,12 @@ namespace rhythmreplugged::core
 {
 	void AudioMixer::reset()
 	{
-		prototype_player_ = nullptr;
+		song_player_ = nullptr;
 	}
 
-	void AudioMixer::set_prototype_player(PrototypePlayer *player)
+	void AudioMixer::set_song_player(SongPlayer *player)
 	{
-		prototype_player_ = player;
+		song_player_ = player;
 	}
 
 	void AudioMixer::render_interleaved_s16(std::int16_t *output, size_t frame_count) const
@@ -19,22 +19,22 @@ namespace rhythmreplugged::core
 		if (output == nullptr || frame_count == 0)
 			return;
 
-		if (prototype_player_ == nullptr || !prototype_player_->is_loaded())
+		if (song_player_ == nullptr || !song_player_->is_loaded())
 		{
 			std::fill(output, output + frame_count * 2, static_cast<std::int16_t>(0));
 			return;
 		}
 
-		prototype_player_->render_interleaved_s16(output, frame_count);
+		song_player_->render_interleaved_s16(output, frame_count);
 	}
 
 	::rhythmreplugged::frontend_contract::AudioBatch AudioMixer::render(size_t frame_count) const
 	{
-		if (prototype_player_ == nullptr || !prototype_player_->is_loaded())
+		if (song_player_ == nullptr || !song_player_->is_loaded())
 			return {};
 
 		::rhythmreplugged::frontend_contract::AudioBatch batch;
-		batch.sample_rate = prototype_player_->sample_rate();
+		batch.sample_rate = song_player_->sample_rate();
 		batch.channels = 2;
 		batch.samples.resize(frame_count * 2);
 		render_interleaved_s16(batch.samples.data(), frame_count);

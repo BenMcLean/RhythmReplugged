@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/chart/MidiChart.h"
-#include "core/audio/PrototypePlayer.h"
+#include "core/audio/SongPlayer.h"
 #include "core/app/AppTypes.h"
 #include "core/play/AudioMixer.h"
 #include "core/play/Transport.h"
@@ -43,7 +43,7 @@ namespace rhythmreplugged::core
 			std::string &error_message);
 		bool load_preloaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 			const std::string &song_directory,
-			PrototypePlayer::PreloadedSongData preloaded_song_data,
+			SongPlayer::PreloadedSongData preloaded_song_data,
 			const GameplayOptions &options,
 			std::string &error_message);
 		bool reconfigure_loaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
@@ -67,7 +67,7 @@ namespace rhythmreplugged::core
 		size_t play_state_serialized_size() const;
 		bool serialize_play_state(std::vector<std::uint8_t> &bytes, std::string &error_message) const;
 		bool deserialize_play_state(const std::uint8_t *data, size_t size, std::string &error_message);
-		PrototypePlayerView view(const std::string &status_message) const;
+		SongPlayerView view(const std::string &status_message) const;
 		void refresh_frame_snapshot(const std::string &status_message);
 		const GameplayFrameSnapshot &frame_snapshot() const;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
@@ -111,9 +111,9 @@ namespace rhythmreplugged::core
 		{
 			std::vector<HighwayNoteView> visible_highway_notes;
 			std::vector<HighwayMeasureLineView> visible_highway_measure_lines;
-			std::vector<PrototypePlayerView::ChartNoteView> visible_chart_notes;
-			std::vector<PrototypePlayerView::ChartMeasureLineView> visible_chart_measure_lines;
-			std::vector<PrototypePlayerView::LyricTokenView> visible_lyric_tokens;
+			std::vector<SongPlayerView::ChartNoteView> visible_chart_notes;
+			std::vector<SongPlayerView::ChartMeasureLineView> visible_chart_measure_lines;
+			std::vector<SongPlayerView::LyricTokenView> visible_lyric_tokens;
 			int current_lyric_line_index = 0;
 			int next_lyric_line_index = -1;
 		};
@@ -136,7 +136,7 @@ namespace rhythmreplugged::core
 		void refresh_lane_frame_cache(double song_time_seconds);
 		void populate_lane_frame_cache(size_t lane_index, double song_time_seconds);
 		void rebuild_cached_scene(GameplaySceneView &scene) const;
-		void rebuild_cached_player_view(PrototypePlayerView &player_view, const std::string &status_message) const;
+		void rebuild_cached_player_view(SongPlayerView &player_view, const std::string &status_message) const;
 		void set_lane_stem_target_gain(size_t lane_index, float gain);
 		float lane_stem_target_gain(size_t lane_index) const;
 		bool has_lane_stem(size_t lane_index) const;
@@ -152,7 +152,7 @@ namespace rhythmreplugged::core
 		double adjusted_song_time_seconds() const;
 		std::uint64_t session_fingerprint() const;
 
-		PrototypePlayer prototype_player_;
+		SongPlayer song_player_;
 		Transport transport_;
 		AudioMixer audio_mixer_;
 		std::vector<GameplayLaneDefinition> gameplay_lanes_;

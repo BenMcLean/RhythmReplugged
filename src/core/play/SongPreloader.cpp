@@ -139,10 +139,10 @@ namespace rhythmreplugged::core
 						return;
 
 					size_t last_reported_bytes = 0;
-					PrototypePlayer::PreloadedStemTrack track;
+					SongPlayer::PreloadedStemTrack track;
 					track.stem_name = staged_job->stem_name;
 					std::string error_message;
-					if (!PrototypePlayer::decode_preloaded_stem(staged_job->bytes, track, error_message,
+					if (!SongPlayer::decode_preloaded_stem(staged_job->bytes, track, error_message,
 						[&](size_t processed_bytes, size_t)
 						{
 							const size_t clamped_bytes = (std::min)(processed_bytes, staged_job->bytes.size());
@@ -225,7 +225,7 @@ namespace rhythmreplugged::core
 		return result;
 	}
 
-	bool SongPreloader::try_take_ready_data(std::string &song_directory, PrototypePlayer::PreloadedSongData &preloaded_song_data)
+	bool SongPreloader::try_take_ready_data(std::string &song_directory, SongPlayer::PreloadedSongData &preloaded_song_data)
 	{
 		std::scoped_lock lock(state_mutex_);
 		if (!ready_result_.has_value())
@@ -242,7 +242,7 @@ namespace rhythmreplugged::core
 		if (generation_.load() != generation || request_state->failed.load())
 			return;
 
-		PrototypePlayer::PreloadedSongData ready_data;
+		SongPlayer::PreloadedSongData ready_data;
 		ready_data.metadata = request_state->metadata;
 		{
 			std::scoped_lock lock(request_state->result_mutex);

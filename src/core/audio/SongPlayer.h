@@ -14,7 +14,7 @@
 
 namespace rhythmreplugged::core
 {
-	class PrototypePlayer
+	class SongPlayer
 	{
 	public:
 		static constexpr int kRuntimeSampleRate = 48000;

@@ -117,8 +117,8 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/app/AppCore.cpp
 	${RR_SRC_DIR}/core/app/AppCore.h
 	${RR_SRC_DIR}/core/app/AppTypes.h
-	${RR_SRC_DIR}/core/audio/PrototypePlayer.cpp
-	${RR_SRC_DIR}/core/audio/PrototypePlayer.h
+	${RR_SRC_DIR}/core/audio/SongPlayer.cpp
+	${RR_SRC_DIR}/core/audio/SongPlayer.h
 	${RR_SRC_DIR}/core/chart/MidiChart.cpp
 	${RR_SRC_DIR}/core/chart/MidiChart.h
 	${RR_SRC_DIR}/core/concurrency/BackgroundWorker.cpp

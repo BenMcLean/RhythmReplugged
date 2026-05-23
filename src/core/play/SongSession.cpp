@@ -471,17 +471,17 @@ namespace rhythmreplugged::core
 
 	bool SongSession::load_preloaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 		const std::string &song_directory,
-		PrototypePlayer::PreloadedSongData preloaded_song_data,
+		SongPlayer::PreloadedSongData preloaded_song_data,
 		const GameplayOptions &options,
 		std::string &error_message)
 	{
 		unload();
 		if (!preloaded_song_data.stems.empty())
 		{
-			if (!prototype_player_.load_preloaded(std::move(preloaded_song_data), error_message))
+			if (!song_player_.load_preloaded(std::move(preloaded_song_data), error_message))
 				return false;
 		}
-		else if (!prototype_player_.load(file_system, song_directory, error_message))
+		else if (!song_player_.load(file_system, song_directory, error_message))
 		{
 			return false;
 		}
@@ -494,15 +494,15 @@ namespace rhythmreplugged::core
 		const GameplayOptions &options,
 		std::string &error_message)
 	{
-		if (!prototype_player_.is_loaded())
+		if (!song_player_.is_loaded())
 		{
 			error_message = "Song audio is not loaded.";
 			return false;
 		}
 
-		prototype_player_.rewind();
-		transport_.configure(prototype_player_.sample_rate());
-		audio_mixer_.set_prototype_player(&prototype_player_);
+		song_player_.rewind();
+		transport_.configure(song_player_.sample_rate());
+		audio_mixer_.set_song_player(&song_player_);
 		if (!configure_gameplay_lanes(file_system, song_directory, options, error_message))
 			return false;
 		refresh_frame_snapshot({});
@@ -520,7 +520,7 @@ namespace rhythmreplugged::core
 		lane_frame_cache_.clear();
 		frame_snapshot_ = {};
 		chart_status_message_.clear();
-		prototype_player_.unload();
+		song_player_.unload();
 		loaded_.store(false);
 	}
 
@@ -647,23 +647,23 @@ namespace rhythmreplugged::core
 
 	bool SongSession::has_stem(std::string_view stem_name) const
 	{
-		return prototype_player_.has_stem(stem_name);
+		return song_player_.has_stem(stem_name);
 	}
 
 	size_t SongSession::loaded_stem_count() const
 	{
-		return prototype_player_.loaded_stem_count();
+		return song_player_.loaded_stem_count();
 	}
 
 	void SongSession::set_stem_target_gain(std::string_view stem_name, float gain)
 	{
 		if (is_loaded())
-			prototype_player_.set_stem_target_gain(stem_name, gain);
+			song_player_.set_stem_target_gain(stem_name, gain);
 	}
 
 	float SongSession::stem_target_gain(std::string_view stem_name) const
 	{
-		return prototype_player_.stem_target_gain(stem_name);
+		return song_player_.stem_target_gain(stem_name);
 	}
 
 	int SongSession::sample_rate() const
@@ -678,7 +678,7 @@ namespace rhythmreplugged::core
 
 	bool SongSession::playback_finished() const
 	{
-		return prototype_player_.playback_finished();
+		return song_player_.playback_finished();
 	}
 
 	void SongSession::set_timing_offset_seconds(double offset_seconds)
@@ -696,7 +696,7 @@ namespace rhythmreplugged::core
 		if (!is_loaded())
 			return 0;
 
-		const PrototypePlayer::PlaybackState audio_state = prototype_player_.playback_state();
+		const SongPlayer::PlaybackState audio_state = song_player_.playback_state();
 		return sizeof(SerializedPlayStateHeader) +
 			play_state_.lanes.size() * sizeof(SerializedLaneRuntimeState) +
 			audio_state.current_gains.size() * sizeof(float) +
@@ -712,7 +712,7 @@ namespace rhythmreplugged::core
 			return false;
 		}
 
-		const PrototypePlayer::PlaybackState audio_state = prototype_player_.playback_state();
+		const SongPlayer::PlaybackState audio_state = song_player_.playback_state();
 		if (audio_state.current_gains.size() != audio_state.target_gains.size())
 		{
 			error_message = "Playback state gain vectors are inconsistent.";
@@ -822,7 +822,7 @@ namespace rhythmreplugged::core
 			return false;
 		}
 
-		const PrototypePlayer::PlaybackState current_audio_state = prototype_player_.playback_state();
+		const SongPlayer::PlaybackState current_audio_state = song_player_.playback_state();
 		if (header.audio_stem_count != current_audio_state.current_gains.size())
 		{
 			error_message = "Serialized play-state audio stem count does not match the loaded song session.";
@@ -864,7 +864,7 @@ namespace rhythmreplugged::core
 			}
 		}
 
-		PrototypePlayer::PlaybackState restored_audio_state;
+		SongPlayer::PlaybackState restored_audio_state;
 		restored_audio_state.frame_index = static_cast<size_t>(header.audio_frame_index);
 		restored_audio_state.current_gains.resize(header.audio_stem_count);
 		restored_audio_state.target_gains.resize(header.audio_stem_count);
@@ -896,7 +896,7 @@ namespace rhythmreplugged::core
 		restored_transport_state.frame_remainder = static_cast<size_t>(header.frame_remainder);
 		restored_transport_state.emitted_frames = static_cast<size_t>(header.emitted_frames);
 		transport_.restore_state(restored_transport_state);
-		if (!prototype_player_.restore_playback_state(restored_audio_state, error_message))
+		if (!song_player_.restore_playback_state(restored_audio_state, error_message))
 			return false;
 
 		for (size_t lane_index = 0; lane_index < play_state_.lanes.size(); ++lane_index)
@@ -907,9 +907,9 @@ namespace rhythmreplugged::core
 		return true;
 	}
 
-	PrototypePlayerView SongSession::view(const std::string &status_message) const
+	SongPlayerView SongSession::view(const std::string &status_message) const
 	{
-		PrototypePlayerView player_view;
+		SongPlayerView player_view;
 		rebuild_cached_player_view(player_view, status_message);
 		return player_view;
 	}
@@ -986,22 +986,22 @@ namespace rhythmreplugged::core
 			lane.instrument_label = instrument_label_for(instrument);
 			for (const std::string &stem_name : stem_names_for(instrument))
 			{
-				if (prototype_player_.has_stem(stem_name))
+				if (song_player_.has_stem(stem_name))
 					lane.stem_names.push_back(stem_name);
 			}
 			if (lane.stem_names.empty() &&
 				(instrument == InstrumentOption::Guitar || instrument == InstrumentOption::CoopGuitar) &&
-				prototype_player_.has_stem("guitar"))
+				song_player_.has_stem("guitar"))
 			{
 				lane.stem_names.push_back("guitar");
 			}
 			if (lane.stem_names.empty() && instrument == InstrumentOption::Bass &&
-				prototype_player_.has_stem("rhythm"))
+				song_player_.has_stem("rhythm"))
 			{
 				lane.stem_names.push_back("rhythm");
 			}
 			if (lane.stem_names.empty() && instrument == InstrumentOption::Rhythm &&
-				prototype_player_.has_stem("bass"))
+				song_player_.has_stem("bass"))
 			{
 				lane.stem_names.push_back("bass");
 			}
@@ -1178,7 +1178,7 @@ namespace rhythmreplugged::core
 		const float clamped_gain = std::clamp(gain, 0.0f, 1.0f);
 		play_state_.lanes[lane_index].stem_target_gain = clamped_gain;
 		for (const std::string &stem_name : gameplay_lanes_[lane_index].stem_names)
-			prototype_player_.set_stem_target_gain(stem_name, clamped_gain);
+			song_player_.set_stem_target_gain(stem_name, clamped_gain);
 	}
 
 	float SongSession::lane_stem_target_gain(size_t lane_index) const
@@ -1432,7 +1432,7 @@ namespace rhythmreplugged::core
 			highway_note.length_seconds = static_cast<float>((std::max)(it->end_seconds - it->start_seconds, 0.0));
 			frame_cache.visible_highway_notes.push_back(highway_note);
 
-			PrototypePlayerView::ChartNoteView chart_note;
+			SongPlayerView::ChartNoteView chart_note;
 			chart_note.lane = it->lane;
 			chart_note.start_offset_seconds = static_cast<float>(it->start_seconds - song_time_seconds);
 			chart_note.length_seconds = static_cast<float>((std::max)(it->end_seconds - it->start_seconds, 0.0));
@@ -1459,7 +1459,7 @@ namespace rhythmreplugged::core
 			highway_measure_line.is_strong = is_strong;
 			frame_cache.visible_highway_measure_lines.push_back(highway_measure_line);
 
-			PrototypePlayerView::ChartMeasureLineView chart_measure_line;
+			SongPlayerView::ChartMeasureLineView chart_measure_line;
 			chart_measure_line.offset_seconds = static_cast<float>(it->time_seconds - song_time_seconds);
 			chart_measure_line.is_measure = is_measure;
 			chart_measure_line.is_strong = is_strong;
@@ -1527,7 +1527,7 @@ namespace rhythmreplugged::core
 				continue;
 			}
 
-			PrototypePlayerView::LyricTokenView lyric_view;
+			SongPlayerView::LyricTokenView lyric_view;
 			lyric_view.text = token.text;
 			lyric_view.start_offset_seconds = static_cast<float>(token.start_seconds - song_time_seconds);
 			lyric_view.end_offset_seconds = static_cast<float>(token.end_seconds - song_time_seconds);
@@ -1574,15 +1574,15 @@ namespace rhythmreplugged::core
 		scene.players.push_back(std::move(gameplay_player));
 	}
 
-	void SongSession::rebuild_cached_player_view(PrototypePlayerView &player_view, const std::string &status_message) const
+	void SongSession::rebuild_cached_player_view(SongPlayerView &player_view, const std::string &status_message) const
 	{
 		player_view = {};
-		player_view.song_title = prototype_player_.metadata().name;
-		player_view.song_artist = prototype_player_.metadata().artist;
+		player_view.song_title = song_player_.metadata().name;
+		player_view.song_artist = song_player_.metadata().artist;
 		player_view.status_message = status_message.empty() ? chart_status_message_ : status_message;
-		player_view.loaded_stem_count = prototype_player_.loaded_stem_count();
+		player_view.loaded_stem_count = song_player_.loaded_stem_count();
 		player_view.song_time_seconds = song_time_seconds();
-		player_view.song_duration_seconds = prototype_player_.duration_seconds();
+		player_view.song_duration_seconds = song_player_.duration_seconds();
 
 		const size_t lane_index = active_lane_index();
 		if (lane_index >= gameplay_lanes_.size() || lane_index >= play_state_.lanes.size())
@@ -1633,11 +1633,11 @@ namespace rhythmreplugged::core
 	std::uint64_t SongSession::session_fingerprint() const
 	{
 		std::uint64_t hash = 1469598103934665603ull;
-		hash_string(hash, prototype_player_.metadata().name);
-		hash_string(hash, prototype_player_.metadata().artist);
-		hash_string(hash, prototype_player_.metadata().album);
-		hash_string(hash, prototype_player_.metadata().charter);
-		const double audio_duration_seconds = prototype_player_.duration_seconds();
+		hash_string(hash, song_player_.metadata().name);
+		hash_string(hash, song_player_.metadata().artist);
+		hash_string(hash, song_player_.metadata().album);
+		hash_string(hash, song_player_.metadata().charter);
+		const double audio_duration_seconds = song_player_.duration_seconds();
 		hash_value(hash, audio_duration_seconds);
 		hash_value(hash, play_state_.gameplay_mode);
 		const std::uint64_t lane_count = static_cast<std::uint64_t>(gameplay_lanes_.size());

@@ -63,6 +63,6 @@ namespace rhythmreplugged::ui
 		}
 
 		cover_textures.stop_song_browser_loading();
-		render_prototype_player_ui(app.gameplay_snapshot(), window_size);
+		render_song_player_ui(app.gameplay_snapshot(), window_size);
 	}
 }

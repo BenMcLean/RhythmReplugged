@@ -75,7 +75,7 @@ namespace rhythmreplugged::ui
 		const core::DifficultySelectView &menu,
 		ImVec2 window_size,
 		float ui_scale);
-	void render_prototype_player_ui(
+	void render_song_player_ui(
 		const core::GameplayFrameSnapshot &snapshot,
 		ImVec2 window_size);
 	void render_frontend_options_ui(

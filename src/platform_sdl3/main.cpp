@@ -327,7 +327,7 @@ int main(int argc, char *argv[])
 	}
 
 	SDL_Window *window = SDL_CreateWindow(
-		"Rhythm Replugged - SDL3 Prototype",
+		"Rhythm Replugged - SDL3 Frontend",
 		kWindowWidth,
 		kWindowHeight,
 		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
