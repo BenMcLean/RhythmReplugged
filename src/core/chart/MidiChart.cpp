@@ -2843,6 +2843,24 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 		const std::string &directory_path,
 		std::string_view file_name)
 	{
+		const auto try_candidate = [&](std::string_view candidate_name) -> std::string
+		{
+			if (candidate_name.empty())
+				return {};
+
+			const std::string candidate_path = directory_path + "/" + std::string(candidate_name);
+			return file_system.path_exists(candidate_path) ? candidate_path : std::string();
+		};
+
+		// Prefer direct VFS path probes first so chart discovery still works on
+		// frontends that allow file reads but do not expose directory enumeration.
+		if (const std::string direct_match = try_candidate(file_name); !direct_match.empty())
+			return direct_match;
+		if (const std::string lower_match = try_candidate(to_lower_copy(std::string(file_name))); !lower_match.empty())
+			return lower_match;
+		if (const std::string upper_match = try_candidate(to_upper_copy(file_name)); !upper_match.empty())
+			return upper_match;
+
 		const std::string target_name = to_upper_copy(file_name);
 		for (const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &entry : file_system.list_directory(directory_path))
 		{
