@@ -57,7 +57,10 @@ namespace rhythmreplugged::core
 			bool metadata_loaded = false;
 		};
 
-		bool load_directory(const std::string &path, std::string &error_message, const std::string *preferred_selected_path = nullptr);
+		bool load_directory(const std::string &path,
+			std::string &error_message,
+			const std::string *preferred_selected_path = nullptr,
+			bool trust_directory_hint = false);
 		BrowserEntry make_song_entry(const ::rhythmreplugged::frontend_contract::RetroDirectoryEntry &directory_entry) const;
 		bool hydrate_song_entry(size_t index);
 		void apply_cached_song_entry_data(BrowserEntry &entry, const CachedSongEntryData &cached_data) const;

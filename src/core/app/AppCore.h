@@ -12,9 +12,7 @@
 #include "frontend_contract/RetroInput.h"
 
 #include <atomic>
-#include <functional>
 #include <string>
-#include <string_view>
 
 namespace rhythmreplugged::core
 {
@@ -25,7 +23,6 @@ namespace rhythmreplugged::core
 
 		bool retro_init(const std::string &song_root_path, std::string &error_message);
 		bool retro_init(const AppLaunchRequest &launch_request, std::string &error_message);
-		void set_diagnostic_logger(std::function<void(std::string_view)> logger);
 		void set_frontend_options(const ::rhythmreplugged::frontend_contract::FrontendOptions &options);
 		void retro_run(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 		void retro_deinit();
@@ -79,7 +76,6 @@ namespace rhythmreplugged::core
 		void reset_gameplay_pause_menu();
 		void open_gameplay_pause_menu();
 		void close_gameplay_pause_menu();
-		void log_diagnostic(std::string_view message) const;
 
 		::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system_;
 		SongBrowser song_browser_;
@@ -92,7 +88,6 @@ namespace rhythmreplugged::core
 		::rhythmreplugged::frontend_contract::RetroInputState previous_input_{};
 		::rhythmreplugged::frontend_contract::AudioBatch audio_batch_{};
 		::rhythmreplugged::frontend_contract::FrontendOptions frontend_options_{};
-		std::function<void(std::string_view)> diagnostic_logger_;
 		std::string player_status_message_;
 		std::string pending_song_path_;
 		MidiChart pending_song_chart_;

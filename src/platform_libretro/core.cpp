@@ -139,15 +139,6 @@ namespace
 		g_log_callback.log(level, "%s", buffer);
 	}
 
-	void log_app_diagnostic(std::string_view message)
-	{
-		if (message.empty())
-			return;
-
-		std::string owned_message(message);
-		log_message(RETRO_LOG_INFO, "[diag] %s\n", owned_message.c_str());
-	}
-
 	const char *glsl_version_for_api(GameplayRendererGl::GraphicsApi api)
 	{
 		switch (api)
@@ -547,11 +538,10 @@ RR_LIBRETRO_EXPORT unsigned retro_api_version(void)
 RR_LIBRETRO_EXPORT void retro_set_environment(retro_environment_t cb)
 {
 	g_environment = cb;
+	g_file_system.set_environment_callback(cb);
 	if (g_environment != nullptr)
 	{
 		g_environment(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &g_log_callback);
-		g_app.set_diagnostic_logger(log_app_diagnostic);
-		log_message(RETRO_LOG_INFO, "[diag] diagnostic logger attached\n");
 		register_core_options();
 		retro_vfs_interface_info vfs_info{};
 		vfs_info.required_interface_version = 3;

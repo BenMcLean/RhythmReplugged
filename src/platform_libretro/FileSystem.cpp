@@ -176,8 +176,33 @@ namespace rhythmreplugged::platform_libretro
 		vfs_interface_ = vfs_interface;
 	}
 
+	void FileSystem::set_environment_callback(retro_environment_t environment)
+	{
+		environment_ = environment;
+	}
+
+	void FileSystem::refresh_vfs_interface() const
+	{
+		if (environment_ == nullptr)
+			return;
+
+		retro_vfs_interface_info vfs_info{};
+		vfs_info.required_interface_version = 3;
+		// Some Linux/libretro frontends, including Lakka on Raspberry Pi, do not
+		// keep directory traversal callbacks reliably usable for the whole core
+		// lifetime. Re-query the VFS table before each filesystem operation so we
+		// stay inside libretro's sandbox without depending on stale callbacks.
+		if (environment_(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_info) && vfs_info.iface != nullptr)
+		{
+			auto *self = const_cast<FileSystem *>(this);
+			self->vfs_interface_version_ = vfs_info.required_interface_version;
+			self->vfs_interface_ = vfs_info.iface;
+		}
+	}
+
 	bool FileSystem::has_vfs_interface() const
 	{
+		refresh_vfs_interface();
 		return vfs_interface_ != nullptr;
 	}
 
@@ -196,6 +221,7 @@ namespace rhythmreplugged::platform_libretro
 
 	bool FileSystem::path_exists(const std::string &path) const
 	{
+		refresh_vfs_interface();
 		bool is_directory = false;
 		if (stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value())
 			return true;
@@ -205,6 +231,7 @@ namespace rhythmreplugged::platform_libretro
 
 	bool FileSystem::path_is_directory(const std::string &path) const
 	{
+		refresh_vfs_interface();
 		bool is_directory = false;
 		if (can_open_directory_with_vfs(vfs_interface_, path))
 			return true;
@@ -215,6 +242,7 @@ namespace rhythmreplugged::platform_libretro
 
 	std::optional<std::uint64_t> FileSystem::file_size(const std::string &path) const
 	{
+		refresh_vfs_interface();
 		bool is_directory = false;
 		const std::optional<int64_t> size = stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory);
 		if (!size.has_value() || is_directory || *size < 0)
@@ -225,6 +253,7 @@ namespace rhythmreplugged::platform_libretro
 
 	std::vector<::rhythmreplugged::frontend_contract::RetroDirectoryEntry> FileSystem::list_directory(const std::string &path) const
 	{
+		refresh_vfs_interface();
 		std::vector<::rhythmreplugged::frontend_contract::RetroDirectoryEntry> entries;
 		// Do not fall back to host directory APIs here. Libretro content access
 		// is defined entirely in terms of VFS, and missing VFS support should be
@@ -232,9 +261,7 @@ namespace rhythmreplugged::platform_libretro
 		if (vfs_interface_ == nullptr || vfs_interface_->opendir == nullptr || vfs_interface_->readdir == nullptr ||
 			vfs_interface_->dirent_get_name == nullptr || vfs_interface_->dirent_is_dir == nullptr ||
 			vfs_interface_->closedir == nullptr)
-		{
 			return entries;
-		}
 
 		retro_vfs_dir_handle *directory = vfs_interface_->opendir(path.c_str(), false);
 		if (directory == nullptr && !path.empty() && path.back() != '/')
@@ -256,7 +283,9 @@ namespace rhythmreplugged::platform_libretro
 			::rhythmreplugged::frontend_contract::RetroDirectoryEntry entry;
 			entry.name = name;
 			entry.path = join_generic_paths(path, entry.name);
-			entry.is_directory = vfs_interface_->dirent_is_dir(directory);
+			entry.is_directory =
+				vfs_interface_->dirent_is_dir(directory) ||
+				can_open_directory_with_vfs(vfs_interface_, entry.path);
 			entries.push_back(std::move(entry));
 		}
 
@@ -278,6 +307,7 @@ namespace rhythmreplugged::platform_libretro
 
 	std::optional<std::vector<std::uint8_t>> FileSystem::read_binary_file(const std::string &path) const
 	{
+		refresh_vfs_interface();
 		// The libretro core must only read files through the frontend-provided
 		// VFS interface. Returning nullopt here allows startup/load code to log
 		// and fail hard instead of silently escaping to native file APIs.

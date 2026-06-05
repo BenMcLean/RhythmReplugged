@@ -229,7 +229,7 @@ namespace rhythmreplugged::core
 			return false;
 
 		const std::string previous_path = current_path_;
-		return load_directory(file_system_.parent_path(current_path_), error_message, &previous_path);
+		return load_directory(file_system_.parent_path(current_path_), error_message, &previous_path, true);
 	}
 
 	bool SongBrowser::activate_selected(std::string &selected_song_path, std::string &error_message)
@@ -246,7 +246,7 @@ namespace rhythmreplugged::core
 
 		if (entry.is_folder)
 		{
-			return load_directory(entry.path, error_message);
+			return load_directory(entry.path, error_message, nullptr, true);
 		}
 
 		if (!entries_[static_cast<size_t>(selected_index_)].metadata_loaded)
@@ -300,10 +300,13 @@ namespace rhythmreplugged::core
 		return cached_view_;
 	}
 
-	bool SongBrowser::load_directory(const std::string &path, std::string &error_message, const std::string *preferred_selected_path)
+	bool SongBrowser::load_directory(const std::string &path,
+		std::string &error_message,
+		const std::string *preferred_selected_path,
+		bool trust_directory_hint)
 	{
 		const std::string canonical_path = file_system_.canonicalize_path(path);
-		if (canonical_path.empty() || !file_system_.path_is_directory(canonical_path))
+		if (canonical_path.empty() || (!trust_directory_hint && !file_system_.path_is_directory(canonical_path)))
 		{
 			error_message = "Target path is not a directory.";
 			return false;
