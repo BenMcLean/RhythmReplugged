@@ -866,6 +866,79 @@ namespace rhythmreplugged::ui
 		ImGui::PopStyleVar();
 	}
 
+	void render_gameplay_pause_ui(
+		const GameplayFrameSnapshot &snapshot,
+		const GameplayPauseMenuView &menu,
+		const GameplayPauseUiActions &actions,
+		ImVec2 window_size,
+		float ui_scale)
+	{
+		int pending_selected_index = -1;
+		bool pending_activate_selection = false;
+		const SongPlayerView &player = snapshot.player;
+		const int wheel_steps = wheel_steps_from_delta(ImGui::GetIO().MouseWheel);
+
+		ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+		ImGui::Begin("Gameplay Pause", nullptr,
+			ImGuiWindowFlags_NoTitleBar |
+			ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse |
+			ImGuiWindowFlags_NoScrollbar |
+			ImGuiWindowFlags_NoSavedSettings |
+			ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+		ImDrawList *draw_list = ImGui::GetWindowDrawList();
+		const ImVec2 origin = ImGui::GetWindowPos();
+		const ImVec2 max(origin.x + window_size.x, origin.y + window_size.y);
+		draw_list->AddRectFilled(origin, max, IM_COL32(6, 8, 13, 148));
+
+		const ImVec2 panel_size(360.0f * ui_scale, 268.0f * ui_scale);
+		const ImVec2 panel_min(
+			origin.x + (window_size.x - panel_size.x) * 0.5f,
+			origin.y + (window_size.y - panel_size.y) * 0.5f);
+		const ImVec2 panel_max(panel_min.x + panel_size.x, panel_min.y + panel_size.y);
+		draw_list->AddRectFilled(panel_min, panel_max, IM_COL32(14, 18, 28, 236), 18.0f);
+		draw_list->AddRect(panel_min, panel_max, IM_COL32(86, 104, 138, 255), 18.0f, 0, 2.0f);
+
+		ImGui::SetCursorScreenPos(ImVec2(panel_min.x + 28.0f * ui_scale, panel_min.y + 24.0f * ui_scale));
+		ImGui::BeginGroup();
+		ImGui::TextUnformatted("Pause");
+		if (!player.song_title.empty())
+			ImGui::TextWrapped("%s", player.song_title.c_str());
+		if (!player.song_artist.empty())
+			ImGui::TextDisabled("%s", player.song_artist.c_str());
+		ImGui::Spacing();
+
+		const char *labels[] = {"Resume", "End Song"};
+		for (int index = 0; index < 2; ++index)
+		{
+			const bool selected = menu.selected_index == index;
+			const bool activated = ImGui::Selectable(labels[index], selected, 0, ImVec2(panel_size.x - 56.0f * ui_scale, 36.0f * ui_scale));
+			queue_selected_index_change(activated, index, pending_selected_index);
+		}
+
+		ImGui::Spacing();
+		ImGui::TextDisabled("B: Resume    A / Start: Confirm");
+		ImGui::EndGroup();
+		ImGui::End();
+		ImGui::PopStyleColor();
+		ImGui::PopStyleVar(2);
+
+		if (wheel_steps != 0 && actions.set_selected_index != nullptr)
+			pending_selected_index = std::clamp(menu.selected_index - wheel_steps, 0, 1);
+
+		if (pending_selected_index >= 0 && actions.set_selected_index != nullptr)
+			actions.set_selected_index(pending_selected_index);
+
+		if (pending_activate_selection && actions.activate_selection != nullptr)
+			actions.activate_selection();
+	}
+
 	void render_frontend_options_ui(
 		const ::rhythmreplugged::frontend_contract::FrontendOptions &options,
 		FrontendOptionsUiState &ui_state,

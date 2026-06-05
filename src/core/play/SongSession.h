@@ -39,15 +39,16 @@ namespace rhythmreplugged::core
 
 		bool load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 			const std::string &song_directory,
+			const MidiChart &song_chart,
 			const GameplayOptions &options,
 			std::string &error_message);
 		bool load_preloaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 			const std::string &song_directory,
+			const MidiChart &song_chart,
 			SongPlayer::PreloadedSongData preloaded_song_data,
 			const GameplayOptions &options,
 			std::string &error_message);
-		bool reconfigure_loaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
-			const std::string &song_directory,
+		bool reconfigure_loaded(const MidiChart &song_chart,
 			const GameplayOptions &options,
 			std::string &error_message);
 		void unload();
@@ -127,8 +128,7 @@ namespace rhythmreplugged::core
 		static std::uint8_t lane_mask_from_state(const std::array<bool, 5> &lanes);
 		static bool held_mask_satisfies_expected(std::uint8_t held_mask, std::uint8_t expected_mask);
 		bool configure_gameplay_lanes(
-			::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
-			const std::string &song_directory,
+			const MidiChart &song_chart,
 			const GameplayOptions &options,
 			std::string &error_message);
 		void reset_runtime_state(GameplayLaneRuntimeState &lane);

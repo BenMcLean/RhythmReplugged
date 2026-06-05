@@ -12,7 +12,9 @@
 #include "frontend_contract/RetroInput.h"
 
 #include <atomic>
+#include <functional>
 #include <string>
+#include <string_view>
 
 namespace rhythmreplugged::core
 {
@@ -23,6 +25,7 @@ namespace rhythmreplugged::core
 
 		bool retro_init(const std::string &song_root_path, std::string &error_message);
 		bool retro_init(const AppLaunchRequest &launch_request, std::string &error_message);
+		void set_diagnostic_logger(std::function<void(std::string_view)> logger);
 		void set_frontend_options(const ::rhythmreplugged::frontend_contract::FrontendOptions &options);
 		void retro_run(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 		void retro_deinit();
@@ -35,7 +38,7 @@ namespace rhythmreplugged::core
 		bool activate_difficulty_selection();
 		void return_to_browser();
 		void toggle_player_guitar_mute();
-		void finalize_audio_stop();
+		void drop_song();
 		int sample_rate() const override;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count) override;
 		size_t gameplay_play_state_serialized_size() const;
@@ -47,8 +50,12 @@ namespace rhythmreplugged::core
 		const SongBrowserView &song_browser_view() const;
 		const InstrumentSelectView &instrument_select_view() const;
 		const DifficultySelectView &difficulty_select_view() const;
+		bool gameplay_paused() const;
+		const GameplayPauseMenuView &gameplay_pause_menu_view() const;
 		const GameplayFrameSnapshot &gameplay_snapshot() const;
 		const ::rhythmreplugged::frontend_contract::AudioBatch &audio_batch() const;
+		bool set_gameplay_pause_selected_index(int index);
+		bool activate_gameplay_pause_selection();
 
 	private:
 		bool activate_browser_selection_unlocked();
@@ -68,6 +75,11 @@ namespace rhythmreplugged::core
 		void run_difficulty_select_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 		void run_loading_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
 		void run_gameplay(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
+		void run_gameplay_pause_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state);
+		void reset_gameplay_pause_menu();
+		void open_gameplay_pause_menu();
+		void close_gameplay_pause_menu();
+		void log_diagnostic(std::string_view message) const;
 
 		::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system_;
 		SongBrowser song_browser_;
@@ -80,13 +92,18 @@ namespace rhythmreplugged::core
 		::rhythmreplugged::frontend_contract::RetroInputState previous_input_{};
 		::rhythmreplugged::frontend_contract::AudioBatch audio_batch_{};
 		::rhythmreplugged::frontend_contract::FrontendOptions frontend_options_{};
+		std::function<void(std::string_view)> diagnostic_logger_;
 		std::string player_status_message_;
 		std::string pending_song_path_;
+		MidiChart pending_song_chart_;
+		bool pending_song_chart_loaded_ = false;
 		GameplayOptions pending_gameplay_options_;
+		GameplayPauseMenuView gameplay_pause_menu_;
 		bool pending_instrument_selection_required_ = false;
 		bool waiting_for_song_preload_ = false;
 		bool session_unload_pending_ = false;
 		bool audio_batch_enabled_ = false;
 		bool restrict_to_startup_song_ = false;
+		bool gameplay_paused_ = false;
 	};
 }

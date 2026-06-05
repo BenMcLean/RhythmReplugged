@@ -76,6 +76,59 @@ namespace rhythmreplugged::core
 			return {};
 		}
 
+		std::string_view display_name_for_difficulty(MidiChartDifficulty difficulty)
+		{
+			for (const ParsedDifficultyPreference &preference : kPreferredDifficulties)
+			{
+				if (preference.difficulty == difficulty)
+					return preference.name;
+			}
+
+			return "Unknown";
+		}
+
+		std::string summarize_available_preview_tracks(const std::vector<MidiChartTrack> &tracks, MidiChartDrumsType detected_drums_type)
+		{
+			(void)detected_drums_type;
+			std::vector<std::string_view> available;
+			for (const InstrumentTrackPreference &track_preference : kPreviewTrackPreferences)
+			{
+				for (const MidiChartTrack &track : tracks)
+				{
+					if (track.type != track_preference.type)
+						continue;
+
+					const auto has_preview_notes = std::any_of(track.parsed_notes.begin(), track.parsed_notes.end(),
+						[track_type = track.type](const MidiChartParsedNote &note)
+						{
+							return (track_type == MidiChartTrackType::Drums &&
+								note.category == MidiChartNoteCategory::Drums &&
+								note.lane >= 0 &&
+								note.lane <= 5) ||
+								(track_type != MidiChartTrackType::Drums &&
+									note.category == MidiChartNoteCategory::FiveFret &&
+									note.lane >= 1 &&
+									note.lane <= 5);
+						});
+					if (has_preview_notes)
+						available.push_back(track_preference.display_name);
+					break;
+				}
+			}
+
+			if (available.empty())
+				return "none";
+
+			std::string summary;
+			for (size_t index = 0; index < available.size(); ++index)
+			{
+				if (index > 0)
+					summary += index + 1 == available.size() ? ", " : ", ";
+				summary += available[index];
+			}
+			return summary;
+		}
+
 		constexpr DifficultyNoteRange kFiveFretNoteRanges[] = {
 			{MidiChartDifficulty::Easy, 60, 5},
 			{MidiChartDifficulty::Medium, 72, 5},
@@ -756,7 +809,13 @@ namespace rhythmreplugged::core
 				}
 			}
 
-			error_message = "notes.chart loaded, but no supported playable chart was found yet.";
+			error_message =
+				"notes.chart loaded, but no playable preview chart matched requested track '" +
+				std::string(display_name_for_preview_track_type(preferred_track_type)) +
+				"' at difficulty '" +
+				std::string(display_name_for_difficulty(preferred_difficulty)) +
+				"'. Available playable tracks: " +
+				summarize_available_preview_tracks(tracks, detected_drums_type) + ".";
 			return false;
 		}
 
@@ -2642,13 +2701,27 @@ bool MidiChart::load(const ::rhythmreplugged::frontend_contract::IRetroFileSyste
 		if (measure_lines_.empty())
 			generate_yarg_measure_lines(midi_file, time_signatures_, measure_lines_);
 
+		return select_preview(preferred_difficulty, preferred_track_type, error_message);
+	}
+
+	bool MidiChart::select_preview(MidiChartDifficulty preferred_difficulty,
+		MidiChartTrackType preferred_track_type,
+		std::string &error_message)
+	{
 		rebuild_preview_selection(preferred_difficulty, preferred_track_type);
 		if (notes_.empty())
 		{
-			error_message = "notes.mid loaded, but no supported playable chart was found yet.";
+			error_message =
+				"Chart loaded, but no playable preview chart matched requested track '" +
+				std::string(display_name_for_preview_track_type(preferred_track_type)) +
+				"' at difficulty '" +
+				std::string(display_name_for_difficulty(preferred_difficulty)) +
+				"'. Available playable tracks: " +
+				summarize_available_preview_tracks(tracks_, detected_drums_type_) + ".";
 			return false;
 		}
 
+		error_message.clear();
 		return true;
 	}
 

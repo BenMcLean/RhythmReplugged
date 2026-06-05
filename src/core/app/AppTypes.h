@@ -102,6 +102,11 @@ namespace rhythmreplugged::core
 		size_t total_read_file_count = 0;
 	};
 
+	struct GameplayPauseMenuView
+	{
+		int selected_index = 0;
+	};
+
 	struct SongPlayerView
 	{
 		struct ChartNoteView

@@ -134,6 +134,40 @@ namespace rhythmreplugged::platform_libretro
 
 			return std::nullopt;
 		}
+
+		bool can_open_directory_with_vfs(const retro_vfs_interface *vfs_interface, const std::string &path)
+		{
+			if (vfs_interface == nullptr || vfs_interface->opendir == nullptr || vfs_interface->closedir == nullptr)
+				return false;
+
+			retro_vfs_dir_handle *directory = vfs_interface->opendir(path.c_str(), false);
+			if (directory == nullptr && !path.empty() && path.back() != '/')
+			{
+				const std::string slash_path = path + "/";
+				directory = vfs_interface->opendir(slash_path.c_str(), false);
+			}
+			if (directory == nullptr)
+				return false;
+
+			vfs_interface->closedir(directory);
+			return true;
+		}
+
+		bool can_open_file_with_vfs(const retro_vfs_interface *vfs_interface, const std::string &path)
+		{
+			if (vfs_interface == nullptr || vfs_interface->open == nullptr || vfs_interface->close == nullptr)
+				return false;
+
+			retro_vfs_file_handle *file = vfs_interface->open(
+				path.c_str(),
+				RETRO_VFS_FILE_ACCESS_READ,
+				RETRO_VFS_FILE_ACCESS_HINT_NONE);
+			if (file == nullptr)
+				return false;
+
+			vfs_interface->close(file);
+			return true;
+		}
 	}
 
 	void FileSystem::set_vfs_interface(uint32_t vfs_interface_version, const retro_vfs_interface *vfs_interface)
@@ -163,13 +197,20 @@ namespace rhythmreplugged::platform_libretro
 	bool FileSystem::path_exists(const std::string &path) const
 	{
 		bool is_directory = false;
-		return stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value();
+		if (stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value())
+			return true;
+
+		return can_open_file_with_vfs(vfs_interface_, path);
 	}
 
 	bool FileSystem::path_is_directory(const std::string &path) const
 	{
 		bool is_directory = false;
-		return stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory).has_value() && is_directory;
+		if (can_open_directory_with_vfs(vfs_interface_, path))
+			return true;
+
+		const std::optional<int64_t> size = stat_path_with_vfs(vfs_interface_version_, vfs_interface_, path, is_directory);
+		return size.has_value() && is_directory;
 	}
 
 	std::optional<std::uint64_t> FileSystem::file_size(const std::string &path) const
@@ -196,6 +237,11 @@ namespace rhythmreplugged::platform_libretro
 		}
 
 		retro_vfs_dir_handle *directory = vfs_interface_->opendir(path.c_str(), false);
+		if (directory == nullptr && !path.empty() && path.back() != '/')
+		{
+			const std::string slash_path = path + "/";
+			directory = vfs_interface_->opendir(slash_path.c_str(), false);
+		}
 		if (directory == nullptr)
 			return entries;
 

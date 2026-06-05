@@ -30,6 +30,12 @@ namespace rhythmreplugged::ui
 		std::function<void()> activate_selection;
 	};
 
+	struct GameplayPauseUiActions
+	{
+		std::function<void(int)> set_selected_index;
+		std::function<void()> activate_selection;
+	};
+
 	struct FrontendOptionsUiState
 	{
 		bool categories_focused = false;
@@ -78,6 +84,12 @@ namespace rhythmreplugged::ui
 	void render_song_player_ui(
 		const core::GameplayFrameSnapshot &snapshot,
 		ImVec2 window_size);
+	void render_gameplay_pause_ui(
+		const core::GameplayFrameSnapshot &snapshot,
+		const core::GameplayPauseMenuView &menu,
+		const GameplayPauseUiActions &actions,
+		ImVec2 window_size,
+		float ui_scale);
 	void render_frontend_options_ui(
 		const ::rhythmreplugged::frontend_contract::FrontendOptions &options,
 		FrontendOptionsUiState &ui_state,

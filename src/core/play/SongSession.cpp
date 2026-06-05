@@ -463,14 +463,16 @@ namespace rhythmreplugged::core
 
 	bool SongSession::load(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 		const std::string &song_directory,
+		const MidiChart &song_chart,
 		const GameplayOptions &options,
 		std::string &error_message)
 	{
-		return load_preloaded(file_system, song_directory, {}, options, error_message);
+		return load_preloaded(file_system, song_directory, song_chart, {}, options, error_message);
 	}
 
 	bool SongSession::load_preloaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 		const std::string &song_directory,
+		const MidiChart &song_chart,
 		SongPlayer::PreloadedSongData preloaded_song_data,
 		const GameplayOptions &options,
 		std::string &error_message)
@@ -486,11 +488,10 @@ namespace rhythmreplugged::core
 			return false;
 		}
 
-		return reconfigure_loaded(file_system, song_directory, options, error_message);
+		return reconfigure_loaded(song_chart, options, error_message);
 	}
 
-	bool SongSession::reconfigure_loaded(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
-		const std::string &song_directory,
+	bool SongSession::reconfigure_loaded(const MidiChart &song_chart,
 		const GameplayOptions &options,
 		std::string &error_message)
 	{
@@ -503,7 +504,7 @@ namespace rhythmreplugged::core
 		song_player_.rewind();
 		transport_.configure(song_player_.sample_rate());
 		audio_mixer_.set_song_player(&song_player_);
-		if (!configure_gameplay_lanes(file_system, song_directory, options, error_message))
+		if (!configure_gameplay_lanes(song_chart, options, error_message))
 			return false;
 		refresh_frame_snapshot({});
 		loaded_.store(true);
@@ -968,8 +969,7 @@ namespace rhythmreplugged::core
 	}
 
 	bool SongSession::configure_gameplay_lanes(
-		::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
-		const std::string &song_directory,
+		const MidiChart &song_chart,
 		const GameplayOptions &options,
 		std::string &error_message)
 	{
@@ -1012,26 +1012,29 @@ namespace rhythmreplugged::core
 		{
 			GameplayLaneDefinition lane = build_lane(options.instrument());
 			std::string chart_error_message;
-			lane.midi_chart.load(
-				file_system,
-				song_directory,
+			lane.midi_chart = song_chart;
+			if (!lane.midi_chart.select_preview(
 				to_midi_chart_difficulty(options.difficulty()),
 				to_midi_chart_track_type(options.instrument()),
-				chart_error_message);
+				chart_error_message))
+			{
+				error_message = chart_error_message.empty() ? "Could not load a playable chart for the selected instrument and difficulty." : chart_error_message;
+				return false;
+			}
+
+			if (!lane.midi_chart.is_loaded())
+			{
+				error_message = "Could not load a playable chart for the selected instrument and difficulty.";
+				return false;
+			}
+
 			cache_lyric_data(lane);
 			chart_status_message_ = std::move(chart_error_message);
 			gameplay_lanes_.push_back(std::move(lane));
 		}
 		else
 		{
-			MidiChart inspect_chart;
-			std::string inspect_error_message;
-			inspect_chart.load(
-				file_system,
-				song_directory,
-				to_midi_chart_difficulty(options.difficulty()),
-				MidiChartTrackType::FiveFretGuitar,
-				inspect_error_message);
+			const MidiChart &inspect_chart = song_chart;
 
 			std::vector<InstrumentOption> freeplay_instruments;
 			for (const MidiChartTrackType track_type : inspect_chart.available_preview_track_types())
@@ -1055,9 +1058,8 @@ namespace rhythmreplugged::core
 			{
 				GameplayLaneDefinition lane = build_lane(instrument);
 				std::string lane_error_message;
-				lane.midi_chart.load(
-					file_system,
-					song_directory,
+				lane.midi_chart = song_chart;
+				lane.midi_chart.select_preview(
 					to_midi_chart_difficulty(options.difficulty()),
 					to_midi_chart_track_type(instrument),
 					lane_error_message);

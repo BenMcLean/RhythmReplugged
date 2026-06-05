@@ -288,6 +288,9 @@ namespace rhythmreplugged::core
 			MidiChartDifficulty preferred_difficulty,
 			MidiChartTrackType preferred_track_type,
 			std::string &error_message);
+		bool select_preview(MidiChartDifficulty preferred_difficulty,
+			MidiChartTrackType preferred_track_type,
+			std::string &error_message);
 		void clear();
 		bool is_loaded() const;
 		std::string_view track_name() const;

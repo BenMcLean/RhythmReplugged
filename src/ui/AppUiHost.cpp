@@ -64,5 +64,12 @@ namespace rhythmreplugged::ui
 
 		cover_textures.stop_song_browser_loading();
 		render_song_player_ui(app.gameplay_snapshot(), window_size);
+		if (app.gameplay_paused())
+		{
+			GameplayPauseUiActions actions;
+			actions.set_selected_index = [&](int index) { app.set_gameplay_pause_selected_index(index); };
+			actions.activate_selection = [&]() { app.activate_gameplay_pause_selection(); };
+			render_gameplay_pause_ui(app.gameplay_snapshot(), app.gameplay_pause_menu_view(), actions, window_size, ui_scale);
+		}
 	}
 }

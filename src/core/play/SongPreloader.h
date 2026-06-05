@@ -61,7 +61,7 @@ namespace rhythmreplugged::core
 			std::vector<SongPlayer::PreloadedStemTrack> stems;
 			std::vector<size_t> stem_order_indices;
 			std::atomic<size_t> processed_decode_bytes{0};
-			size_t total_bytes = 0;
+			std::atomic<size_t> total_bytes{0};
 			std::atomic<size_t> completed_decode_stem_count{0};
 			std::atomic<size_t> completed_read_file_count{0};
 			size_t total_stem_count = 0;

@@ -125,7 +125,7 @@ namespace rhythmreplugged::core
 				staged_job->bytes = std::move(*stem_bytes);
 				{
 					std::scoped_lock lock(request_state->result_mutex);
-					request_state->total_bytes += staged_job->bytes.size();
+					request_state->total_bytes.fetch_add(staged_job->bytes.size());
 					request_state->staged_jobs.push_back(staged_job);
 				}
 
@@ -215,7 +215,7 @@ namespace rhythmreplugged::core
 		result.phase = request_state->phase.load();
 		result.sample_rate = request_state->sample_rate.load();
 		result.processed_bytes = request_state->processed_decode_bytes.load();
-		result.total_bytes = request_state->total_bytes;
+		result.total_bytes = request_state->total_bytes.load();
 		result.completed_stem_count = request_state->completed_decode_stem_count.load();
 		result.total_stem_count = request_state->total_stem_count;
 		result.completed_read_file_count = request_state->completed_read_file_count.load();

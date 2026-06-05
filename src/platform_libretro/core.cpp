@@ -139,6 +139,15 @@ namespace
 		g_log_callback.log(level, "%s", buffer);
 	}
 
+	void log_app_diagnostic(std::string_view message)
+	{
+		if (message.empty())
+			return;
+
+		std::string owned_message(message);
+		log_message(RETRO_LOG_INFO, "[diag] %s\n", owned_message.c_str());
+	}
+
 	const char *glsl_version_for_api(GameplayRendererGl::GraphicsApi api)
 	{
 		switch (api)
@@ -188,6 +197,7 @@ namespace
 		input.up = input.up || keyboard_pressed(RETROK_UP);
 		input.down = input.down || keyboard_pressed(RETROK_DOWN);
 		input.a = input.a || keyboard_pressed(RETROK_RETURN) || keyboard_pressed(RETROK_SPACE);
+		input.start = input.start || keyboard_pressed(RETROK_RETURN);
 		input.b = input.b || keyboard_pressed(RETROK_0) || keyboard_pressed(RETROK_BACKSPACE);
 		input.l = input.l || keyboard_pressed(RETROK_LEFTBRACKET);
 		input.r = input.r || keyboard_pressed(RETROK_RIGHTBRACKET);
@@ -540,6 +550,8 @@ RR_LIBRETRO_EXPORT void retro_set_environment(retro_environment_t cb)
 	if (g_environment != nullptr)
 	{
 		g_environment(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &g_log_callback);
+		g_app.set_diagnostic_logger(log_app_diagnostic);
+		log_message(RETRO_LOG_INFO, "[diag] diagnostic logger attached\n");
 		register_core_options();
 		retro_vfs_interface_info vfs_info{};
 		vfs_info.required_interface_version = 3;
@@ -818,7 +830,7 @@ RR_LIBRETRO_EXPORT void retro_run(void)
 	sync_frontend_sample_rate();
 	submit_audio();
 	if (g_app.mode() != AppMode::Gameplay)
-		g_app.finalize_audio_stop();
+		g_app.drop_song();
 
 	ImGui_ImplOpenGL3_NewFrame();
 	begin_imgui_libretro_frame(

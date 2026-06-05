@@ -610,6 +610,8 @@ int main(int argc, char *argv[])
 					held_input.right = is_down;
 				else if (scancode == SDL_SCANCODE_RETURN || scancode == SDL_SCANCODE_SPACE)
 					held_input.a = is_down;
+				if (scancode == SDL_SCANCODE_RETURN)
+					held_input.start = is_down;
 				else if (scancode == SDL_SCANCODE_BACKSPACE || scancode == SDL_SCANCODE_0)
 					held_input.b = is_down;
 				else if (scancode == SDL_SCANCODE_X)
@@ -691,7 +693,7 @@ int main(int argc, char *argv[])
 		else
 		{
 			audio_output.shutdown();
-			app.finalize_audio_stop();
+			app.drop_song();
 		}
 
 		ImGui_ImplOpenGL3_NewFrame();
