@@ -83,6 +83,22 @@ namespace
 		{nullptr, false, false},
 	};
 
+	const retro_input_descriptor kInputDescriptors[] = {
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L, "Gameplay: switch track left"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R, "Gameplay: switch track right"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Gameplay: pause"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT, "Gameplay: lane 1 / Menus: left"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP, "Gameplay: lane 2 / Menus: up"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT, "Gameplay: lane 3 / Menus: right"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y, "Gameplay: lane 3"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X, "Gameplay: lane 4"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A, "Gameplay: lane 5 / Menus: accept"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B, "Menus: cancel"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN, "Menus: down"},
+		{0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Unused"},
+		{0},
+	};
+
 	std::vector<retro_core_option_v2_category> g_option_categories;
 	std::vector<retro_core_option_v2_definition> g_core_option_definitions;
 	retro_core_options_v2 g_core_options{};
@@ -555,6 +571,7 @@ RR_LIBRETRO_EXPORT void retro_set_environment(retro_environment_t cb)
 		bool support_no_game = true;
 		g_environment(RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME, &support_no_game);
 		g_environment(RETRO_ENVIRONMENT_SET_CONTENT_INFO_OVERRIDE, const_cast<retro_system_content_info_override *>(kContentInfoOverrides));
+		g_environment(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, const_cast<retro_input_descriptor *>(kInputDescriptors));
 		retro_frame_time_callback frame_time{};
 		frame_time.callback = frame_time_callback;
 		frame_time.reference = kNominalFrameTimeUsec;

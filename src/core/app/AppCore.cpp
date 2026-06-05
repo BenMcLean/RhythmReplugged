@@ -910,7 +910,7 @@ namespace rhythmreplugged::core
 			return;
 		}
 
-		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.start, previous_input_.start))
+		if (pressed(input_state.a, previous_input_.a))
 		{
 			activate_browser_selection_unlocked();
 			return;
@@ -953,7 +953,7 @@ namespace rhythmreplugged::core
 			return;
 		}
 
-		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.start, previous_input_.start))
+		if (pressed(input_state.a, previous_input_.a))
 		{
 			activate_instrument_selection_unlocked();
 			return;
@@ -998,7 +998,7 @@ namespace rhythmreplugged::core
 			return;
 		}
 
-		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.start, previous_input_.start))
+		if (pressed(input_state.a, previous_input_.a))
 		{
 			activate_difficulty_selection_unlocked();
 			return;
@@ -1078,14 +1078,14 @@ namespace rhythmreplugged::core
 		const std::array<bool, 5> previous_lane_held = {
 			previous_input_.left || previous_input_.lane_1,
 			previous_input_.up || previous_input_.lane_2,
-			previous_input_.y || previous_input_.lane_3,
+			previous_input_.right || previous_input_.y || previous_input_.lane_3,
 			previous_input_.x || previous_input_.lane_4,
 			previous_input_.a || previous_input_.lane_5,
 		};
 		const std::array<bool, 5> lane_held = {
 			input_state.left || input_state.lane_1,
 			input_state.up || input_state.lane_2,
-			input_state.y || input_state.lane_3,
+			input_state.right || input_state.y || input_state.lane_3,
 			input_state.x || input_state.lane_4,
 			input_state.a || input_state.lane_5,
 		};
@@ -1107,7 +1107,7 @@ namespace rhythmreplugged::core
 			return;
 		}
 
-		if (pressed(input_state.a, previous_input_.a) || pressed(input_state.start, previous_input_.start))
+		if (pressed(input_state.a, previous_input_.a))
 		{
 			activate_gameplay_pause_selection();
 			return;
