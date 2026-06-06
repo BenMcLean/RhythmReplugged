@@ -305,6 +305,8 @@ namespace rhythmreplugged::core
 		float lane_depth_offset = 0.0f;
 		LaneLockState lock_state = LaneLockState::Unlocked;
 		float lock_progress = 0.0f;
+		float lock_build_progress = 0.0f;
+		bool has_scheduled_lock = false;
 		bool is_actionable = false;
 		bool should_prompt = false;
 		bool hide_note_visuals = false;

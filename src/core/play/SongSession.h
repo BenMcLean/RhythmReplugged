@@ -34,6 +34,7 @@ namespace rhythmreplugged::core
 			float lock_progress = 0.0f;
 			double last_missed_note_time_seconds = -1.0;
 			int successful_replugged_measures = 0;
+			double count_eligible_measure_start_seconds = 0.0;
 			bool is_actionable = false;
 			bool should_prompt = false;
 			std::uint32_t event_flags = 0;
@@ -164,9 +165,14 @@ namespace rhythmreplugged::core
 		void lock_replugged_lane(size_t lane_index, double lock_start_time_seconds, double lock_end_time_seconds);
 		bool lane_has_actionable_note(size_t lane_index, double song_time_seconds) const;
 		int initial_active_lane_index() const;
+		void apply_replugged_keep_busy_rule(double song_time_seconds);
 		std::optional<std::pair<double, double>> replugged_section_range_for_time(size_t lane_index, double song_time_seconds) const;
 		std::optional<std::pair<double, double>> replugged_section_range_for_note_index(size_t lane_index, size_t note_index) const;
 		std::optional<std::pair<double, double>> next_replugged_lock_range(size_t lane_index, size_t note_index) const;
+		std::optional<std::pair<double, double>> next_replugged_empty_measure_range(size_t lane_index, double song_time_seconds) const;
+		double next_measure_boundary_at_or_after(size_t lane_index, double song_time_seconds) const;
+		bool lane_measure_has_notes(size_t lane_index, double measure_start_seconds, double measure_end_seconds) const;
+		float replugged_lock_build_progress(size_t lane_index, double song_time_seconds) const;
 		size_t active_lane_index() const;
 		double adjusted_song_time_seconds() const;
 		std::uint64_t session_fingerprint() const;
