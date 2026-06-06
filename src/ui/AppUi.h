@@ -24,6 +24,12 @@ namespace rhythmreplugged::ui
 		std::function<void()> activate_selection;
 	};
 
+	struct ModeSelectUiActions
+	{
+		std::function<void(int)> set_selected_index;
+		std::function<void()> activate_selection;
+	};
+
 	struct InstrumentSelectUiActions
 	{
 		std::function<void(int)> set_selected_index;
@@ -70,6 +76,11 @@ namespace rhythmreplugged::ui
 	void render_difficulty_select_ui(
 		const core::DifficultySelectView &menu,
 		const DifficultySelectUiActions &actions,
+		ImVec2 window_size,
+		float ui_scale);
+	void render_mode_select_ui(
+		const core::ModeSelectView &menu,
+		const ModeSelectUiActions &actions,
 		ImVec2 window_size,
 		float ui_scale);
 	void render_instrument_select_ui(

@@ -83,6 +83,8 @@ namespace rhythmreplugged::core
 			return std::nullopt;
 		}
 
+		bool track_has_exact_difficulty(const MidiChart &chart, InstrumentOption instrument, DifficultyOption difficulty);
+
 		std::vector<DifficultyOption> collect_available_difficulties(const MidiChart &chart, MidiChartTrackType track_type)
 		{
 			bool has_easy = false;
@@ -189,6 +191,17 @@ namespace rhythmreplugged::core
 			return std::find(available_difficulties.begin(), available_difficulties.end(), difficulty) != available_difficulties.end();
 		}
 
+		bool contains_any_instrument(const std::vector<InstrumentOption> &available_instruments, const std::vector<InstrumentOption> &requested)
+		{
+			for (const InstrumentOption instrument : requested)
+			{
+				if (contains_instrument(available_instruments, instrument))
+					return true;
+			}
+
+			return false;
+		}
+
 		int instrument_sort_rank(InstrumentOption instrument)
 		{
 			switch (instrument)
@@ -219,6 +232,74 @@ namespace rhythmreplugged::core
 				{
 					return instrument_sort_rank(left) < instrument_sort_rank(right);
 				});
+		}
+
+		std::vector<InstrumentOption> filter_available_claims(
+			const std::vector<InstrumentOption> &available_instruments,
+			const GameplayOptions &options)
+		{
+			std::vector<InstrumentOption> filtered_claims;
+			for (const InstrumentOption instrument : options.claimed_instruments())
+			{
+				if (!contains_instrument(available_instruments, instrument))
+					continue;
+				if (contains_instrument(options.reserved_instruments(), instrument))
+					continue;
+				filtered_claims.push_back(instrument);
+			}
+			sort_instruments_canonical(filtered_claims);
+			filtered_claims.erase(std::unique(filtered_claims.begin(), filtered_claims.end()), filtered_claims.end());
+			return filtered_claims;
+		}
+
+		std::vector<DifficultyOption> collect_available_multi_difficulties(
+			const MidiChart &chart,
+			const std::vector<InstrumentOption> &claimed_instruments)
+		{
+			std::vector<DifficultyOption> difficulties;
+			for (DifficultyOption difficulty : {DifficultyOption::Easy, DifficultyOption::Medium, DifficultyOption::Hard, DifficultyOption::Expert})
+			{
+				size_t playable_count = 0;
+				for (const InstrumentOption instrument : claimed_instruments)
+				{
+					if (track_has_exact_difficulty(chart, instrument, difficulty))
+						++playable_count;
+				}
+				if (playable_count >= 2)
+					difficulties.push_back(difficulty);
+			}
+			return difficulties;
+		}
+
+		bool track_has_exact_difficulty(const MidiChart &chart, InstrumentOption instrument, DifficultyOption difficulty)
+		{
+			const MidiChartTrackType track_type = to_midi_chart_track_type(instrument);
+			const MidiChartDifficulty midi_difficulty =
+				difficulty == DifficultyOption::Easy ? MidiChartDifficulty::Easy :
+				difficulty == DifficultyOption::Medium ? MidiChartDifficulty::Medium :
+				difficulty == DifficultyOption::Hard ? MidiChartDifficulty::Hard :
+				MidiChartDifficulty::Expert;
+			for (const MidiChartTrack &track : chart.tracks())
+			{
+				if (track.type != track_type)
+					continue;
+
+				for (const MidiChartParsedNote &note : track.parsed_notes)
+				{
+					if (note.difficulty != midi_difficulty)
+						continue;
+
+					const bool is_supported_note =
+						(track_type == MidiChartTrackType::Drums && note.category == MidiChartNoteCategory::Drums && note.lane >= 0 && note.lane <= 5) ||
+						(track_type != MidiChartTrackType::Drums && note.category == MidiChartNoteCategory::FiveFret && note.lane >= 1 && note.lane <= 5);
+					if (is_supported_note)
+						return true;
+				}
+
+				return false;
+			}
+
+			return false;
 		}
 
 	}
@@ -343,7 +424,10 @@ namespace rhythmreplugged::core
 	{
 		GameplayOptions options;
 		if (const std::optional<InstrumentOption> instrument = parse_instrument_option(frontend_options_.default_instrument))
+		{
 			options.set_instrument(*instrument);
+			options.set_claimed_instruments({*instrument});
+		}
 		if (const std::optional<DifficultyOption> difficulty = parse_difficulty_option(frontend_options_.default_difficulty))
 			options.set_difficulty(*difficulty);
 		return options;
@@ -385,6 +469,19 @@ namespace rhythmreplugged::core
 		return activate_instrument_selection_unlocked();
 	}
 
+	bool AppCore::set_mode_selected_index(int index)
+	{
+		if (mode_ != AppMode::Menu || menu_screen_ != MenuScreen::ModeSelect)
+			return false;
+
+		return mode_select_menu_.set_selected_index(index);
+	}
+
+	bool AppCore::activate_mode_selection()
+	{
+		return activate_mode_selection_unlocked();
+	}
+
 	bool AppCore::activate_browser_selection_unlocked()
 	{
 		if (mode_ != AppMode::Menu || menu_screen_ != MenuScreen::SongBrowser)
@@ -414,7 +511,13 @@ namespace rhythmreplugged::core
 		if (mode_ != AppMode::Menu || menu_screen_ != MenuScreen::InstrumentSelect || pending_song_path_.empty())
 			return false;
 
-		instrument_select_menu_.apply_to(pending_gameplay_options_);
+		std::string selection_error_message;
+		if (!instrument_select_menu_.activate(pending_gameplay_options_, selection_error_message))
+		{
+			if (!selection_error_message.empty())
+				instrument_select_menu_.set_status_message(selection_error_message);
+			return selection_error_message.empty();
+		}
 		instrument_select_menu_.clear_status_message();
 		std::string chart_error_message;
 		std::vector<DifficultyOption> available_difficulties;
@@ -429,11 +532,20 @@ namespace rhythmreplugged::core
 			}
 			sort_instruments_canonical(available_instruments);
 
-			available_difficulties = pending_gameplay_options_.gameplay_mode() == GameplayMode::Freeplay
-				? collect_available_difficulties(pending_song_chart_, available_instruments)
-				: collect_available_difficulties(
+			if (pending_gameplay_options_.gameplay_mode() == GameplayMode::Classic)
+			{
+				available_difficulties = collect_available_difficulties(
 					pending_song_chart_,
 					to_midi_chart_track_type(pending_gameplay_options_.instrument()));
+			}
+			else
+			{
+				const std::vector<InstrumentOption> claimed_instruments =
+					filter_available_claims(available_instruments, pending_gameplay_options_);
+				available_difficulties = collect_available_multi_difficulties(
+					pending_song_chart_,
+					claimed_instruments);
+			}
 		}
 		else
 			chart_error_message = "Could not load a playable chart for the selected song.";
@@ -446,6 +558,38 @@ namespace rhythmreplugged::core
 		if (!chart_error_message.empty())
 			difficulty_select_menu_.set_status_message(chart_error_message);
 		menu_screen_ = MenuScreen::DifficultySelect;
+		refresh_difficulty_preload_state();
+		return true;
+	}
+
+	bool AppCore::activate_mode_selection_unlocked()
+	{
+		if (mode_ != AppMode::Menu || menu_screen_ != MenuScreen::ModeSelect || pending_song_path_.empty())
+			return false;
+
+		mode_select_menu_.apply_to(pending_gameplay_options_);
+		mode_select_menu_.clear_status_message();
+
+		std::vector<InstrumentOption> available_instruments;
+		if (pending_song_chart_loaded_)
+		{
+			for (const MidiChartTrackType track_type : pending_song_chart_.available_preview_track_types())
+			{
+				const std::optional<InstrumentOption> instrument = to_instrument_option(track_type);
+				if (instrument.has_value())
+					available_instruments.push_back(*instrument);
+			}
+			sort_instruments_canonical(available_instruments);
+		}
+
+		instrument_select_menu_.open(
+			mode_select_menu_.view().song_title,
+			mode_select_menu_.view().song_subtitle,
+			available_instruments,
+			pending_gameplay_options_);
+		if (!pending_song_chart_loaded_)
+			instrument_select_menu_.set_status_message("Could not load a playable chart for the selected song.");
+		menu_screen_ = MenuScreen::InstrumentSelect;
 		refresh_difficulty_preload_state();
 		return true;
 	}
@@ -543,6 +687,7 @@ namespace rhythmreplugged::core
 		pending_song_chart_.clear();
 		pending_song_chart_loaded_ = false;
 		pending_gameplay_options_ = make_default_gameplay_options();
+		pending_gameplay_options_.set_reserved_instruments({});
 		pending_instrument_selection_required_ = false;
 		waiting_for_song_preload_ = false;
 		const bool can_reuse_loaded_song =
@@ -557,7 +702,6 @@ namespace rhythmreplugged::core
 		const std::string song_subtitle = selected_entry != nullptr ? selected_entry->subtitle : std::string();
 
 		std::vector<InstrumentOption> available_instruments;
-		std::vector<DifficultyOption> available_difficulties;
 		std::string chart_error_message;
 		pending_song_chart_loaded_ = pending_song_chart_.load(
 			file_system_,
@@ -581,67 +725,30 @@ namespace rhythmreplugged::core
 		{
 			pending_gameplay_options_.set_gameplay_mode(GameplayMode::Classic);
 			pending_gameplay_options_.set_instrument(available_instruments.front());
+			pending_gameplay_options_.set_claimed_instruments({available_instruments.front()});
 		}
 		else if (requested_instrument.has_value() && contains_instrument(available_instruments, *requested_instrument))
 		{
 			pending_gameplay_options_.set_gameplay_mode(GameplayMode::Classic);
 			pending_gameplay_options_.set_instrument(*requested_instrument);
+			pending_gameplay_options_.set_claimed_instruments({*requested_instrument});
+		}
+		else if (!available_instruments.empty())
+		{
+			pending_gameplay_options_.set_claimed_instruments({available_instruments.front()});
 		}
 
-		available_difficulties = pending_gameplay_options_.gameplay_mode() == GameplayMode::Freeplay
-			? collect_available_difficulties(pending_song_chart_, available_instruments)
-			: collect_available_difficulties(
-				pending_song_chart_,
-				to_midi_chart_track_type(pending_gameplay_options_.instrument()));
-		const std::optional<DifficultyOption> requested_difficulty =
-			parse_difficulty_option(frontend_options_.default_difficulty);
-		if (available_difficulties.size() == 1)
-			pending_gameplay_options_.set_difficulty(available_difficulties.front());
-		else if (requested_difficulty.has_value() && contains_difficulty(available_difficulties, *requested_difficulty))
-			pending_gameplay_options_.set_difficulty(*requested_difficulty);
+		std::vector<GameplayMode> available_modes = {GameplayMode::Classic};
+		if (available_instruments.size() > 1)
+		{
+			available_modes.push_back(GameplayMode::Freeplay);
+			available_modes.push_back(GameplayMode::Replugged);
+		}
 
-		const bool should_show_instrument_menu =
-			available_instruments.size() > 1 &&
-			(!requested_instrument.has_value() || !contains_instrument(available_instruments, *requested_instrument));
-		const bool should_show_difficulty_menu =
-			available_difficulties.size() > 1 &&
-			(!requested_difficulty.has_value() || !contains_difficulty(available_difficulties, *requested_difficulty));
-
-		instrument_select_menu_.open(song_title, song_subtitle, available_instruments, pending_gameplay_options_);
+		mode_select_menu_.open(song_title, song_subtitle, available_modes, pending_gameplay_options_);
 		if (!chart_error_message.empty())
-			instrument_select_menu_.set_status_message(chart_error_message);
-
-		if (!allow_auto_start)
-		{
-			menu_screen_ = MenuScreen::InstrumentSelect;
-			refresh_difficulty_preload_state();
-			return true;
-		}
-
-		if (should_show_instrument_menu)
-		{
-			pending_instrument_selection_required_ = true;
-			menu_screen_ = MenuScreen::InstrumentSelect;
-		}
-		else
-		{
-			difficulty_select_menu_.open(song_title, song_subtitle, available_difficulties, pending_gameplay_options_);
-			if (!chart_error_message.empty())
-				difficulty_select_menu_.set_status_message(chart_error_message);
-			if (should_show_difficulty_menu)
-			{
-				menu_screen_ = MenuScreen::DifficultySelect;
-			}
-			else if (allow_auto_start)
-			{
-				menu_screen_ = MenuScreen::DifficultySelect;
-				activate_difficulty_selection_unlocked();
-			}
-			else
-			{
-				menu_screen_ = MenuScreen::DifficultySelect;
-			}
-		}
+			mode_select_menu_.set_status_message(chart_error_message);
+		menu_screen_ = MenuScreen::ModeSelect;
 		refresh_difficulty_preload_state();
 		return true;
 	}
@@ -663,6 +770,15 @@ namespace rhythmreplugged::core
 				: static_cast<float>(preload_status.processed_bytes) / static_cast<float>(preload_status.total_bytes);
 		}
 
+		mode_select_menu_.set_preload_progress(
+			preload_status.phase,
+			std::clamp(preload_progress, 0.0f, 1.0f),
+			preload_status.processed_bytes,
+			preload_status.total_bytes,
+			preload_status.completed_stem_count,
+			preload_status.total_stem_count,
+			preload_status.completed_read_file_count,
+			preload_status.total_read_file_count);
 		instrument_select_menu_.set_preload_progress(
 			preload_status.phase,
 			std::clamp(preload_progress, 0.0f, 1.0f),
@@ -683,6 +799,7 @@ namespace rhythmreplugged::core
 			preload_status.total_read_file_count);
 		if (preload_status.failed && !preload_status.error_message.empty())
 		{
+			mode_select_menu_.set_status_message(preload_status.error_message);
 			instrument_select_menu_.set_status_message(preload_status.error_message);
 			difficulty_select_menu_.set_status_message(preload_status.error_message);
 		}
@@ -701,9 +818,8 @@ namespace rhythmreplugged::core
 		if (song_path.empty() || begin_song_activation(song_path, false))
 			return;
 
-		menu_screen_ = pending_instrument_selection_required_
-			? MenuScreen::InstrumentSelect
-			: MenuScreen::DifficultySelect;
+		menu_screen_ = MenuScreen::ModeSelect;
+		mode_select_menu_.set_status_message("Could not reopen the selected song.");
 		instrument_select_menu_.set_status_message("Could not reopen the selected song.");
 		difficulty_select_menu_.set_status_message("Could not reopen the selected song.");
 	}
@@ -806,6 +922,11 @@ namespace rhythmreplugged::core
 		return song_browser_.view();
 	}
 
+	const ModeSelectView &AppCore::mode_select_view() const
+	{
+		return mode_select_menu_.view();
+	}
+
 	const InstrumentSelectView &AppCore::instrument_select_view() const
 	{
 		return instrument_select_menu_.view();
@@ -886,6 +1007,9 @@ namespace rhythmreplugged::core
 		case MenuScreen::SongBrowser:
 			run_song_browser_menu(input_state);
 			break;
+		case MenuScreen::ModeSelect:
+			run_instrument_select_menu(input_state);
+			break;
 		case MenuScreen::InstrumentSelect:
 			run_instrument_select_menu(input_state);
 			break;
@@ -940,15 +1064,38 @@ namespace rhythmreplugged::core
 
 	void AppCore::run_instrument_select_menu(const ::rhythmreplugged::frontend_contract::RetroInputState &input_state)
 	{
-		if (pressed(input_state.b, previous_input_.b))
+		if (menu_screen_ == MenuScreen::ModeSelect)
 		{
-			if (restrict_to_startup_song_)
+			if (pressed(input_state.b, previous_input_.b))
 			{
-				instrument_select_menu_.clear_status_message();
+				if (restrict_to_startup_song_)
+				{
+					mode_select_menu_.clear_status_message();
+					return;
+				}
+
+				return_to_browser_unlocked();
+				mode_select_menu_.clear_status_message();
 				return;
 			}
 
-			return_to_browser_unlocked();
+			if (pressed(input_state.a, previous_input_.a))
+			{
+				activate_mode_selection_unlocked();
+				return;
+			}
+
+			if (pressed(input_state.up, previous_input_.up))
+				mode_select_menu_.move_selection(-1);
+
+			if (pressed(input_state.down, previous_input_.down))
+				mode_select_menu_.move_selection(1);
+			return;
+		}
+
+		if (pressed(input_state.b, previous_input_.b))
+		{
+			menu_screen_ = MenuScreen::ModeSelect;
 			instrument_select_menu_.clear_status_message();
 			return;
 		}

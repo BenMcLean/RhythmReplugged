@@ -10,6 +10,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -27,6 +28,15 @@ namespace rhythmreplugged::core
 			std::uint64_t consumed_input_generation = 0;
 			size_t next_note_index = 0;
 			float stem_target_gain = 1.0f;
+			LaneLockState lock_state = LaneLockState::Unlocked;
+			double lock_start_time_seconds = 0.0;
+			double lock_end_time_seconds = 0.0;
+			float lock_progress = 0.0f;
+			double last_missed_note_time_seconds = -1.0;
+			int successful_replugged_measures = 0;
+			bool is_actionable = false;
+			bool should_prompt = false;
+			std::uint32_t event_flags = 0;
 		};
 
 		struct PlayState
@@ -124,6 +134,8 @@ namespace rhythmreplugged::core
 		static constexpr double kNoteHitWindowSeconds = 0.125;
 		static constexpr double kSustainMinimumSeconds = 0.08;
 		static constexpr double kSustainDropLeniencySeconds = 0.025;
+		static constexpr int kRepluggedMeasuresRequiredToLock = 2;
+		static constexpr double kRepluggedActionableLookaheadSeconds = 1.2;
 
 		static std::uint8_t lane_mask_from_state(const std::array<bool, 5> &lanes);
 		static bool held_mask_satisfies_expected(std::uint8_t held_mask, std::uint8_t expected_mask);
@@ -148,6 +160,13 @@ namespace rhythmreplugged::core
 		void start_sustains_for_note_group(size_t lane_index, size_t start_index, size_t end_index);
 		void consume_missed_note_groups(size_t lane_index, double song_time_seconds);
 		void advance_inactive_lane(size_t lane_index, double song_time_seconds);
+		void update_replugged_lane_state(size_t lane_index, double song_time_seconds, bool is_active_lane);
+		void lock_replugged_lane(size_t lane_index, double lock_start_time_seconds, double lock_end_time_seconds);
+		bool lane_has_actionable_note(size_t lane_index, double song_time_seconds) const;
+		int initial_active_lane_index() const;
+		std::optional<std::pair<double, double>> replugged_section_range_for_time(size_t lane_index, double song_time_seconds) const;
+		std::optional<std::pair<double, double>> replugged_section_range_for_note_index(size_t lane_index, size_t note_index) const;
+		std::optional<std::pair<double, double>> next_replugged_lock_range(size_t lane_index, size_t note_index) const;
 		size_t active_lane_index() const;
 		double adjusted_song_time_seconds() const;
 		std::uint64_t session_fingerprint() const;

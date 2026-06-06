@@ -237,7 +237,7 @@ namespace
 			fade);
 	}
 
-	void append_highway_background(MeshBatch &batch, const InstrumentLaneView &lane, const HighwayStyleView &style)
+	void append_highway_background(MeshBatch &batch, const InstrumentLaneView &lane, const HighwayStyleView &style, float visible_depth_seconds)
 	{
 		const float near_z = 1.4f;
 		const float far_z = -10.5f;
@@ -253,25 +253,48 @@ namespace
 			1.0f);
 
 		const float lane_width = lane.lane_width / 5.0f;
+		const bool has_locked_visual_span =
+			lane.locked_visual_end_offset_seconds > lane.locked_visual_start_offset_seconds;
+		const float locked_near_z = note_depth(lane.locked_visual_start_offset_seconds, visible_depth_seconds) + lane.lane_depth_offset;
+		const float locked_far_z = note_depth(lane.locked_visual_end_offset_seconds, visible_depth_seconds) + lane.lane_depth_offset;
 		for (int fret = 0; fret < 5; ++fret)
 		{
-			Color4 lane_color = style.lane_colors[fret];
 			const bool is_held = lane.lane_held[static_cast<size_t>(fret)];
 			const bool is_sustaining = lane.lane_sustaining[static_cast<size_t>(fret)];
-			const float shade = is_held ? 0.28f : (is_sustaining ? 0.20f : 0.12f);
-			lane_color.r *= shade;
-			lane_color.g *= shade;
-			lane_color.b *= shade;
-			lane_color.a = 1.0f;
-			append_xz_quad(
-				batch,
-				lane.lane_center_x - lane.lane_width * 0.5f + lane_width * static_cast<float>(fret) + style.lane_gap * 0.5f,
-				lane.lane_center_x - lane.lane_width * 0.5f + lane_width * static_cast<float>(fret + 1) - style.lane_gap * 0.5f,
-				0.0f,
-				-10.0f,
-				0.02f,
-				lane_color,
-				1.0f);
+			const float shade = lane.should_prompt ? 0.22f : (is_held ? 0.28f : (is_sustaining ? 0.20f : 0.12f));
+			Color4 unlocked_color = style.lane_colors[fret];
+			unlocked_color.r *= shade;
+			unlocked_color.g *= shade;
+			unlocked_color.b *= shade;
+			unlocked_color.a = 1.0f;
+			Color4 locked_color = with_alpha_scale(style.lane_border_color, 0.85f);
+			locked_color.r *= shade;
+			locked_color.g *= shade;
+			locked_color.b *= shade;
+			locked_color.a = 1.0f;
+			const float left = lane.lane_center_x - lane.lane_width * 0.5f + lane_width * static_cast<float>(fret) + style.lane_gap * 0.5f;
+			const float right = lane.lane_center_x - lane.lane_width * 0.5f + lane_width * static_cast<float>(fret + 1) - style.lane_gap * 0.5f;
+
+			if (!has_locked_visual_span)
+			{
+				append_xz_quad(batch, left, right, 0.0f, -10.0f, 0.02f, unlocked_color, 1.0f);
+				continue;
+			}
+
+			const float clamped_locked_near_z = std::clamp(locked_near_z, far_z, 0.0f);
+			const float clamped_locked_far_z = std::clamp(locked_far_z, far_z, 0.0f);
+			if (clamped_locked_far_z >= 0.0f)
+			{
+				append_xz_quad(batch, left, right, 0.0f, -10.0f, 0.02f, unlocked_color, 1.0f);
+				continue;
+			}
+
+			if (clamped_locked_near_z < 0.0f)
+				append_xz_quad(batch, left, right, 0.0f, clamped_locked_near_z, 0.02f, unlocked_color, 1.0f);
+			if (clamped_locked_near_z > clamped_locked_far_z)
+				append_xz_quad(batch, left, right, clamped_locked_near_z, clamped_locked_far_z, 0.02f, locked_color, 1.0f);
+			if (clamped_locked_far_z > far_z)
+				append_xz_quad(batch, left, right, clamped_locked_far_z, far_z, 0.02f, unlocked_color, 1.0f);
 		}
 
 		for (int separator = 1; separator < 5; ++separator)
@@ -321,6 +344,9 @@ namespace
 		const HighwayStyleView &style,
 		float visible_depth_seconds)
 	{
+		if (lane.hide_note_visuals)
+			return;
+
 		const float x_scale = lane_x_scale(lane);
 		for (const HighwayNoteView &note : lane.visible_notes)
 		{
@@ -355,6 +381,9 @@ namespace
 		const HighwayStyleView &style,
 		float visible_depth_seconds)
 	{
+		if (lane.hide_note_visuals)
+			return;
+
 		const float x_scale = lane_x_scale(lane);
 		for (const HighwayNoteView &note : lane.visible_notes)
 		{
@@ -394,6 +423,9 @@ namespace
 	void append_hit_line(MeshBatch &batch, const InstrumentLaneView &lane, const HighwayStyleView &style)
 	{
 		const float x_scale = lane_x_scale(lane);
+		const Color4 hit_line_color = lane.should_prompt
+			? Color4{1.0f, 0.84f, 0.34f, 1.0f}
+			: style.hit_line_color;
 		append_xz_quad(
 			batch,
 			lane.lane_center_x - lane.lane_width * 0.5f,
@@ -401,12 +433,12 @@ namespace
 			0.08f,
 			-0.08f,
 			0.12f,
-			style.hit_line_color,
+			hit_line_color,
 			1.0f);
 
 		for (int fret = 0; fret < 5; ++fret)
 		{
-			Color4 color = lane.lane_held[static_cast<size_t>(fret)] || lane.lane_sustaining[static_cast<size_t>(fret)]
+			Color4 color = (lane.lane_held[static_cast<size_t>(fret)] || lane.lane_sustaining[static_cast<size_t>(fret)])
 				? style.lane_colors[fret]
 				: with_alpha_scale(style.lane_border_color, 0.8f);
 			const float radius_x = 0.24f * x_scale;
@@ -858,7 +890,7 @@ namespace rhythmreplugged::render_gl
 			mesh_batch_.clear();
 			for (const InstrumentLaneView &lane : player.world.lanes)
 			{
-				append_highway_background(mesh_batch_, lane, player.world.style);
+				append_highway_background(mesh_batch_, lane, player.world.style, player.camera.visible_depth_seconds);
 				append_measure_lines(mesh_batch_, lane, player.world.style, player.camera.visible_depth_seconds);
 				append_sustains(mesh_batch_, lane, player.world.style, player.camera.visible_depth_seconds);
 				append_notes(mesh_batch_, lane, player.world.style, player.camera.visible_depth_seconds);

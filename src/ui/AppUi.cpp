@@ -287,6 +287,81 @@ namespace
 			countdown_text.c_str());
 	}
 
+	void draw_replugged_lane_status(const GameplayFrameSnapshot &snapshot, const ImVec2 &canvas_pos, ImVec2 window_size)
+	{
+		if (snapshot.scene.players.empty())
+			return;
+
+		const PlayerGameplayView &player = snapshot.scene.players.front();
+		if (player.world.gameplay_mode != GameplayMode::Replugged || player.world.lanes.empty())
+			return;
+
+		float span_left = 0.0f;
+		float span_right = 0.0f;
+		bool have_span = false;
+		for (const InstrumentLaneView &lane : player.world.lanes)
+		{
+			const float left = lane.lane_center_x - lane.lane_width * 0.5f;
+			const float right = lane.lane_center_x + lane.lane_width * 0.5f;
+			if (!have_span)
+			{
+				span_left = left;
+				span_right = right;
+				have_span = true;
+			}
+			else
+			{
+				span_left = (std::min)(span_left, left);
+				span_right = (std::max)(span_right, right);
+			}
+		}
+		if (!have_span || std::fabs(span_right - span_left) < 0.001f)
+			return;
+
+		ImDrawList *draw_list = ImGui::GetWindowDrawList();
+		const float content_left = canvas_pos.x + 42.0f;
+		const float content_right = canvas_pos.x + window_size.x - 42.0f;
+		const float content_width = content_right - content_left;
+		const float label_y = canvas_pos.y + window_size.y - 66.0f;
+		const float bar_y = canvas_pos.y + window_size.y - 42.0f;
+		const float bar_height = 10.0f;
+		for (const InstrumentLaneView &lane : player.world.lanes)
+		{
+			const float normalized_left = (lane.lane_center_x - lane.lane_width * 0.5f - span_left) / (span_right - span_left);
+			const float normalized_right = (lane.lane_center_x + lane.lane_width * 0.5f - span_left) / (span_right - span_left);
+			const float bar_left = content_left + normalized_left * content_width;
+			const float bar_right = content_left + normalized_right * content_width;
+			const ImVec2 bar_min(bar_left, bar_y);
+			const ImVec2 bar_max(bar_right, bar_y + bar_height);
+			draw_list->AddRectFilled(bar_min, bar_max, IM_COL32(22, 28, 40, 224), 4.0f);
+			draw_list->AddRect(bar_min, bar_max, IM_COL32(82, 94, 118, 255), 4.0f);
+
+			if (lane.lock_state == LaneLockState::Locked)
+			{
+				const float filled_right = bar_left + (bar_right - bar_left) * std::clamp(lane.lock_progress, 0.0f, 1.0f);
+				draw_list->AddRectFilled(
+					bar_min,
+					ImVec2(filled_right, bar_max.y),
+					IM_COL32(84, 204, 118, 232),
+					4.0f);
+			}
+			else if (lane.should_prompt)
+			{
+				draw_list->AddRectFilled(bar_min, bar_max, IM_COL32(214, 159, 54, 168), 4.0f);
+			}
+
+			const char *state_text = lane.lock_state == LaneLockState::Locked
+				? "Locked"
+				: (lane.should_prompt ? "Play" : "Unlocked");
+			const std::string label = lane.instrument_label + " - " + state_text;
+			const ImVec2 text_size = ImGui::CalcTextSize(label.c_str());
+			draw_list->AddText(
+				ImVec2((bar_left + bar_right - text_size.x) * 0.5f, label_y),
+				IM_COL32(228, 233, 240, 255),
+				label.c_str());
+		}
+	}
+
 	void render_preload_progress_overlay(const DifficultySelectView &menu, ImVec2 window_size, float ui_scale)
 	{
 		if (menu.preload_phase == PreloadPhase::Idle)
@@ -352,6 +427,70 @@ namespace
 	}
 
 	void render_preload_progress_overlay(const InstrumentSelectView &menu, ImVec2 window_size, float ui_scale)
+	{
+		if (menu.preload_phase == PreloadPhase::Idle)
+			return;
+
+		const ImVec2 overlay_size(320.0f * ui_scale, 92.0f * ui_scale);
+		ImGui::SetNextWindowPos(
+			ImVec2(window_size.x - overlay_size.x - 24.0f * ui_scale, window_size.y - overlay_size.y - 24.0f * ui_scale),
+			ImGuiCond_Always);
+		ImGui::SetNextWindowSize(overlay_size, ImGuiCond_Always);
+		ImGui::SetNextWindowFocus();
+		ImGui::Begin("Stem Preload Overlay", nullptr,
+			ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse |
+			ImGuiWindowFlags_NoTitleBar |
+			ImGuiWindowFlags_NoInputs |
+			ImGuiWindowFlags_NoNavFocus);
+
+		ImVec4 progress_color = ImVec4(0.28f, 0.72f, 0.32f, 1.0f);
+		const char *title = "Song Ready";
+		const char *detail = "";
+		if (menu.preload_phase == PreloadPhase::Reading)
+		{
+			title = "Reading Stems";
+			detail = "files";
+			progress_color = ImVec4(0.92f, 0.78f, 0.20f, 1.0f);
+		}
+		else if (menu.preload_phase == PreloadPhase::Decoding)
+		{
+			title = "Decoding Stems";
+			detail = "MiB";
+		}
+		else if (menu.preload_phase == PreloadPhase::Failed)
+		{
+			title = "Load Failed";
+			detail = "";
+			progress_color = ImVec4(0.88f, 0.32f, 0.32f, 1.0f);
+		}
+
+		ImGui::TextUnformatted(title);
+		ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progress_color);
+		ImGui::ProgressBar(menu.preload_progress, ImVec2(-1.0f, 0.0f));
+		ImGui::PopStyleColor();
+		if (menu.preload_phase == PreloadPhase::Reading)
+		{
+			ImGui::TextDisabled(
+				"%zu / %zu files read",
+				menu.completed_read_file_count,
+				menu.total_read_file_count);
+		}
+		else
+		{
+			ImGui::TextDisabled(
+				"%zu / %zu stems   %zu / %zu %s",
+				menu.completed_stem_count,
+				menu.total_stem_count,
+				menu.preload_processed_megabytes,
+				menu.preload_total_megabytes,
+				detail);
+		}
+		ImGui::End();
+	}
+
+	void render_preload_progress_overlay(const ModeSelectView &menu, ImVec2 window_size, float ui_scale)
 	{
 		if (menu.preload_phase == PreloadPhase::Idle)
 			return;
@@ -666,13 +805,6 @@ namespace rhythmreplugged::ui
 			queue_selected_index_change(activated, index, pending_selected_index);
 		}
 
-		ImGui::Spacing();
-		if (ImGui::Button("Start Song", ImVec2(240.0f * ui_scale, 0.0f)) &&
-			actions.activate_selection != nullptr)
-		{
-			pending_activate_selection = true;
-		}
-
 		if (!menu.status_message.empty())
 		{
 			ImGui::Spacing();
@@ -704,6 +836,66 @@ namespace rhythmreplugged::ui
 		{
 			actions.activate_selection();
 		}
+	}
+
+	void render_mode_select_ui(
+		const ModeSelectView &menu,
+		const ModeSelectUiActions &actions,
+		ImVec2 window_size,
+		float ui_scale)
+	{
+		int pending_selected_index = -1;
+		bool pending_activate_selection = false;
+		const int wheel_steps = wheel_steps_from_delta(ImGui::GetIO().MouseWheel);
+
+		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
+		ImGui::Begin("Mode Select", nullptr,
+			ImGuiWindowFlags_NoResize |
+			ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse);
+
+		ImGui::TextUnformatted("Select Mode");
+		ImGui::Separator();
+		if (!menu.song_title.empty())
+			ImGui::TextWrapped("%s", menu.song_title.c_str());
+		if (!menu.song_subtitle.empty())
+			ImGui::TextDisabled("%s", menu.song_subtitle.c_str());
+		ImGui::Spacing();
+
+		for (int index = 0; index < static_cast<int>(menu.entries.size()); ++index)
+		{
+			const ModeListItem &entry = menu.entries[index];
+			const bool selected = index == menu.selected_index;
+			const bool activated = ImGui::Selectable(entry.label.c_str(), selected, 0, ImVec2(0.0f, 36.0f * ui_scale));
+			queue_selected_index_change(activated, index, pending_selected_index);
+		}
+
+		if (!menu.status_message.empty())
+		{
+			ImGui::Spacing();
+			ImGui::TextWrapped("%s", menu.status_message.c_str());
+		}
+
+		ImGui::Spacing();
+		ImGui::TextDisabled("B: Back    A / Start: Confirm");
+		ImGui::End();
+
+		if (wheel_steps != 0 && !menu.entries.empty() && actions.set_selected_index != nullptr)
+		{
+			pending_selected_index = clamp_menu_index(
+				menu.selected_index,
+				-wheel_steps,
+				static_cast<int>(menu.entries.size()));
+		}
+
+		render_preload_progress_overlay(menu, window_size, ui_scale);
+
+		if (pending_selected_index >= 0 && actions.set_selected_index != nullptr)
+			actions.set_selected_index(pending_selected_index);
+
+		if (pending_activate_selection && actions.activate_selection != nullptr)
+			actions.activate_selection();
 	}
 
 	void render_instrument_select_ui(
@@ -739,13 +931,6 @@ namespace rhythmreplugged::ui
 			queue_selected_index_change(activated, index, pending_selected_index);
 		}
 
-		ImGui::Spacing();
-		if (ImGui::Button("Next", ImVec2(240.0f * ui_scale, 0.0f)) &&
-			actions.activate_selection != nullptr)
-		{
-			pending_activate_selection = true;
-		}
-
 		if (!menu.status_message.empty())
 		{
 			ImGui::Spacing();
@@ -753,7 +938,7 @@ namespace rhythmreplugged::ui
 		}
 
 		ImGui::Spacing();
-		ImGui::TextDisabled("B: Back    A / Start: Confirm");
+		ImGui::TextDisabled("B: Back    A / Start: Toggle claim or continue");
 		ImGui::End();
 
 		if (wheel_steps != 0 && !menu.entries.empty() && actions.set_selected_index != nullptr)
@@ -850,6 +1035,7 @@ namespace rhythmreplugged::ui
 
 		draw_lyric_strip(player, canvas_pos, window_size);
 		draw_song_countdown(player, canvas_pos, window_size);
+		draw_replugged_lane_status(snapshot, canvas_pos, window_size);
 
 		if (!player.status_message.empty())
 			draw_status_pill("player_status", ImVec2(canvas_pos.x + 20.0f, canvas_pos.y + 146.0f), player.status_message.c_str(), IM_COL32(16, 20, 29, 210));

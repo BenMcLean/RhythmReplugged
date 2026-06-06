@@ -27,7 +27,7 @@ namespace rhythmreplugged::core
 		};
 
 		constexpr std::uint32_t kSerializedPlayStateMagic = 0x52525053u; // RRPS
-		constexpr std::uint32_t kSerializedPlayStateVersion = 3u;
+		constexpr std::uint32_t kSerializedPlayStateVersion = 6u;
 
 		struct SerializedPlayStateHeader
 		{
@@ -49,15 +49,21 @@ namespace rhythmreplugged::core
 		struct SerializedLaneRuntimeState
 		{
 			std::uint8_t lane_held_mask = 0;
-			std::uint8_t reserved0 = 0;
-			std::uint8_t reserved1 = 0;
-			std::uint8_t reserved2 = 0;
+			std::uint8_t lock_state = 0;
+			std::uint8_t is_actionable = 0;
+			std::uint8_t should_prompt = 0;
 			double lane_sustain_end_times[5]{};
 			double lane_sustain_release_times[5]{};
 			std::uint64_t input_generation = 0;
 			std::uint64_t consumed_input_generation = 0;
 			std::uint64_t next_note_index = 0;
 			float stem_target_gain = 1.0f;
+			double lock_start_time_seconds = 0.0;
+			double lock_end_time_seconds = 0.0;
+			float lock_progress = 0.0f;
+			double last_missed_note_time_seconds = -1.0;
+			std::int32_t successful_replugged_measures = 0;
+			std::uint32_t event_flags = 0;
 		};
 
 		template <typename T>
@@ -546,15 +552,25 @@ namespace rhythmreplugged::core
 		const double current_time_seconds = song_time_seconds();
 		for (size_t index = 0; index < gameplay_lanes_.size(); ++index)
 		{
-			if (index == lane_index)
-				continue;
-			advance_inactive_lane(index, current_time_seconds);
+			if (play_state_.gameplay_mode == GameplayMode::Replugged)
+				update_replugged_lane_state(index, current_time_seconds, index == lane_index);
+			else if (index != lane_index)
+				advance_inactive_lane(index, current_time_seconds);
 		}
 		if (lane_held != lane.lane_held)
 			++lane.input_generation;
 		lane.lane_held = lane_held;
 		if (!is_loaded() || gameplay_lanes_[lane_index].midi_chart.notes().empty())
 		{
+			set_lane_stem_target_gain(lane_index, 1.0f);
+			return;
+		}
+
+		if (play_state_.gameplay_mode == GameplayMode::Replugged &&
+			lane.lock_state == LaneLockState::Locked &&
+			lane.lock_end_time_seconds > current_time_seconds)
+		{
+			lane.lane_held.fill(false);
 			set_lane_stem_target_gain(lane_index, 1.0f);
 			return;
 		}
@@ -578,6 +594,30 @@ namespace rhythmreplugged::core
 					lane.next_note_index = group_end_index;
 					lane.consumed_input_generation = lane.input_generation;
 					resolved_note_hit = true;
+					if (play_state_.gameplay_mode == GameplayMode::Replugged)
+						set_lane_stem_target_gain(lane_index, 1.0f);
+					if (play_state_.gameplay_mode == GameplayMode::Replugged)
+					{
+						const auto completed_section = replugged_section_range_for_time(lane_index, note_time_seconds);
+						if (completed_section.has_value() &&
+							lane.last_missed_note_time_seconds < completed_section->first)
+						{
+							const bool section_complete =
+								lane.next_note_index >= notes.size() ||
+								notes[lane.next_note_index].start_seconds >= completed_section->second - 0.001;
+							if (section_complete)
+							{
+								++lane.successful_replugged_measures;
+								if (lane.successful_replugged_measures >= kRepluggedMeasuresRequiredToLock)
+								{
+									const auto lock_range = next_replugged_lock_range(lane_index, lane.next_note_index);
+									if (lock_range.has_value())
+										lock_replugged_lane(lane_index, lock_range->first, lock_range->second);
+									lane.successful_replugged_measures = 0;
+								}
+							}
+						}
+					}
 				}
 				else
 				{
@@ -600,6 +640,30 @@ namespace rhythmreplugged::core
 				lane.next_note_index = group_end_index;
 				lane.consumed_input_generation = lane.input_generation;
 				resolved_note_hit = true;
+				if (play_state_.gameplay_mode == GameplayMode::Replugged)
+					set_lane_stem_target_gain(lane_index, 1.0f);
+				if (play_state_.gameplay_mode == GameplayMode::Replugged)
+				{
+					const auto completed_section = replugged_section_range_for_time(lane_index, note_time_seconds);
+					if (completed_section.has_value() &&
+						lane.last_missed_note_time_seconds < completed_section->first)
+					{
+						const bool section_complete =
+							lane.next_note_index >= notes.size() ||
+							notes[lane.next_note_index].start_seconds >= completed_section->second - 0.001;
+						if (section_complete)
+						{
+							++lane.successful_replugged_measures;
+							if (lane.successful_replugged_measures >= kRepluggedMeasuresRequiredToLock)
+							{
+								const auto lock_range = next_replugged_lock_range(lane_index, lane.next_note_index);
+								if (lock_range.has_value())
+									lock_replugged_lane(lane_index, lock_range->first, lock_range->second);
+								lane.successful_replugged_measures = 0;
+							}
+						}
+					}
+				}
 			}
 		}
 
@@ -616,13 +680,19 @@ namespace rhythmreplugged::core
 			return;
 		}
 
+		if (play_state_.gameplay_mode == GameplayMode::Replugged)
+			return;
+
 		if (resolved_note_hit || lane.next_note_index >= gameplay_lanes_[lane_index].midi_chart.notes().size())
 			set_lane_stem_target_gain(lane_index, 1.0f);
 	}
 
 	bool SongSession::switch_active_lane(int delta)
 	{
-		if (play_state_.gameplay_mode != GameplayMode::Freeplay || gameplay_lanes_.size() < 2 || delta == 0)
+		if ((play_state_.gameplay_mode != GameplayMode::Freeplay &&
+			 play_state_.gameplay_mode != GameplayMode::Replugged) ||
+			gameplay_lanes_.size() < 2 ||
+			delta == 0)
 			return false;
 
 		const int lane_count = static_cast<int>(gameplay_lanes_.size());
@@ -637,12 +707,14 @@ namespace rhythmreplugged::core
 		previous_lane.lane_held.fill(false);
 		previous_lane.lane_sustain_end_times_.fill(0.0);
 		previous_lane.lane_sustain_release_times_.fill(-1.0);
-		set_lane_stem_target_gain(static_cast<size_t>(previous_index), 1.0f);
+		if (play_state_.gameplay_mode == GameplayMode::Freeplay)
+			set_lane_stem_target_gain(static_cast<size_t>(previous_index), 1.0f);
 
 		play_state_.active_lane_index = next_index;
 		GameplayLaneRuntimeState &next_lane = play_state_.lanes[static_cast<size_t>(play_state_.active_lane_index)];
 		next_lane.lane_held.fill(false);
-		set_lane_stem_target_gain(static_cast<size_t>(play_state_.active_lane_index), 1.0f);
+		if (play_state_.gameplay_mode == GameplayMode::Freeplay)
+			set_lane_stem_target_gain(static_cast<size_t>(play_state_.active_lane_index), 1.0f);
 		return true;
 	}
 
@@ -740,6 +812,9 @@ namespace rhythmreplugged::core
 		{
 			SerializedLaneRuntimeState serialized_lane;
 			serialized_lane.lane_held_mask = lane_mask_from_state(lane.lane_held);
+			serialized_lane.lock_state = static_cast<std::uint8_t>(lane.lock_state);
+			serialized_lane.is_actionable = lane.is_actionable ? 1u : 0u;
+			serialized_lane.should_prompt = lane.should_prompt ? 1u : 0u;
 			for (size_t fret = 0; fret < lane.lane_sustain_end_times_.size(); ++fret)
 			{
 				serialized_lane.lane_sustain_end_times[fret] = lane.lane_sustain_end_times_[fret];
@@ -749,6 +824,12 @@ namespace rhythmreplugged::core
 			serialized_lane.consumed_input_generation = lane.consumed_input_generation;
 			serialized_lane.next_note_index = static_cast<std::uint64_t>(lane.next_note_index);
 			serialized_lane.stem_target_gain = lane.stem_target_gain;
+			serialized_lane.lock_start_time_seconds = lane.lock_start_time_seconds;
+			serialized_lane.lock_end_time_seconds = lane.lock_end_time_seconds;
+			serialized_lane.lock_progress = lane.lock_progress;
+			serialized_lane.last_missed_note_time_seconds = lane.last_missed_note_time_seconds;
+			serialized_lane.successful_replugged_measures = lane.successful_replugged_measures;
+			serialized_lane.event_flags = lane.event_flags;
 			append_bytes(bytes, serialized_lane);
 		}
 
@@ -801,7 +882,7 @@ namespace rhythmreplugged::core
 			error_message = "Save state belongs to a different song or chart configuration.";
 			return false;
 		}
-		if (header.gameplay_mode > static_cast<std::uint32_t>(GameplayMode::Freeplay))
+		if (header.gameplay_mode > static_cast<std::uint32_t>(GameplayMode::Replugged))
 		{
 			error_message = "Serialized play-state gameplay mode is invalid.";
 			return false;
@@ -856,6 +937,17 @@ namespace rhythmreplugged::core
 			lane.consumed_input_generation = serialized_lane.consumed_input_generation;
 			lane.next_note_index = static_cast<size_t>(serialized_lane.next_note_index);
 			lane.stem_target_gain = std::clamp(serialized_lane.stem_target_gain, 0.0f, 1.0f);
+			lane.lock_state = serialized_lane.lock_state == static_cast<std::uint8_t>(LaneLockState::Locked)
+				? LaneLockState::Locked
+				: LaneLockState::Unlocked;
+			lane.lock_start_time_seconds = serialized_lane.lock_start_time_seconds;
+			lane.lock_end_time_seconds = serialized_lane.lock_end_time_seconds;
+			lane.lock_progress = std::clamp(serialized_lane.lock_progress, 0.0f, 1.0f);
+			lane.last_missed_note_time_seconds = serialized_lane.last_missed_note_time_seconds;
+			lane.successful_replugged_measures = (std::max)(0, serialized_lane.successful_replugged_measures);
+			lane.is_actionable = serialized_lane.is_actionable != 0;
+			lane.should_prompt = serialized_lane.should_prompt != 0;
+			lane.event_flags = serialized_lane.event_flags;
 
 			const size_t note_count = gameplay_lanes_[lane_index].midi_chart.notes().size();
 			if (lane.next_note_index > note_count)
@@ -1034,27 +1126,26 @@ namespace rhythmreplugged::core
 		}
 		else
 		{
-			const MidiChart &inspect_chart = song_chart;
-
-			std::vector<InstrumentOption> freeplay_instruments;
-			for (const MidiChartTrackType track_type : inspect_chart.available_preview_track_types())
+			std::vector<InstrumentOption> selected_instruments;
+			for (const InstrumentOption instrument : options.claimed_instruments())
 			{
-				const std::optional<InstrumentOption> instrument = to_instrument_option(track_type);
-				if (!instrument.has_value() || !track_has_exact_difficulty(inspect_chart, *instrument, options.difficulty()))
+				if (std::find(options.reserved_instruments().begin(), options.reserved_instruments().end(), instrument) != options.reserved_instruments().end())
 					continue;
-
-				freeplay_instruments.push_back(*instrument);
+				if (!track_has_exact_difficulty(song_chart, instrument, options.difficulty()))
+					continue;
+				selected_instruments.push_back(instrument);
 			}
 
 			std::sort(
-				freeplay_instruments.begin(),
-				freeplay_instruments.end(),
+				selected_instruments.begin(),
+				selected_instruments.end(),
 				[](InstrumentOption left, InstrumentOption right)
 				{
 					return instrument_sort_rank(left) < instrument_sort_rank(right);
 				});
+			selected_instruments.erase(std::unique(selected_instruments.begin(), selected_instruments.end()), selected_instruments.end());
 
-			for (const InstrumentOption instrument : freeplay_instruments)
+			for (const InstrumentOption instrument : selected_instruments)
 			{
 				GameplayLaneDefinition lane = build_lane(instrument);
 				std::string lane_error_message;
@@ -1074,9 +1165,11 @@ namespace rhythmreplugged::core
 				gameplay_lanes_.push_back(std::move(lane));
 			}
 
-			if (gameplay_lanes_.empty())
+			if (gameplay_lanes_.size() < 2)
 			{
-				error_message = "Freeplay mode requires at least one playable instrument at the selected difficulty.";
+				error_message = play_state_.gameplay_mode == GameplayMode::Freeplay
+					? "Freeplay mode requires at least two claimed playable instruments at the selected difficulty."
+					: "Replugged mode requires at least two claimed playable instruments at the selected difficulty.";
 				return false;
 			}
 		}
@@ -1092,6 +1185,29 @@ namespace rhythmreplugged::core
 			set_lane_stem_target_gain(lane_index, 1.0f);
 		}
 
+		play_state_.active_lane_index = initial_active_lane_index();
+		if (play_state_.gameplay_mode == GameplayMode::Replugged)
+		{
+			for (size_t lane_index = 0; lane_index < gameplay_lanes_.size(); ++lane_index)
+			{
+				GameplayLaneRuntimeState &lane_runtime = play_state_.lanes[lane_index];
+				if (static_cast<int>(lane_index) == play_state_.active_lane_index)
+				{
+					lane_runtime.lock_state = LaneLockState::Unlocked;
+					lane_runtime.is_actionable = lane_has_actionable_note(lane_index, 0.0);
+					lane_runtime.should_prompt = false;
+					set_lane_stem_target_gain(lane_index, 1.0f);
+					continue;
+				}
+
+				const auto initial_lock_range = next_replugged_lock_range(lane_index, lane_runtime.next_note_index);
+				if (initial_lock_range.has_value())
+					lock_replugged_lane(lane_index, 0.0, initial_lock_range->second);
+				else
+					set_lane_stem_target_gain(lane_index, 1.0f);
+			}
+		}
+
 		return true;
 	}
 
@@ -1104,6 +1220,15 @@ namespace rhythmreplugged::core
 		lane.consumed_input_generation = 0;
 		lane.next_note_index = 0;
 		lane.stem_target_gain = 1.0f;
+		lane.lock_state = LaneLockState::Unlocked;
+		lane.lock_start_time_seconds = 0.0;
+		lane.lock_end_time_seconds = 0.0;
+		lane.lock_progress = 0.0f;
+		lane.last_missed_note_time_seconds = -1.0;
+		lane.successful_replugged_measures = 0;
+		lane.is_actionable = false;
+		lane.should_prompt = false;
+		lane.event_flags = 0;
 	}
 
 	void SongSession::cache_lyric_data(GameplayLaneDefinition &lane)
@@ -1331,12 +1456,26 @@ namespace rhythmreplugged::core
 			if (song_time_seconds <= note_time_seconds + kNoteHitWindowSeconds)
 				break;
 
+			lane.last_missed_note_time_seconds = note_time_seconds;
+			lane.successful_replugged_measures = 0;
 			lane.next_note_index = note_group_end_index(lane_index, lane.next_note_index);
 			missed_any_notes = true;
 		}
 
-		if (missed_any_notes)
-			set_lane_stem_target_gain(lane_index, 0.0f);
+		if (!missed_any_notes)
+			return;
+
+		if (play_state_.gameplay_mode == GameplayMode::Replugged)
+		{
+			const bool lock_is_active =
+				lane.lock_start_time_seconds <= song_time_seconds &&
+				lane.lock_end_time_seconds > song_time_seconds;
+			if (!lock_is_active)
+				set_lane_stem_target_gain(lane_index, 0.0f);
+			return;
+		}
+
+		set_lane_stem_target_gain(lane_index, 0.0f);
 	}
 
 	void SongSession::advance_inactive_lane(size_t lane_index, double song_time_seconds)
@@ -1354,6 +1493,220 @@ namespace rhythmreplugged::core
 
 			lane.next_note_index = note_group_end_index(lane_index, lane.next_note_index);
 		}
+	}
+
+	void SongSession::update_replugged_lane_state(size_t lane_index, double song_time_seconds, bool is_active_lane)
+	{
+		GameplayLaneRuntimeState &lane = play_state_.lanes[lane_index];
+		lane.event_flags = 0;
+		lane.lane_held.fill(false);
+		lane.lane_sustain_end_times_.fill(0.0);
+		lane.lane_sustain_release_times_.fill(-1.0);
+
+		const bool was_locked = lane.lock_state == LaneLockState::Locked;
+		if (lane.lock_end_time_seconds > song_time_seconds)
+		{
+			const bool lock_is_active = lane.lock_start_time_seconds <= song_time_seconds;
+			lane.lock_state = lock_is_active ? LaneLockState::Locked : LaneLockState::Unlocked;
+			if (lock_is_active)
+			{
+				const double lock_duration_seconds = (std::max)(lane.lock_end_time_seconds - lane.lock_start_time_seconds, 0.001);
+				lane.lock_progress = static_cast<float>(std::clamp(
+					(lane.lock_end_time_seconds - song_time_seconds) / lock_duration_seconds,
+					0.0,
+					1.0));
+			}
+			else
+			{
+				lane.lock_progress = 1.0f;
+			}
+			if (lock_is_active)
+			{
+				advance_inactive_lane(lane_index, song_time_seconds);
+				set_lane_stem_target_gain(lane_index, 1.0f);
+			}
+			else
+			{
+				consume_missed_note_groups(lane_index, song_time_seconds);
+			}
+		}
+		else
+		{
+			if (was_locked)
+				lane.event_flags |= 1u << 3;
+			lane.lock_state = LaneLockState::Unlocked;
+			lane.lock_start_time_seconds = 0.0;
+			lane.lock_end_time_seconds = 0.0;
+			lane.lock_progress = 0.0f;
+			if (was_locked)
+				lane.successful_replugged_measures = 0;
+			consume_missed_note_groups(lane_index, song_time_seconds);
+		}
+
+		const bool was_actionable = lane.is_actionable;
+		lane.is_actionable =
+			lane.lock_end_time_seconds <= song_time_seconds &&
+			lane.lock_state == LaneLockState::Unlocked &&
+			lane_has_actionable_note(lane_index, song_time_seconds);
+		lane.should_prompt = lane.is_actionable && !is_active_lane;
+		if (!was_actionable && lane.is_actionable)
+			lane.event_flags |= 1u << 4;
+		if (was_actionable && !lane.is_actionable)
+			lane.event_flags |= 1u << 5;
+	}
+
+	void SongSession::lock_replugged_lane(size_t lane_index, double lock_start_time_seconds, double lock_end_time_seconds)
+	{
+		if (lane_index >= play_state_.lanes.size())
+			return;
+		if (lock_end_time_seconds <= lock_start_time_seconds)
+			return;
+
+		GameplayLaneRuntimeState &lane = play_state_.lanes[lane_index];
+		lane.lock_state = lock_start_time_seconds <= song_time_seconds()
+			? LaneLockState::Locked
+			: LaneLockState::Unlocked;
+		lane.lock_start_time_seconds = lock_start_time_seconds;
+		lane.lock_end_time_seconds = lock_end_time_seconds;
+		lane.lock_progress = 1.0f;
+		lane.is_actionable = false;
+		lane.should_prompt = false;
+		lane.event_flags |= 1u << 2;
+		if (lane.lock_state == LaneLockState::Locked)
+			set_lane_stem_target_gain(lane_index, 1.0f);
+	}
+
+	bool SongSession::lane_has_actionable_note(size_t lane_index, double song_time_seconds) const
+	{
+		if (lane_index >= play_state_.lanes.size() || lane_index >= gameplay_lanes_.size())
+			return false;
+
+		const GameplayLaneRuntimeState &lane = play_state_.lanes[lane_index];
+		const std::vector<MidiChartNote> &notes = gameplay_lanes_[lane_index].midi_chart.notes();
+		if (lane.next_note_index >= notes.size())
+			return false;
+
+		const double note_time_seconds = notes[lane.next_note_index].start_seconds;
+		return note_time_seconds >= song_time_seconds - kNoteHitWindowSeconds &&
+			note_time_seconds <= song_time_seconds + kRepluggedActionableLookaheadSeconds;
+	}
+
+	int SongSession::initial_active_lane_index() const
+	{
+		if (gameplay_lanes_.empty())
+			return 0;
+
+		double earliest_note_time_seconds = 0.0;
+		bool found_earliest = false;
+		std::vector<size_t> candidate_lane_indexes;
+		for (size_t lane_index = 0; lane_index < gameplay_lanes_.size(); ++lane_index)
+		{
+			const auto &notes = gameplay_lanes_[lane_index].midi_chart.notes();
+			if (notes.empty())
+				continue;
+
+			const double first_note_time_seconds = notes.front().start_seconds;
+			if (!found_earliest || first_note_time_seconds < earliest_note_time_seconds - 0.001)
+			{
+				found_earliest = true;
+				earliest_note_time_seconds = first_note_time_seconds;
+				candidate_lane_indexes = {lane_index};
+			}
+			else if (std::fabs(first_note_time_seconds - earliest_note_time_seconds) <= 0.001)
+			{
+				candidate_lane_indexes.push_back(lane_index);
+			}
+		}
+
+		if (!found_earliest)
+			return 0;
+
+		for (const size_t lane_index : candidate_lane_indexes)
+		{
+			if (gameplay_lanes_[lane_index].instrument == InstrumentOption::Guitar)
+				return static_cast<int>(lane_index);
+		}
+
+		return static_cast<int>(candidate_lane_indexes.back());
+	}
+
+	std::optional<std::pair<double, double>> SongSession::replugged_section_range_for_time(size_t lane_index, double song_time_seconds) const
+	{
+		if (lane_index >= gameplay_lanes_.size())
+			return std::nullopt;
+
+		const auto &measure_lines = gameplay_lanes_[lane_index].midi_chart.measure_lines();
+		if (measure_lines.empty())
+			return std::nullopt;
+
+		double start_seconds = 0.0;
+		bool found_start = false;
+		for (const MidiChartMeasureLine &measure_line : measure_lines)
+		{
+			if (measure_line.kind != MidiChartMeasureLine::Kind::Measure)
+				continue;
+			if (measure_line.time_seconds > song_time_seconds + 0.001)
+			{
+				if (!found_start)
+					return std::make_pair(0.0, measure_line.time_seconds);
+				return std::make_pair(start_seconds, measure_line.time_seconds);
+			}
+
+			start_seconds = measure_line.time_seconds;
+			found_start = true;
+		}
+
+		const auto &notes = gameplay_lanes_[lane_index].midi_chart.notes();
+		const double fallback_end_seconds = !notes.empty()
+			? (std::max)(start_seconds + 0.5, notes.back().end_seconds)
+			: start_seconds + 0.5;
+		return std::make_pair(found_start ? start_seconds : 0.0, fallback_end_seconds);
+	}
+
+	std::optional<std::pair<double, double>> SongSession::replugged_section_range_for_note_index(size_t lane_index, size_t note_index) const
+	{
+		if (lane_index >= gameplay_lanes_.size())
+			return std::nullopt;
+
+		const auto &notes = gameplay_lanes_[lane_index].midi_chart.notes();
+		if (note_index >= notes.size())
+			return std::nullopt;
+
+		return replugged_section_range_for_time(lane_index, notes[note_index].start_seconds);
+	}
+
+	std::optional<std::pair<double, double>> SongSession::next_replugged_lock_range(size_t lane_index, size_t note_index) const
+	{
+		if (lane_index >= gameplay_lanes_.size())
+			return std::nullopt;
+
+		const auto &notes = gameplay_lanes_[lane_index].midi_chart.notes();
+		if (note_index >= notes.size())
+			return std::nullopt;
+		const auto next_measure = replugged_section_range_for_note_index(lane_index, note_index);
+		if (!next_measure.has_value())
+			return std::nullopt;
+
+		const auto &measure_lines = gameplay_lanes_[lane_index].midi_chart.measure_lines();
+		double lock_end_time_seconds = next_measure->second;
+		const int locked_measure_count = kRepluggedMeasuresRequiredToLock * static_cast<int>(gameplay_lanes_.size());
+		int measures_found = 1;
+		for (const MidiChartMeasureLine &measure_line : measure_lines)
+		{
+			if (measure_line.kind != MidiChartMeasureLine::Kind::Measure)
+				continue;
+			if (measure_line.time_seconds <= next_measure->second + 0.001)
+				continue;
+
+			lock_end_time_seconds = measure_line.time_seconds;
+			++measures_found;
+			if (measures_found >= locked_measure_count)
+				break;
+		}
+
+		const double minimum_lock_end_time_seconds = next_measure->second;
+		lock_end_time_seconds = (std::max)(lock_end_time_seconds, minimum_lock_end_time_seconds);
+		return std::make_pair(next_measure->first, lock_end_time_seconds);
 	}
 
 	GameplayMode SongSession::gameplay_mode() const
@@ -1385,6 +1738,18 @@ namespace rhythmreplugged::core
 		lane_view.is_active = static_cast<int>(index) == play_state_.active_lane_index;
 		lane_view.is_muted = has_lane_stem(index) && lane_stem_target_gain(index) < 0.5f;
 		lane_view.has_chart = lane.midi_chart.is_loaded();
+		lane_view.lock_state = lane_runtime.lock_state;
+		lane_view.lock_progress = lane_runtime.lock_progress;
+		lane_view.is_actionable = lane_runtime.is_actionable;
+		lane_view.should_prompt = lane_runtime.should_prompt;
+		lane_view.hide_note_visuals = false;
+		lane_view.hide_lane_colors = false;
+		if (play_state_.gameplay_mode == GameplayMode::Replugged &&
+			lane_runtime.lock_end_time_seconds > song_time_seconds())
+		{
+			lane_view.locked_visual_start_offset_seconds = static_cast<float>((std::max)(0.0, lane_runtime.lock_start_time_seconds - song_time_seconds()));
+			lane_view.locked_visual_end_offset_seconds = static_cast<float>((std::max)(0.0, lane_runtime.lock_end_time_seconds - song_time_seconds()));
+		}
 		lane_view.lane_held = lane_runtime.lane_held;
 		const std::uint8_t sustain_mask = active_sustain_lane_mask(index, song_time_seconds());
 		for (size_t fret = 0; fret < lane_view.lane_sustaining.size(); ++fret)
@@ -1427,6 +1792,18 @@ namespace rhythmreplugged::core
 		{
 			if (it->start_seconds > max_time)
 				break;
+
+			if (play_state_.gameplay_mode == GameplayMode::Replugged &&
+				lane_index < play_state_.lanes.size())
+			{
+				const GameplayLaneRuntimeState &lane_runtime = play_state_.lanes[lane_index];
+				if (lane_runtime.lock_end_time_seconds > song_time_seconds &&
+					it->start_seconds >= lane_runtime.lock_start_time_seconds &&
+					it->start_seconds < lane_runtime.lock_end_time_seconds)
+				{
+					continue;
+				}
+			}
 
 			HighwayNoteView highway_note;
 			highway_note.lane = it->lane;
@@ -1553,14 +1930,18 @@ namespace rhythmreplugged::core
 		PlayerGameplayView gameplay_player;
 		gameplay_player.normalized_rect = {0.0f, 0.0f, 1.0f, 1.0f};
 		gameplay_player.camera = make_default_guitar_camera_view();
+		gameplay_player.world.gameplay_mode = play_state_.gameplay_mode;
 		gameplay_player.world.style = make_default_guitar_highway_style_view();
 		for (size_t index = 0; index < gameplay_lanes_.size(); ++index)
 			gameplay_player.world.lanes.push_back(gameplay_lane_view(index));
 		if (gameplay_player.world.lanes.empty())
 			gameplay_player.world.lanes.push_back(gameplay_lane_view(0));
 		gameplay_player.world.focused_lane_index = play_state_.active_lane_index;
-		gameplay_player.world.focus_blend = play_state_.gameplay_mode == GameplayMode::Freeplay ? 0.35f : 1.0f;
-		if (play_state_.gameplay_mode == GameplayMode::Freeplay)
+		gameplay_player.world.focus_blend =
+			(play_state_.gameplay_mode == GameplayMode::Freeplay ||
+			 play_state_.gameplay_mode == GameplayMode::Replugged) ? 0.35f : 1.0f;
+		if (play_state_.gameplay_mode == GameplayMode::Freeplay ||
+			play_state_.gameplay_mode == GameplayMode::Replugged)
 			layout_freeplay_lanes(gameplay_player.world.lanes, gameplay_player.world.focused_lane_index);
 		else if (!gameplay_player.world.lanes.empty())
 		{

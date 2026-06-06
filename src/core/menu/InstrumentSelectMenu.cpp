@@ -8,6 +8,27 @@ namespace rhythmreplugged::core
 	namespace
 	{
 		constexpr size_t kBytesPerMegabyte = 1024u * 1024u;
+
+		const char *instrument_name(InstrumentOption instrument)
+		{
+			switch (instrument)
+			{
+			case InstrumentOption::Guitar:
+				return "Guitar";
+			case InstrumentOption::Bass:
+				return "Bass";
+			case InstrumentOption::Rhythm:
+				return "Rhythm";
+			case InstrumentOption::CoopGuitar:
+				return "Co-op Guitar";
+			case InstrumentOption::Keys:
+				return "Keys";
+			case InstrumentOption::Drums:
+				return "Drums";
+			}
+
+			return "Instrument";
+		}
 	}
 
 	void InstrumentSelectMenu::open(
@@ -20,13 +41,25 @@ namespace rhythmreplugged::core
 		song_title_ = std::move(song_title);
 		song_subtitle_ = std::move(song_subtitle);
 		status_message_.clear();
+		available_instruments_ = available_instruments;
+		working_options_ = options;
+		if (options.gameplay_mode() != GameplayMode::Classic)
+			working_options_.set_claimed_instruments(available_instruments_);
 		available_entries_.clear();
-		available_entries_.reserve(available_instruments.size() + (available_instruments.size() > 1 ? 1u : 0u));
-		for (const InstrumentOption instrument : available_instruments)
-			available_entries_.push_back({GameplayMode::Classic, instrument});
-		if (available_instruments.size() > 1)
-			available_entries_.push_back({GameplayMode::Freeplay, InstrumentOption::Guitar});
-		selected_index_ = default_index_for(options);
+		if (options.gameplay_mode() == GameplayMode::Classic)
+		{
+			available_entries_.reserve(available_instruments.size());
+			for (const InstrumentOption instrument : available_instruments)
+				available_entries_.push_back({InstrumentListItem::Kind::ClassicPlay, instrument});
+		}
+		else
+		{
+			available_entries_.reserve(available_instruments.size() + 1u);
+			for (const InstrumentOption instrument : available_instruments)
+				available_entries_.push_back({InstrumentListItem::Kind::ClaimToggle, instrument});
+			available_entries_.push_back({InstrumentListItem::Kind::Continue, InstrumentOption::Guitar});
+		}
+		selected_index_ = default_index_for(working_options_);
 		rebuild_view();
 	}
 
@@ -83,15 +116,38 @@ namespace rhythmreplugged::core
 		cached_view_.total_read_file_count = total_read_file_count;
 	}
 
-	void InstrumentSelectMenu::apply_to(GameplayOptions &options) const
+	bool InstrumentSelectMenu::activate(GameplayOptions &options, std::string &error_message)
 	{
+		error_message.clear();
 		if (selected_index_ < 0 || selected_index_ >= static_cast<int>(available_entries_.size()))
-			return;
+		{
+			error_message = "No instrument selection is currently highlighted.";
+			return false;
+		}
 
 		const SelectionEntry &entry = available_entries_[static_cast<size_t>(selected_index_)];
-		options.set_gameplay_mode(entry.gameplay_mode);
-		if (entry.gameplay_mode == GameplayMode::Classic)
-			options.set_instrument(entry.instrument);
+		switch (entry.kind)
+		{
+		case InstrumentListItem::Kind::ClaimToggle:
+			working_options_.toggle_claimed_instrument(entry.instrument);
+			rebuild_view();
+			return false;
+		case InstrumentListItem::Kind::ClassicPlay:
+			working_options_.set_instrument(entry.instrument);
+			working_options_.set_claimed_instruments({entry.instrument});
+			options = working_options_;
+			return true;
+		case InstrumentListItem::Kind::Continue:
+			break;
+		}
+
+		if (playable_claim_count(working_options_) < 2)
+		{
+			error_message = "Claim at least two playable instruments for multi-instrument modes.";
+			return false;
+		}
+		options = working_options_;
+		return true;
 	}
 
 	const InstrumentSelectView &InstrumentSelectMenu::view() const
@@ -110,45 +166,84 @@ namespace rhythmreplugged::core
 		for (const SelectionEntry &entry : available_entries_)
 		{
 			InstrumentListItem item;
-			item.gameplay_mode = entry.gameplay_mode;
+			item.kind = entry.kind;
+			item.gameplay_mode = working_options_.gameplay_mode();
 			item.instrument = entry.instrument;
 			item.label = label_for(entry);
+			item.is_claimed = working_options_.has_claimed_instrument(entry.instrument);
 			cached_view_.entries.push_back(std::move(item));
 		}
 	}
 
-	std::string InstrumentSelectMenu::label_for(const SelectionEntry &entry)
+	std::string InstrumentSelectMenu::label_for(const SelectionEntry &entry) const
 	{
-		if (entry.gameplay_mode == GameplayMode::Freeplay)
-			return "Freeplay";
+		if (entry.kind == InstrumentListItem::Kind::ClaimToggle)
+		{
+			const bool claimed = working_options_.has_claimed_instrument(entry.instrument);
+			return claimed
+				? "[x] Claim " + std::string(instrument_name(entry.instrument))
+				: "[ ] Claim " + std::string(instrument_name(entry.instrument));
+		}
+		if (entry.kind == InstrumentListItem::Kind::Continue)
+			return "Continue";
 
 		switch (entry.instrument)
 		{
 		case InstrumentOption::Guitar:
-			return "Guitar";
+			return entry.kind == InstrumentListItem::Kind::ClassicPlay ? "Play Classic Guitar" : "Guitar";
 		case InstrumentOption::Bass:
-			return "Bass";
+			return entry.kind == InstrumentListItem::Kind::ClassicPlay ? "Play Classic Bass" : "Bass";
 		case InstrumentOption::Rhythm:
-			return "Rhythm";
+			return entry.kind == InstrumentListItem::Kind::ClassicPlay ? "Play Classic Rhythm" : "Rhythm";
 		case InstrumentOption::CoopGuitar:
-			return "Co-op Guitar";
+			return entry.kind == InstrumentListItem::Kind::ClassicPlay ? "Play Classic Co-op Guitar" : "Co-op Guitar";
 		case InstrumentOption::Keys:
-			return "Keys";
+			return entry.kind == InstrumentListItem::Kind::ClassicPlay ? "Play Classic Keys" : "Keys";
 		case InstrumentOption::Drums:
-			return "Drums";
+			return entry.kind == InstrumentListItem::Kind::ClassicPlay ? "Play Classic Drums" : "Drums";
 		}
 
 		return "Instrument";
 	}
 
+	size_t InstrumentSelectMenu::playable_claim_count(const GameplayOptions &options) const
+	{
+		size_t count = 0;
+		for (const InstrumentOption instrument : options.claimed_instruments())
+		{
+			if (std::find(available_instruments_.begin(), available_instruments_.end(), instrument) == available_instruments_.end())
+				continue;
+			if (std::find(options.reserved_instruments().begin(), options.reserved_instruments().end(), instrument) != options.reserved_instruments().end())
+				continue;
+			++count;
+		}
+
+		return count;
+	}
+
 	int InstrumentSelectMenu::default_index_for(const GameplayOptions &options) const
 	{
+		if (options.gameplay_mode() != GameplayMode::Classic)
+		{
+			for (int index = 0; index < static_cast<int>(available_entries_.size()); ++index)
+			{
+				const SelectionEntry &entry = available_entries_[static_cast<size_t>(index)];
+				if (entry.kind == InstrumentListItem::Kind::Continue)
+					return index;
+			}
+		}
+
 		for (int index = 0; index < static_cast<int>(available_entries_.size()); ++index)
 		{
 			const SelectionEntry &entry = available_entries_[static_cast<size_t>(index)];
-			if (entry.gameplay_mode != options.gameplay_mode())
-				continue;
-			if (entry.gameplay_mode == GameplayMode::Freeplay || entry.instrument == options.instrument())
+			if (entry.kind == InstrumentListItem::Kind::ClassicPlay &&
+				options.gameplay_mode() == GameplayMode::Classic &&
+				entry.instrument == options.instrument())
+			{
+				return index;
+			}
+			if (entry.kind == InstrumentListItem::Kind::ClaimToggle &&
+				options.has_claimed_instrument(entry.instrument))
 				return index;
 		}
 

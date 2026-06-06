@@ -7,13 +7,13 @@
 
 namespace rhythmreplugged::core
 {
-	class InstrumentSelectMenu
+	class ModeSelectMenu
 	{
 	public:
 		void open(
 			std::string song_title,
 			std::string song_subtitle,
-			const std::vector<InstrumentOption> &available_instruments,
+			const std::vector<GameplayMode> &available_modes,
 			const GameplayOptions &options);
 		bool move_selection(int delta);
 		bool set_selected_index(int index);
@@ -28,28 +28,19 @@ namespace rhythmreplugged::core
 			size_t total_stem_count,
 			size_t completed_read_file_count,
 			size_t total_read_file_count);
-		bool activate(GameplayOptions &options, std::string &error_message);
-		const InstrumentSelectView &view() const;
+		void apply_to(GameplayOptions &options) const;
+		const ModeSelectView &view() const;
 
 	private:
-		struct SelectionEntry
-		{
-			InstrumentListItem::Kind kind = InstrumentListItem::Kind::ClaimToggle;
-			InstrumentOption instrument = InstrumentOption::Guitar;
-		};
-
 		void rebuild_view();
-		std::string label_for(const SelectionEntry &entry) const;
-		size_t playable_claim_count(const GameplayOptions &options) const;
-		int default_index_for(const GameplayOptions &options) const;
+		static std::string label_for(GameplayMode gameplay_mode);
+		int default_index_for(GameplayMode gameplay_mode) const;
 
 		std::string song_title_;
 		std::string song_subtitle_;
 		std::string status_message_;
-		std::vector<InstrumentOption> available_instruments_;
-		std::vector<SelectionEntry> available_entries_;
-		GameplayOptions working_options_;
+		std::vector<GameplayMode> available_modes_;
 		int selected_index_ = 0;
-		mutable InstrumentSelectView cached_view_;
+		mutable ModeSelectView cached_view_;
 	};
 }

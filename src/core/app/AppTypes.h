@@ -20,6 +20,7 @@ namespace rhythmreplugged::core
 	enum class MenuScreen
 	{
 		SongBrowser,
+		ModeSelect,
 		InstrumentSelect,
 		DifficultySelect,
 		Loading,
@@ -61,11 +62,43 @@ namespace rhythmreplugged::core
 		std::string label;
 	};
 
+	struct ModeListItem
+	{
+		GameplayMode gameplay_mode = GameplayMode::Classic;
+		std::string label;
+	};
+
+	struct ModeSelectView
+	{
+		std::string song_title;
+		std::string song_subtitle;
+		std::string status_message;
+		std::vector<ModeListItem> entries;
+		int selected_index = 0;
+		PreloadPhase preload_phase = PreloadPhase::Idle;
+		float preload_progress = 0.0f;
+		size_t preload_processed_megabytes = 0;
+		size_t preload_total_megabytes = 0;
+		size_t completed_stem_count = 0;
+		size_t total_stem_count = 0;
+		size_t completed_read_file_count = 0;
+		size_t total_read_file_count = 0;
+	};
+
 	struct InstrumentListItem
 	{
+		enum class Kind
+		{
+			ClaimToggle,
+			ClassicPlay,
+			Continue,
+		};
+
+		Kind kind = Kind::ClaimToggle;
 		GameplayMode gameplay_mode = GameplayMode::Classic;
 		InstrumentOption instrument = InstrumentOption::Guitar;
 		std::string label;
+		bool is_claimed = false;
 	};
 
 	struct InstrumentSelectView
@@ -254,6 +287,12 @@ namespace rhythmreplugged::core
 		bool is_strong = false;
 	};
 
+	enum class LaneLockState
+	{
+		Unlocked,
+		Locked,
+	};
+
 	struct InstrumentLaneView
 	{
 		HighwayInstrumentType instrument_type = HighwayInstrumentType::FiveFretGuitar;
@@ -264,6 +303,14 @@ namespace rhythmreplugged::core
 		float lane_center_x = 0.0f;
 		float lane_width = 1.0f;
 		float lane_depth_offset = 0.0f;
+		LaneLockState lock_state = LaneLockState::Unlocked;
+		float lock_progress = 0.0f;
+		bool is_actionable = false;
+		bool should_prompt = false;
+		bool hide_note_visuals = false;
+		bool hide_lane_colors = false;
+		float locked_visual_start_offset_seconds = 0.0f;
+		float locked_visual_end_offset_seconds = 0.0f;
 		std::array<bool, 5> lane_held{};
 		std::array<bool, 5> lane_sustaining{};
 		std::vector<HighwayNoteView> visible_notes;
@@ -272,6 +319,7 @@ namespace rhythmreplugged::core
 
 	struct HighwayWorldView
 	{
+		GameplayMode gameplay_mode = GameplayMode::Classic;
 		HighwayStyleView style;
 		std::vector<InstrumentLaneView> lanes;
 		int focused_lane_index = 0;

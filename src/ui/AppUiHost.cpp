@@ -44,6 +44,16 @@ namespace rhythmreplugged::ui
 				return;
 			}
 
+			if (app.menu_screen() == MenuScreen::ModeSelect)
+			{
+				cover_textures.stop_song_browser_loading();
+				ModeSelectUiActions actions;
+				actions.set_selected_index = [&](int index) { app.set_mode_selected_index(index); };
+				actions.activate_selection = [&]() { app.activate_mode_selection(); };
+				render_mode_select_ui(app.mode_select_view(), actions, window_size, ui_scale);
+				return;
+			}
+
 			if (app.menu_screen() == MenuScreen::InstrumentSelect)
 			{
 				cover_textures.stop_song_browser_loading();

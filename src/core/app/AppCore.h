@@ -4,6 +4,7 @@
 #include "core/app/AppTypes.h"
 #include "core/menu/DifficultySelectMenu.h"
 #include "core/menu/InstrumentSelectMenu.h"
+#include "core/menu/ModeSelectMenu.h"
 #include "core/menu/SongBrowser.h"
 #include "core/play/SongPreloader.h"
 #include "core/play/SongSession.h"
@@ -31,6 +32,8 @@ namespace rhythmreplugged::core
 		bool activate_browser_selection();
 		bool set_instrument_selected_index(int index);
 		bool activate_instrument_selection();
+		bool set_mode_selected_index(int index);
+		bool activate_mode_selection();
 		bool set_difficulty_selected_index(int index);
 		bool activate_difficulty_selection();
 		void return_to_browser();
@@ -45,6 +48,7 @@ namespace rhythmreplugged::core
 		AppMode mode() const;
 		MenuScreen menu_screen() const;
 		const SongBrowserView &song_browser_view() const;
+		const ModeSelectView &mode_select_view() const;
 		const InstrumentSelectView &instrument_select_view() const;
 		const DifficultySelectView &difficulty_select_view() const;
 		bool gameplay_paused() const;
@@ -56,6 +60,7 @@ namespace rhythmreplugged::core
 
 	private:
 		bool activate_browser_selection_unlocked();
+		bool activate_mode_selection_unlocked();
 		bool activate_instrument_selection_unlocked();
 		bool activate_difficulty_selection_unlocked();
 		bool begin_song_activation(const std::string &selected_song_path, bool allow_auto_start = true);
@@ -79,6 +84,7 @@ namespace rhythmreplugged::core
 
 		::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system_;
 		SongBrowser song_browser_;
+		ModeSelectMenu mode_select_menu_;
 		InstrumentSelectMenu instrument_select_menu_;
 		DifficultySelectMenu difficulty_select_menu_;
 		SongPreloader song_preloader_;
