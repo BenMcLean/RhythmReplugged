@@ -129,6 +129,12 @@ namespace rhythmreplugged::core
 	{
 		for (int index = 0; index < static_cast<int>(available_modes_.size()); ++index)
 		{
+			if (available_modes_[static_cast<size_t>(index)] == GameplayMode::Freeplay)
+				return index;
+		}
+
+		for (int index = 0; index < static_cast<int>(available_modes_.size()); ++index)
+		{
 			if (available_modes_[static_cast<size_t>(index)] == gameplay_mode)
 				return index;
 		}
