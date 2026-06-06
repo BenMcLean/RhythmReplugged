@@ -1230,6 +1230,13 @@ namespace rhythmreplugged::core
 
 		void push_parsed_note(MidiChartTrack &track, MidiChartParsedNote note)
 		{
+			if (note.category == MidiChartNoteCategory::Drums ||
+				note.category == MidiChartNoteCategory::EliteDrums)
+			{
+				note.end_tick = note.tick;
+				note.end_seconds = note.start_seconds;
+			}
+
 			track.parsed_notes.push_back(std::move(note));
 		}
 
