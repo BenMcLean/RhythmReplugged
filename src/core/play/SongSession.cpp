@@ -599,30 +599,6 @@ namespace rhythmreplugged::core
 					resolved_note_hit = true;
 					if (play_state_.gameplay_mode == GameplayMode::Replugged)
 						set_lane_stem_target_gain(lane_index, 1.0f);
-					if (play_state_.gameplay_mode == GameplayMode::Replugged)
-					{
-						const auto completed_section = replugged_section_range_for_time(lane_index, note_time_seconds);
-						if (completed_section.has_value() &&
-							completed_section->first + 0.001 >= lane.count_eligible_measure_start_seconds &&
-							lane.last_missed_note_time_seconds < completed_section->first)
-						{
-							const bool section_complete =
-								lane.next_note_index >= notes.size() ||
-								notes[lane.next_note_index].start_seconds >= completed_section->second - 0.001;
-							if (section_complete)
-							{
-								if (lane_measure_has_notes(lane_index, completed_section->first, completed_section->second))
-									++lane.successful_replugged_measures;
-								if (lane.successful_replugged_measures >= kRepluggedMeasuresRequiredToLock)
-								{
-									const auto lock_range = next_replugged_lock_range(lane_index, lane.next_note_index);
-									if (lock_range.has_value())
-										lock_replugged_lane(lane_index, lock_range->first, lock_range->second);
-									lane.successful_replugged_measures = 0;
-								}
-							}
-						}
-					}
 				}
 				else
 				{
@@ -647,30 +623,6 @@ namespace rhythmreplugged::core
 				resolved_note_hit = true;
 				if (play_state_.gameplay_mode == GameplayMode::Replugged)
 					set_lane_stem_target_gain(lane_index, 1.0f);
-				if (play_state_.gameplay_mode == GameplayMode::Replugged)
-				{
-					const auto completed_section = replugged_section_range_for_time(lane_index, note_time_seconds);
-					if (completed_section.has_value() &&
-						completed_section->first + 0.001 >= lane.count_eligible_measure_start_seconds &&
-						lane.last_missed_note_time_seconds < completed_section->first)
-					{
-						const bool section_complete =
-							lane.next_note_index >= notes.size() ||
-							notes[lane.next_note_index].start_seconds >= completed_section->second - 0.001;
-						if (section_complete)
-						{
-							if (lane_measure_has_notes(lane_index, completed_section->first, completed_section->second))
-								++lane.successful_replugged_measures;
-							if (lane.successful_replugged_measures >= kRepluggedMeasuresRequiredToLock)
-							{
-								const auto lock_range = next_replugged_lock_range(lane_index, lane.next_note_index);
-								if (lock_range.has_value())
-									lock_replugged_lane(lane_index, lock_range->first, lock_range->second);
-								lane.successful_replugged_measures = 0;
-							}
-						}
-					}
-				}
 			}
 		}
 
@@ -1551,6 +1503,22 @@ namespace rhythmreplugged::core
 
 		const auto current_measure = replugged_section_range_for_time(lane_index, song_time_seconds + 0.001);
 		if (current_measure.has_value() &&
+			lane.lock_start_time_seconds > song_time_seconds + 0.001 &&
+			lane.lock_start_time_seconds < current_measure->second - 0.001)
+		{
+			const double lock_duration_seconds = (std::max)(lane.lock_end_time_seconds - lane.lock_start_time_seconds, 0.0);
+			lane.lock_start_time_seconds = current_measure->second;
+			lane.lock_end_time_seconds = lane.lock_start_time_seconds + lock_duration_seconds;
+		}
+		if (current_measure.has_value() &&
+			lane.lock_end_time_seconds > current_measure->first + 0.001 &&
+			lane.lock_end_time_seconds < current_measure->second - 0.001)
+		{
+			lane.lock_end_time_seconds = current_measure->second;
+		}
+		if (is_active_lane)
+			advance_replugged_measure_progress(lane_index, song_time_seconds);
+		if (current_measure.has_value() &&
 			!lane_measure_has_notes(lane_index, current_measure->first, current_measure->second))
 		{
 			const auto empty_measure_range = next_replugged_empty_measure_range(lane_index, song_time_seconds);
@@ -1616,6 +1584,59 @@ namespace rhythmreplugged::core
 			lane.event_flags |= 1u << 4;
 		if (was_actionable && !lane.is_actionable)
 			lane.event_flags |= 1u << 5;
+	}
+
+	void SongSession::advance_replugged_measure_progress(size_t lane_index, double song_time_seconds)
+	{
+		if (play_state_.gameplay_mode != GameplayMode::Replugged ||
+			lane_index >= play_state_.lanes.size() ||
+			lane_index >= gameplay_lanes_.size())
+		{
+			return;
+		}
+
+		GameplayLaneRuntimeState &lane = play_state_.lanes[lane_index];
+		if (lane.lock_end_time_seconds > song_time_seconds + 0.001)
+			return;
+
+		for (int guard = 0; guard < 64; ++guard)
+		{
+			if (song_time_seconds + 0.001 < lane.count_eligible_measure_start_seconds)
+				return;
+
+			const auto measure = replugged_section_range_for_time(
+				lane_index,
+				lane.count_eligible_measure_start_seconds + 0.001);
+			if (!measure.has_value())
+				return;
+			if (measure->first + 0.001 < lane.count_eligible_measure_start_seconds)
+			{
+				lane.count_eligible_measure_start_seconds = measure->second;
+				continue;
+			}
+			if (song_time_seconds + 0.001 < measure->second)
+				return;
+
+			const bool measure_counts = lane.last_missed_note_time_seconds < measure->first;
+			if (measure_counts)
+				++lane.successful_replugged_measures;
+			else
+				lane.successful_replugged_measures = 0;
+
+			lane.count_eligible_measure_start_seconds = measure->second;
+			if (lane.successful_replugged_measures >= kRepluggedMeasuresRequiredToLock)
+			{
+				const auto lock_range = next_replugged_lock_range(lane_index, lane.next_note_index);
+				if (lock_range.has_value())
+				{
+					lock_replugged_lane(lane_index, lock_range->first, lock_range->second);
+					lane.successful_replugged_measures = 0;
+					return;
+				}
+				lane.successful_replugged_measures = kRepluggedMeasuresRequiredToLock;
+				return;
+			}
+		}
 	}
 
 	void SongSession::lock_replugged_lane(size_t lane_index, double lock_start_time_seconds, double lock_end_time_seconds)
@@ -1729,6 +1750,35 @@ namespace rhythmreplugged::core
 		return false;
 	}
 
+	bool SongSession::any_other_lane_has_notes_in_measure(size_t excluded_lane_index, double measure_start_seconds, double measure_end_seconds) const
+	{
+		for (size_t lane_index = 0; lane_index < gameplay_lanes_.size(); ++lane_index)
+		{
+			if (lane_index == excluded_lane_index)
+				continue;
+			if (lane_measure_has_notes(lane_index, measure_start_seconds, measure_end_seconds))
+				return true;
+		}
+
+		return false;
+	}
+
+	bool SongSession::other_lane_unlocks_at_measure(size_t excluded_lane_index, double measure_end_seconds) const
+	{
+		for (size_t lane_index = 0; lane_index < play_state_.lanes.size(); ++lane_index)
+		{
+			if (lane_index == excluded_lane_index)
+				continue;
+			const GameplayLaneRuntimeState &lane = play_state_.lanes[lane_index];
+			if (lane.lock_end_time_seconds <= 0.0)
+				continue;
+			if (std::fabs(lane.lock_end_time_seconds - measure_end_seconds) <= 0.001)
+				return true;
+		}
+
+		return false;
+	}
+
 	float SongSession::replugged_lock_build_progress(size_t lane_index, double song_time_seconds) const
 	{
 		if (lane_index >= play_state_.lanes.size() || lane_index >= gameplay_lanes_.size())
@@ -1740,44 +1790,20 @@ namespace rhythmreplugged::core
 		if (song_time_seconds + 0.001 < lane.count_eligible_measure_start_seconds)
 			return 0.0f;
 
-		float built_measures = 0.0f;
-		double probe_time_seconds = lane.count_eligible_measure_start_seconds + 0.001;
-		for (int guard = 0; guard < 64; ++guard)
+		float built_measures = static_cast<float>(lane.successful_replugged_measures);
+		const auto measure = replugged_section_range_for_time(
+			lane_index,
+			lane.count_eligible_measure_start_seconds + 0.001);
+		if (measure.has_value() &&
+			measure->first + 0.001 >= lane.count_eligible_measure_start_seconds &&
+			lane.last_missed_note_time_seconds < measure->first)
 		{
-			const auto measure = replugged_section_range_for_time(lane_index, probe_time_seconds);
-			if (!measure.has_value())
-				break;
-			if (measure->first + 0.001 < lane.count_eligible_measure_start_seconds)
-			{
-				probe_time_seconds = measure->second + 0.001;
-				continue;
-			}
-			if (lane.last_missed_note_time_seconds >= measure->first)
-				break;
-			if (!lane_measure_has_notes(lane_index, measure->first, measure->second))
-			{
-				probe_time_seconds = measure->second + 0.001;
-				if (song_time_seconds <= measure->second + 0.001)
-					break;
-				continue;
-			}
-
 			const double measure_duration_seconds = (std::max)(measure->second - measure->first, 0.001);
-			if (song_time_seconds >= measure->second - 0.001)
-			{
-				built_measures += 1.0f;
-				probe_time_seconds = measure->second + 0.001;
-				if (built_measures >= static_cast<float>(kRepluggedMeasuresRequiredToLock))
-					break;
-				continue;
-			}
-
 			if (song_time_seconds >= measure->first)
 			{
 				const double elapsed_seconds = std::clamp(song_time_seconds - measure->first, 0.0, measure_duration_seconds);
 				built_measures += static_cast<float>(elapsed_seconds / measure_duration_seconds);
 			}
-			break;
 		}
 
 		return std::clamp(built_measures / static_cast<float>(kRepluggedMeasuresRequiredToLock), 0.0f, 1.0f);
@@ -1836,9 +1862,19 @@ namespace rhythmreplugged::core
 		const auto &notes = gameplay_lanes_[lane_index].midi_chart.notes();
 		if (note_index >= notes.size())
 			return std::nullopt;
-		const auto next_measure = replugged_section_range_for_note_index(lane_index, note_index);
+		auto next_measure = replugged_section_range_for_note_index(lane_index, note_index);
 		if (!next_measure.has_value())
 			return std::nullopt;
+
+		for (int guard = 0; guard < 64; ++guard)
+		{
+			if (any_other_lane_has_notes_in_measure(lane_index, next_measure->first, next_measure->second))
+				break;
+			const auto later_measure = replugged_section_range_for_time(lane_index, next_measure->second + 0.001);
+			if (!later_measure.has_value() || later_measure->first <= next_measure->first + 0.001)
+				return std::nullopt;
+			next_measure = later_measure;
+		}
 
 		const auto &measure_lines = gameplay_lanes_[lane_index].midi_chart.measure_lines();
 		double lock_end_time_seconds = next_measure->second;
@@ -1859,6 +1895,10 @@ namespace rhythmreplugged::core
 
 		const double minimum_lock_end_time_seconds = next_measure->second;
 		lock_end_time_seconds = (std::max)(lock_end_time_seconds, minimum_lock_end_time_seconds);
+		for (int guard = 0; guard < 64 && other_lane_unlocks_at_measure(lane_index, lock_end_time_seconds); ++guard)
+		{
+			lock_end_time_seconds = next_measure_boundary_at_or_after(lane_index, lock_end_time_seconds + 0.001);
+		}
 		return std::make_pair(next_measure->first, lock_end_time_seconds);
 	}
 
@@ -1975,6 +2015,8 @@ namespace rhythmreplugged::core
 			: 0.0f;
 		lane_view.has_scheduled_lock = play_state_.gameplay_mode == GameplayMode::Replugged &&
 			lane_runtime.lock_end_time_seconds > song_time_seconds();
+		lane_view.is_lock_ready = play_state_.gameplay_mode == GameplayMode::Replugged &&
+			lane_runtime.successful_replugged_measures >= kRepluggedMeasuresRequiredToLock;
 		lane_view.is_actionable = lane_runtime.is_actionable;
 		lane_view.should_prompt = lane_runtime.should_prompt;
 		lane_view.hide_note_visuals = false;

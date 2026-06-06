@@ -162,6 +162,7 @@ namespace rhythmreplugged::core
 		void consume_missed_note_groups(size_t lane_index, double song_time_seconds);
 		void advance_inactive_lane(size_t lane_index, double song_time_seconds);
 		void update_replugged_lane_state(size_t lane_index, double song_time_seconds, bool is_active_lane);
+		void advance_replugged_measure_progress(size_t lane_index, double song_time_seconds);
 		void lock_replugged_lane(size_t lane_index, double lock_start_time_seconds, double lock_end_time_seconds);
 		bool lane_has_actionable_note(size_t lane_index, double song_time_seconds) const;
 		int initial_active_lane_index() const;
@@ -172,6 +173,8 @@ namespace rhythmreplugged::core
 		std::optional<std::pair<double, double>> next_replugged_empty_measure_range(size_t lane_index, double song_time_seconds) const;
 		double next_measure_boundary_at_or_after(size_t lane_index, double song_time_seconds) const;
 		bool lane_measure_has_notes(size_t lane_index, double measure_start_seconds, double measure_end_seconds) const;
+		bool any_other_lane_has_notes_in_measure(size_t excluded_lane_index, double measure_start_seconds, double measure_end_seconds) const;
+		bool other_lane_unlocks_at_measure(size_t excluded_lane_index, double measure_end_seconds) const;
 		float replugged_lock_build_progress(size_t lane_index, double song_time_seconds) const;
 		size_t active_lane_index() const;
 		double adjusted_song_time_seconds() const;

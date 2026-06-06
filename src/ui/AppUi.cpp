@@ -336,15 +336,29 @@ namespace
 			draw_list->AddRectFilled(bar_min, bar_max, IM_COL32(22, 28, 40, 224), 4.0f);
 			draw_list->AddRect(bar_min, bar_max, IM_COL32(82, 94, 118, 255), 4.0f);
 
-			if (lane.has_scheduled_lock)
+			if (lane.lock_state == LaneLockState::Locked)
 			{
-				const float fill_progress = lane.lock_state == LaneLockState::Locked
-					? std::clamp(lane.lock_progress, 0.0f, 1.0f)
-					: 1.0f;
+				const float fill_progress = std::clamp(lane.lock_progress, 0.0f, 1.0f);
 				const float filled_right = bar_left + (bar_right - bar_left) * fill_progress;
 				draw_list->AddRectFilled(
 					bar_min,
 					ImVec2(filled_right, bar_max.y),
+					IM_COL32(84, 204, 118, 232),
+					4.0f);
+			}
+			else if (lane.has_scheduled_lock)
+			{
+				draw_list->AddRectFilled(
+					bar_min,
+					bar_max,
+					IM_COL32(84, 204, 118, 232),
+					4.0f);
+			}
+			else if (lane.is_lock_ready)
+			{
+				draw_list->AddRectFilled(
+					bar_min,
+					bar_max,
 					IM_COL32(84, 204, 118, 232),
 					4.0f);
 			}
@@ -364,7 +378,7 @@ namespace
 
 			const char *state_text = lane.lock_state == LaneLockState::Locked
 				? "Locked"
-				: (lane.has_scheduled_lock ? "Ready" : (lane.lock_build_progress > 0.0f ? "Building" : (lane.should_prompt ? "Play" : "Unlocked")));
+				: ((lane.has_scheduled_lock || lane.is_lock_ready) ? "Ready" : (lane.lock_build_progress > 0.0f ? "Building" : (lane.should_prompt ? "Play" : "Unlocked")));
 			const std::string label = lane.instrument_label + " - " + state_text;
 			const ImVec2 text_size = ImGui::CalcTextSize(label.c_str());
 			draw_list->AddText(
