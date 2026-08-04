@@ -67,13 +67,12 @@ The state where the lane is temporarily exempt from play and its locked section 
 
 ### Safely in the future
 
-A future measure start that has not already effectively begun by the time the game confirms the lock should occur.
+A future measure start after the section currently being played.
 
 Practical meaning:
 
 - A lane must never lock the section currently being played.
 - A newly earned lock should normally target the next measure.
-- If the final required note was hit too close to that next measure boundary for the transition to be fair and readable, the lock must be pushed later.
 
 This is intentionally a gameplay rule, not a renderer-specific timing constant.
 
@@ -180,7 +179,6 @@ Once a lane has entered `Ready`, the game chooses the earliest future measure th
 This means:
 
 - the next measure is preferred
-- if the next measure is too late to transition into fairly, choose a later measure
 - if the next measure has no other-lane notes, choose a later measure
 - the search continues measure by measure until an eligible measure is found
 
@@ -223,15 +221,13 @@ Lock duration is based on claimed instrument count.
 
 Formula:
 
-`(2 measures required to earn the lock * number of claimed instruments) + 1 measure`
+`2 measures required to earn the lock * number of claimed instruments`
 
 Examples:
 
-- 2 claimed instruments: 5 locked measures
-- 3 claimed instruments: 7 locked measures
-- 4 claimed instruments: 9 locked measures
-
-The extra `+1` measure exists to give the player time to switch lanes.
+- 2 claimed instruments: 4 locked measures
+- 3 claimed instruments: 6 locked measures
+- 4 claimed instruments: 8 locked measures
 
 ## Unlock Behavior
 
@@ -248,12 +244,11 @@ Newly unlocked lanes should be staggered so perfect play is achievable.
 Operational intent:
 
 - multiple lanes should not newly unlock on the same measure when the game can avoid it
-- the staggering target is 3 measures apart
+- the staggering target is 2 measures apart
 
 Rationale:
 
 - 2 measures to earn another lock
-- 1 additional measure to switch lanes
 
 It is still possible for multiple lanes to be simultaneously unlocked because of mistakes. What must be avoided is multiple lanes being newly scheduled to come unlocked on the same measure during otherwise correct play.
 
@@ -346,7 +341,19 @@ The per-lane progress bar does double duty as both lock-build and lock-warning f
 ### Yellow build
 
 - the bar fills yellow while building toward a lock
-- it reflects progress toward the 2 required measures
+- it reflects the percentage of elapsed time within the full required build window
+
+The required build window is:
+
+- start: the start of the first of the 2 required correct note-bearing measures
+- end: the last required note hit in the second required correct note-bearing measure
+
+Therefore:
+
+- the yellow fill is not a simple per-measure counter
+- it should begin filling during the first required measure
+- it should continue filling smoothly across the full two-measure build window
+- it reaches full yellow when the last required note for earning `Ready` is hit
 
 ### Full yellow ready state
 

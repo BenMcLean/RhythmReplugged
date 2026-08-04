@@ -8,7 +8,7 @@
 			"program": "${command:cmake.launchTargetPath}",
 			"cwd": "${workspaceFolder}",
 			"args": [
-				"--content-root",
+				"--songs-root",
 				"D:\\ROMs\\YARG"
 			]
 		},
