@@ -2559,19 +2559,25 @@ bool SongSession::other_lane_unlocks_too_close(size_t excluded_lane_index, doubl
 		if (lane_index >= gameplay_lanes_.size())
 			return std::nullopt;
 
-		double probe_time_seconds = next_measure_boundary_at_or_after(lane_index, song_time_seconds);
-		if (probe_time_seconds + 0.001 < song_time_seconds)
-			return std::nullopt;
+		auto measure = replugged_section_range_for_time(lane_index, song_time_seconds);
+		for (int guard = 0; guard < 64; ++guard)
+		{
+			if (!measure.has_value())
+				return std::nullopt;
+			if (!lane_measure_has_notes(lane_index, measure->first, measure->second))
+				break;
 
-		const auto first_measure = replugged_section_range_for_time(lane_index, probe_time_seconds);
-		if (!first_measure.has_value())
-			return std::nullopt;
-		if (lane_measure_has_notes(lane_index, first_measure->first, first_measure->second))
-			return std::nullopt;
+			const auto next_measure = next_replugged_section_range(lane_index, measure->second);
+			if (!next_measure.has_value() || next_measure->first <= measure->first + 0.001)
+			{
+				return std::nullopt;
+			}
+			measure = next_measure;
+		}
 
-		double empty_start_seconds = first_measure->first;
-		double empty_end_seconds = first_measure->second;
-		while (true)
+		double empty_start_seconds = measure->first;
+		double empty_end_seconds = measure->second;
+		for (int guard = 0; guard < 64; ++guard)
 		{
 			const auto next_measure = next_replugged_section_range(lane_index, empty_end_seconds);
 			if (!next_measure.has_value() ||
