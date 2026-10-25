@@ -647,7 +647,7 @@ namespace rhythmreplugged::core
 		}
 
 		refresh_active_sustains(lane_index, current_time_seconds, held_mask);
-		const std::uint8_t sustain_mask = active_sustain_lane_mask(lane_index, current_time_seconds);
+		const std::uint8_t sustain_mask = required_sustain_lane_mask(lane_index, current_time_seconds);
 		if (sustain_mask != 0)
 		{
 			const std::uint8_t imminent_note_mask = imminent_note_lane_mask(lane_index, current_time_seconds);
@@ -1027,6 +1027,13 @@ namespace rhythmreplugged::core
 		::rhythmreplugged::frontend_contract::AudioBatch batch = audio_mixer_.render(frame_count);
 		transport_.on_audio_rendered(batch.frame_count());
 		return batch;
+	}
+
+	void SongSession::advance_headless_tick(int ticks_per_second)
+	{
+		const size_t frame_count = transport_.frames_for_next_tick(ticks_per_second);
+		song_player_.advance_silent(frame_count);
+		transport_.on_audio_rendered(frame_count);
 	}
 
 	double SongSession::song_time_seconds() const
@@ -1457,6 +1464,23 @@ namespace rhythmreplugged::core
 
 			if (sustain_end_time > 0.0)
 				mask |= static_cast<std::uint8_t>(1u << fret);
+		}
+
+		return mask;
+	}
+
+	// The lanes the player must still be holding to keep the stem audible. This is the active sustain
+	// mask minus any sustain within the drop leniency of its end, so releasing on time (or slightly
+	// early) at the end of a sustain is never treated as a drop. The active mask itself is left alone
+	// because the highway uses it to draw sustain glow.
+	std::uint8_t SongSession::required_sustain_lane_mask(size_t lane_index, double song_time_seconds) const
+	{
+		const GameplayLaneRuntimeState &lane = play_state_.lanes[lane_index];
+		std::uint8_t mask = active_sustain_lane_mask(lane_index, song_time_seconds);
+		for (size_t fret = 0; fret < lane.lane_sustain_end_times_.size(); ++fret)
+		{
+			if (lane.lane_sustain_end_times_[fret] - song_time_seconds <= kSustainDropLeniencySeconds)
+				mask &= static_cast<std::uint8_t>(~(1u << fret));
 		}
 
 		return mask;

@@ -309,6 +309,19 @@ if(TARGET stage_libretro)
 	add_dependencies(stage stage_libretro)
 endif()
 
+add_executable(rr_sim
+	${RR_SRC_DIR}/sim/SimMain.cpp
+	${RR_SRC_DIR}/platform_sdl3/FileSystem.cpp
+)
+
+target_include_directories(rr_sim PRIVATE
+	${RR_SRC_DIR}
+)
+
+target_link_libraries(rr_sim PRIVATE
+	rr_core
+)
+
 add_executable(rr_transport_harness
 	${RR_SRC_DIR}/core/play/TransportParityHarness.cpp
 )

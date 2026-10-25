@@ -158,6 +158,44 @@ namespace rhythmreplugged::core
 		return adopt_preloaded(std::move(preloaded_song_data), error_message);
 	}
 
+	bool SongPlayer::preload_headless(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+		const std::string &song_directory,
+		double duration_seconds,
+		PreloadedSongData &preloaded_song_data,
+		std::string &error_message)
+	{
+		preloaded_song_data = {};
+
+		const SongIniParseResult parse_result = parse_song_ini(file_system, song_directory + "/song.ini");
+		if (!parse_result.has_song_section || !parse_result.parsed_successfully)
+		{
+			error_message = parse_result.error_message.empty() ? "Could not parse song.ini." : parse_result.error_message;
+			return false;
+		}
+
+		preloaded_song_data.metadata = make_song_metadata_view(parse_result.metadata, folder_name_from_path(song_directory));
+		const size_t frame_count = static_cast<size_t>(std::llround((std::max)(duration_seconds, 0.0) * static_cast<double>(kRuntimeSampleRate)));
+		for (std::string_view stem_name : kPlayableStemNames)
+		{
+			// Existence check only: the stem files are never opened.
+			if (!file_system.path_exists(song_directory + "/" + std::string(stem_name) + ".ogg"))
+				continue;
+
+			PreloadedStemTrack track;
+			track.stem_name = stem_name;
+			track.frame_count = frame_count;
+			preloaded_song_data.stems.push_back(std::move(track));
+		}
+
+		if (preloaded_song_data.stems.empty())
+		{
+			error_message = "Could not find any supported .ogg stems.";
+			return false;
+		}
+
+		return true;
+	}
+
 	bool SongPlayer::preload(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
 		const std::string &song_directory,
 		PreloadedSongData &preloaded_song_data,
@@ -374,6 +412,11 @@ namespace rhythmreplugged::core
 		return normalize_runtime_audio(track, error_message);
 	}
 
+	void SongPlayer::advance_silent(size_t frame_count)
+	{
+		frame_index_ = (std::min)(frame_index_ + frame_count, longest_track_frame_count());
+	}
+
 	bool SongPlayer::decode_vorbis(const std::vector<std::uint8_t> &bytes,
 		PreloadedStemTrack &track,
 		std::string &error_message,
@@ -585,7 +628,7 @@ namespace rhythmreplugged::core
 
 	std::int16_t SongPlayer::sample_track_channel(const StemTrack &track, size_t frame_index, int channel) const
 	{
-		if (frame_index >= track.frame_count)
+		if (frame_index >= track.frame_count || track.samples.empty())
 			return 0;
 
 		const int resolved_channel = track.channels == 1 ? 0 : channel;

@@ -67,6 +67,16 @@ namespace rhythmreplugged::core
 			const std::string &song_directory,
 			PreloadedSongData &preloaded_song_data,
 			std::string &error_message);
+		// Headless variant of preload for the bot simulator: reads song.ini and checks which stem files
+		// exist, but never opens or decodes them. Each stem becomes a sample-less track of the given
+		// duration (take it from the chart), so it must only be driven with advance_silent(), never rendered.
+		static bool preload_headless(::rhythmreplugged::frontend_contract::IRetroFileSystem &file_system,
+			const std::string &song_directory,
+			double duration_seconds,
+			PreloadedSongData &preloaded_song_data,
+			std::string &error_message);
+		// Moves the playhead forward without mixing audio. Stem gains are not faded.
+		void advance_silent(size_t frame_count);
 		static bool decode_preloaded_stem(const std::vector<std::uint8_t> &bytes,
 			PreloadedStemTrack &track,
 			std::string &error_message,

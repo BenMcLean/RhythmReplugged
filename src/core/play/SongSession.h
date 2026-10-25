@@ -19,6 +19,10 @@ namespace rhythmreplugged::core
 	class SongSession
 	{
 	public:
+		// Notes at least this long are sustains that must be held. Public so the bot and any UI that
+		// draws sustain tails use the same threshold as the hit logic.
+		static constexpr double kSustainMinimumSeconds = 0.08;
+
 		// The one rule for earning a lock in Replugged mode. It is made by looking ahead whenever a
 		// lane comes unlocked or a note is missed. The first and last required notes are fixed for the
 		// life of the plan; only the lock target may be re-chosen while the lane is not yet committed.
@@ -106,6 +110,9 @@ namespace rhythmreplugged::core
 		const GameplayFrameSnapshot &frame_snapshot() const;
 		void render_interleaved_s16(std::int16_t *output, size_t frame_count);
 		::rhythmreplugged::frontend_contract::AudioBatch render_fixed_tick_audio(int ticks_per_second);
+		// Advances song time by one fixed tick without mixing audio. Only for sessions loaded from
+		// SongPlayer::preload_headless data (the bot simulator).
+		void advance_headless_tick(int ticks_per_second);
 		double song_time_seconds() const;
 		double song_time_beats(double beats_per_minute) const;
 		GameplayMode gameplay_mode() const;
@@ -156,7 +163,6 @@ namespace rhythmreplugged::core
 		static constexpr double kChartLookbehindSeconds = 0.35;
 		static constexpr double kChartLookaheadSeconds = 3.0;
 		static constexpr double kNoteHitWindowSeconds = 0.125;
-		static constexpr double kSustainMinimumSeconds = 0.08;
 		static constexpr double kSustainDropLeniencySeconds = 0.025;
 		static constexpr int kRepluggedMeasuresRequiredToLock = 2;
 		static constexpr double kRepluggedActionableLookaheadSeconds = 1.2;
@@ -181,6 +187,7 @@ namespace rhythmreplugged::core
 		std::uint8_t imminent_note_lane_mask(size_t lane_index, double song_time_seconds) const;
 		void refresh_active_sustains(size_t lane_index, double song_time_seconds, std::uint8_t held_mask);
 		std::uint8_t active_sustain_lane_mask(size_t lane_index, double song_time_seconds) const;
+		std::uint8_t required_sustain_lane_mask(size_t lane_index, double song_time_seconds) const;
 		void start_sustains_for_note_group(size_t lane_index, size_t start_index, size_t end_index);
 		void consume_missed_note_groups(size_t lane_index, double song_time_seconds);
 		void advance_inactive_lane(size_t lane_index, double song_time_seconds);
