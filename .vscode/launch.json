@@ -2,14 +2,30 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Debug CMake Target (Windows/MSVC)",
-			"type": "cppvsdbg",
+			"name": "Debug CMake Target (Windows/MinGW gdb)",
+			"type": "cppdbg",
 			"request": "launch",
 			"program": "${command:cmake.launchTargetPath}",
 			"cwd": "${workspaceFolder}",
 			"args": [
 				"--songs-root",
 				"D:\\ROMs\\YARG"
+			],
+			"MIMode": "gdb",
+			"miDebuggerPath": "C:/tools/msys64/ucrt64/bin/gdb.exe",
+			"externalConsole": false,
+			"environment": [
+				{
+					"name": "PATH",
+					"value": "C:/tools/msys64/ucrt64/bin;${env:PATH}"
+				}
+			],
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				}
 			]
 		},
 		{

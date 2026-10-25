@@ -637,3 +637,8 @@ imgui.ini
 build/
 /songs/
 /.llm-context/
+
+# Shared VS Code workspace config
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/extensions.json

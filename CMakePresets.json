@@ -19,7 +19,11 @@
 			"name": "windows-base",
 			"hidden": true,
 			"inherits": "base",
-			"generator": "Visual Studio 17 2022"
+			"condition": {
+				"type": "equals",
+				"lhs": "${hostSystemName}",
+				"rhs": "Windows"
+			}
 		},
 		{
 			"name": "windows-x64",
@@ -35,10 +39,54 @@
 			}
 		},
 		{
+			"name": "windows-mingw-base",
+			"hidden": true,
+			"inherits": "base",
+			"generator": "Ninja",
+			"condition": {
+				"type": "equals",
+				"lhs": "${hostSystemName}",
+				"rhs": "Windows"
+			},
+			"environment": {
+				"PATH": "C:/tools/msys64/ucrt64/bin;$penv{PATH}"
+			},
+			"cacheVariables": {
+				"VCPKG_TARGET_TRIPLET": "x64-mingw-static",
+				"VCPKG_HOST_TRIPLET": "x64-mingw-static",
+				"CMAKE_C_COMPILER": "C:/tools/msys64/ucrt64/bin/gcc.exe",
+				"CMAKE_CXX_COMPILER": "C:/tools/msys64/ucrt64/bin/g++.exe",
+				"CMAKE_MAKE_PROGRAM": "C:/tools/msys64/ucrt64/bin/ninja.exe"
+			}
+		},
+		{
+			"name": "windows-mingw-debug",
+			"displayName": "Windows MinGW Debug",
+			"description": "FOSS GCC toolchain from MSYS2 UCRT64.",
+			"inherits": "windows-mingw-base",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug"
+			}
+		},
+		{
+			"name": "windows-mingw-release",
+			"displayName": "Windows MinGW Release",
+			"description": "FOSS GCC toolchain from MSYS2 UCRT64.",
+			"inherits": "windows-mingw-base",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release"
+			}
+		},
+		{
 			"name": "linux-debug",
 			"displayName": "Linux Debug",
 			"description": "Linux desktop build with shared vcpkg dependencies.",
 			"inherits": "base",
+			"condition": {
+				"type": "equals",
+				"lhs": "${hostSystemName}",
+				"rhs": "Linux"
+			},
 			"generator": "Ninja",
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Debug",
@@ -50,6 +98,11 @@
 			"displayName": "Linux Release",
 			"description": "Linux desktop build with shared vcpkg dependencies.",
 			"inherits": "base",
+			"condition": {
+				"type": "equals",
+				"lhs": "${hostSystemName}",
+				"rhs": "Linux"
+			},
 			"generator": "Ninja",
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Release",
@@ -62,6 +115,11 @@
 			"description": "Shared WSL/Linux cross-compilation settings for ARM64/AArch64 output.",
 			"hidden": true,
 			"inherits": "base",
+			"condition": {
+				"type": "equals",
+				"lhs": "${hostSystemName}",
+				"rhs": "Linux"
+			},
 			"generator": "Ninja",
 			"cacheVariables": {
 				"VCPKG_TARGET_TRIPLET": "arm64-linux",
@@ -98,6 +156,11 @@
 			"description": "Internal libretro-only build without SDL3 frontend dependencies.",
 			"hidden": true,
 			"inherits": "base",
+			"condition": {
+				"type": "equals",
+				"lhs": "${hostSystemName}",
+				"rhs": "Linux"
+			},
 			"generator": "Ninja",
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Debug",
@@ -113,6 +176,11 @@
 			"description": "Internal libretro-only build without SDL3 frontend dependencies.",
 			"hidden": true,
 			"inherits": "base",
+			"condition": {
+				"type": "equals",
+				"lhs": "${hostSystemName}",
+				"rhs": "Linux"
+			},
 			"generator": "Ninja",
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Release",
@@ -167,6 +235,14 @@
 			"targets": [
 				"windows_artifacts"
 			]
+		},
+		{
+			"name": "windows-mingw-debug",
+			"configurePreset": "windows-mingw-debug"
+		},
+		{
+			"name": "windows-mingw-release",
+			"configurePreset": "windows-mingw-release"
 		},
 		{
 			"name": "linux-debug",
