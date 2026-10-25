@@ -53,7 +53,7 @@ A measure in a lane that contains no note starts in that lane.
 
 The state where an unlocked lane is accumulating correct-measure progress toward its next lock.
 
-Building begins at the moment the first note required to earn a lock is hit (not at the start of its measure) and ends when the last note required to earn a lock is hit, at which point the lane becomes `Ready`.
+Building begins at the moment the first note required to earn a lock is hit (not at the start of its measure) and ends when the last note required to earn a lock is hit, at which point the lane becomes `Ready`. See "The build window".
 
 ### Ready
 
@@ -136,6 +136,51 @@ Lock progress is based on full measures, but success does not need to be deferre
 If the player hits the last required note of the second required measure, then the game already knows that lane has successfully completed the required work needed to begin attempting a future lock.
 
 That lane may therefore enter `Ready` as soon as the final required note is hit, even if the actual lock will only begin at a later measure boundary.
+
+### The build window
+
+Earning a lock is governed by exactly one mechanism: the **build window**. There is no other path to a lock.
+
+The build window is a plan, made in advance, that names:
+
+- the **first required note**: the first note of the first full note-bearing measure at or after the plan's start point
+- the **last required note**: the point where playing everything from the first required note onward has earned a lock (see below)
+
+The plan is made by looking ahead, so the first required note and the last required note, and therefore the temporal distance between them, are known before the player plays either one.
+
+A new plan is made:
+
+- at song start, for the initial active lane
+- when a locked lane comes unlocked, starting from the measure line where the lock ended
+- when a note is missed while the lane is unlocked, building, or ready, starting from the first measure line after the missed note
+
+Because the plan starts on a measure line, partial measures never count. After a miss, the remainder of the measure containing the missed note is ordinary play that earns nothing; the first required note is the first note of the next full note-bearing measure. Empty measures at the start of the search are skipped because they are already locked.
+
+The lane states follow from the plan:
+
+- `Unlocked`: the first required note has not been hit yet
+- `Building`: the first required note has been hit, the last required note has not
+- `Ready`: the last required note has been hit
+- `Committed`: the last note before the future locked section has been hit
+
+The only event that clears a build window is a missed note. Nothing else resets it.
+
+#### Upper bound of the build window
+
+The last required note is the last note of the second note-bearing measure of the plan, with one exception that is part of the same rule rather than a special case:
+
+> At any point, playing all the notes from that point through the last note before an empty measure earns a lock, because empty measures are automatically locked.
+
+So the upper bound of the build window is the earlier of:
+
+- the last note of the second required note-bearing measure, and
+- the last note before the first empty measure that follows the first required measure
+
+For example, if a lane has one note-bearing measure followed by an empty measure, the build window spans only that one measure, from its first note to its last note, and the empty measure is the locked section that is earned.
+
+#### Choosing the locked section for a build window
+
+While the plan is `Unlocked`, `Building`, or `Ready`, the lock start may be re-chosen as other lanes' locks and the Keep Busy rule change which measures are eligible. Only the lock start may move: the first and last required notes of the window stay fixed until a missed note replaces the plan. The lock start is chosen by the rules in "Choosing the Next Locked Measure" below, and an upcoming empty measure is chosen when it comes before any other eligible measure.
 
 ### Ready still requires correct play
 
@@ -355,7 +400,7 @@ The required build window is:
 Therefore:
 
 - the yellow fill is not a measure counter, and it does not measure position within the measures
-- it measures the temporal distance between the first required note and the last required note
+- it measures the temporal distance between the first required note and the last required note, both of which are known in advance from the build window
 - it is empty (`Unlocked`) until the first required note is hit; it does not start at the measure line
 - it should continue filling smoothly and monotonically until the last required note is hit
 - it reaches full yellow when the last required note for earning `Ready` is hit

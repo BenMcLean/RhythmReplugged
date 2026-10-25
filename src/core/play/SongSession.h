@@ -19,6 +19,28 @@ namespace rhythmreplugged::core
 	class SongSession
 	{
 	public:
+		// The one rule for earning a lock in Replugged mode. It is made by looking ahead whenever a
+		// lane comes unlocked or a note is missed. The first and last required notes are fixed for the
+		// life of the plan; only the lock target may be re-chosen while the lane is not yet committed.
+		// The lane's build state is derived from next_note_index against these note indexes.
+		struct RepluggedBuildPlan
+		{
+			enum class Phase
+			{
+				None,
+				Unlocked,
+				Building,
+				Ready,
+			};
+
+			bool valid = false;
+			size_t first_note_index = 0;
+			size_t last_note_index = 0;
+			double first_note_time_seconds = 0.0;
+			double last_note_time_seconds = 0.0;
+			double earliest_lock_start_seconds = 0.0;
+		};
+
 		struct GameplayLaneRuntimeState
 		{
 			std::array<bool, 5> lane_held{};
@@ -33,17 +55,8 @@ namespace rhythmreplugged::core
 			int lock_end_measure_index = -1;
 			double lock_start_time_seconds = 0.0;
 			double lock_end_time_seconds = 0.0;
-			int ready_lock_start_measure_index = -1;
-			int ready_lock_end_measure_index = -1;
-			double ready_lock_start_time_seconds = 0.0;
-			double ready_lock_end_time_seconds = 0.0;
-			size_t ready_lock_note_index = 0;
 			float lock_progress = 0.0f;
-			double last_missed_note_time_seconds = -1.0;
-			int successful_replugged_measures = 0;
-			int count_eligible_measure_index = 0;
-			double count_eligible_measure_start_seconds = 0.0;
-			bool lock_ready = false;
+			RepluggedBuildPlan build_plan;
 			bool is_actionable = false;
 			bool should_prompt = false;
 			std::uint32_t event_flags = 0;
@@ -172,14 +185,16 @@ namespace rhythmreplugged::core
 		void consume_missed_note_groups(size_t lane_index, double song_time_seconds);
 		void advance_inactive_lane(size_t lane_index, double song_time_seconds);
 		void update_replugged_lane_state(size_t lane_index, double song_time_seconds, bool is_active_lane);
-		void advance_replugged_measure_progress(size_t lane_index, double song_time_seconds);
-		void advance_replugged_measure_progress_on_hit(size_t lane_index, double note_time_seconds);
+		std::optional<RepluggedBuildPlan> compute_replugged_build_plan(size_t lane_index, double start_seconds) const;
+		void replan_replugged_build(size_t lane_index, double start_seconds);
+		std::optional<std::pair<double, double>> replugged_build_target_range(size_t lane_index, double song_time_seconds) const;
+		bool try_commit_replugged_build_plan(size_t lane_index, double song_time_seconds);
+		RepluggedBuildPlan::Phase replugged_build_phase(size_t lane_index) const;
 		void lock_replugged_lane(size_t lane_index, double lock_start_time_seconds, double lock_end_time_seconds);
 		void set_replugged_lock_schedule_by_measure(size_t lane_index, int lock_start_measure_index, int lock_end_measure_index);
 		void sync_replugged_lane_schedule_times(size_t lane_index);
-		bool try_commit_replugged_ready_lock(size_t lane_index, double song_time_seconds);
 		size_t first_note_index_at_or_after(size_t lane_index, double song_time_seconds) const;
-		std::optional<std::pair<double, double>> predicted_replugged_lock_range(size_t lane_index, double song_time_seconds) const;
+		std::optional<std::pair<double, double>> visual_replugged_lock_range(size_t lane_index, double song_time_seconds) const;
 		bool lane_has_actionable_note(size_t lane_index, double song_time_seconds) const;
 		int initial_active_lane_index() const;
 		void apply_replugged_keep_busy_rule(double song_time_seconds);
@@ -202,7 +217,6 @@ namespace rhythmreplugged::core
 		bool any_other_lane_is_available_in_measure(size_t excluded_lane_index, int measure_index, double measure_start_seconds, double measure_end_seconds) const;
 		std::optional<double> lane_measure_last_note_time(size_t lane_index, double measure_start_seconds, double measure_end_seconds) const;
 		std::optional<double> lane_measure_first_note_time(size_t lane_index, double measure_start_seconds, double measure_end_seconds) const;
-		std::optional<std::pair<double, double>> replugged_lock_build_window(size_t lane_index) const;
 		double earliest_replugged_lock_start_after_required_measure(size_t lane_index, double measure_start_seconds, double measure_end_seconds) const;
 		double advance_measure_boundary(size_t lane_index, double measure_end_seconds, int measure_count) const;
 		double retreat_measure_boundary(size_t lane_index, double measure_end_seconds, int measure_count) const;

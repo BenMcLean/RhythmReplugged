@@ -362,7 +362,7 @@ namespace
 					IM_COL32(224, 190, 72, 220),
 					4.0f);
 			}
-			else if (lane.lock_build_progress > 0.0f)
+			else if (lane.is_lock_building)
 			{
 				const float filled_right = bar_left + (bar_right - bar_left) * std::clamp(lane.lock_build_progress, 0.0f, 1.0f);
 				draw_list->AddRectFilled(
@@ -378,7 +378,7 @@ namespace
 
 			const char *state_text = lane.lock_state == LaneLockState::Locked
 				? "Locked"
-				: (lane.is_lock_committed ? "Committed" : ((lane.is_lock_ready) ? "Ready" : (lane.lock_build_progress > 0.0f ? "Building" : (lane.should_prompt ? "Play" : "Unlocked"))));
+				: (lane.is_lock_committed ? "Committed" : ((lane.is_lock_ready) ? "Ready" : (lane.is_lock_building ? "Building" : (lane.should_prompt ? "Play" : "Unlocked"))));
 			const std::string label = lane.instrument_label + " - " + state_text;
 			const ImVec2 text_size = ImGui::CalcTextSize(label.c_str());
 			draw_list->AddText(
