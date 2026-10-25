@@ -2229,6 +2229,24 @@ namespace rhythmreplugged::core
 		return last_note_time_seconds;
 	}
 
+	std::optional<double> SongSession::lane_measure_first_note_time(size_t lane_index, double measure_start_seconds, double measure_end_seconds) const
+	{
+		if (lane_index >= gameplay_lanes_.size())
+			return std::nullopt;
+
+		const auto &notes = gameplay_lanes_[lane_index].midi_chart.notes();
+		for (const MidiChartNote &note : notes)
+		{
+			if (note.start_seconds + 0.001 < measure_start_seconds)
+				continue;
+			if (note.start_seconds >= measure_end_seconds - 0.001)
+				break;
+			return note.start_seconds;
+		}
+
+		return std::nullopt;
+	}
+
 	std::optional<std::pair<double, double>> SongSession::replugged_lock_build_window(size_t lane_index) const
 	{
 		if (lane_index >= play_state_.lanes.size() || lane_index >= gameplay_lanes_.size())
@@ -2242,13 +2260,20 @@ namespace rhythmreplugged::core
 			return std::nullopt;
 		if (lane.last_missed_note_time_seconds >= first_required_measure->first)
 			return std::nullopt;
-		if (!lane_measure_has_notes(lane_index, first_required_measure->first, first_required_measure->second))
+		// After a required measure is completed, count_eligible_measure_index points at the measure
+		// after it, which may be empty. The window is anchored on the completed measures instead.
+		if (lane.successful_replugged_measures <= 0 &&
+			!lane_measure_has_notes(lane_index, first_required_measure->first, first_required_measure->second))
+		{
 			return std::nullopt;
+		}
 
+		// Once the lane is Ready, count_eligible_measure_index has advanced past both required
+		// measures, so the window must rewind across all of them to stay anchored in place.
 		const int completed_required_measures = (std::clamp)(
 			lane.successful_replugged_measures,
 			0,
-			kRepluggedMeasuresRequiredToLock - 1);
+			kRepluggedMeasuresRequiredToLock);
 		int first_required_measure_index = lane.count_eligible_measure_index;
 		for (int completed_index = 0; completed_index < completed_required_measures; ++completed_index)
 		{
@@ -2259,7 +2284,7 @@ namespace rhythmreplugged::core
 					lane_index,
 					first_required_measure->first);
 				if (!previous_measure.has_value() ||
-					previous_measure->second >= first_required_measure->first - 0.001)
+					previous_measure->first >= first_required_measure->first - 0.001)
 				{
 					return std::nullopt;
 				}
@@ -2307,8 +2332,16 @@ namespace rhythmreplugged::core
 		if (!final_required_note_time.has_value())
 			return std::nullopt;
 
-		return std::make_pair(
+		// The window spans the first required note to the last required note, not the measure bounds.
+		const std::optional<double> first_required_note_time = lane_measure_first_note_time(
+			lane_index,
 			first_required_measure->first,
+			first_required_measure->second);
+		if (!first_required_note_time.has_value())
+			return std::nullopt;
+
+		return std::make_pair(
+			first_required_note_time.value(),
 			final_required_note_time.value());
 	}
 
@@ -2457,6 +2490,10 @@ bool SongSession::other_lane_unlocks_too_close(size_t excluded_lane_index, doubl
 			return 0.0f;
 		const auto build_window = replugged_lock_build_window(lane_index);
 		if (!build_window.has_value())
+			return 0.0f;
+
+		// Building starts when the first required note has actually been hit.
+		if (lane.next_note_index <= first_note_index_at_or_after(lane_index, build_window->first))
 			return 0.0f;
 
 		const double build_duration_seconds = (std::max)(build_window->second - build_window->first, 0.001);

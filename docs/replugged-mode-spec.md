@@ -53,6 +53,8 @@ A measure in a lane that contains no note starts in that lane.
 
 The state where an unlocked lane is accumulating correct-measure progress toward its next lock.
 
+Building begins at the moment the first note required to earn a lock is hit (not at the start of its measure) and ends when the last note required to earn a lock is hit, at which point the lane becomes `Ready`.
+
 ### Ready
 
 The state where a lane has earned a possible future lock, but continued correct play is still required before that lock becomes guaranteed.
@@ -138,6 +140,8 @@ That lane may therefore enter `Ready` as soon as the final required note is hit,
 ### Ready still requires correct play
 
 A lane in `Ready` is still playable and still fragile.
+
+Remaining in `Ready` for a long time is expected and normal, for example when the chosen lock target is many measures away because no other lane has notes in between. The lane stays `Ready`, shown as full yellow, until the last note before the locked section is hit (`Committed`) or a note is missed.
 
 Missing a note while `Ready` has the same effect as missing a note while `Building`:
 
@@ -345,15 +349,17 @@ The per-lane progress bar does double duty as both lock-build and lock-warning f
 
 The required build window is:
 
-- start: the start of the first of the 2 required correct note-bearing measures
-- end: the last required note hit in the second required correct note-bearing measure
+- start: the first required note, i.e. the first note of the first of the 2 required correct note-bearing measures, once it has been hit
+- end: the last required note in the second required correct note-bearing measure
 
 Therefore:
 
-- the yellow fill is not a simple per-measure counter
-- it should begin filling during the first required measure
-- it should continue filling smoothly across the full two-measure build window
+- the yellow fill is not a measure counter, and it does not measure position within the measures
+- it measures the temporal distance between the first required note and the last required note
+- it is empty (`Unlocked`) until the first required note is hit; it does not start at the measure line
+- it should continue filling smoothly and monotonically until the last required note is hit
 - it reaches full yellow when the last required note for earning `Ready` is hit
+- a missed note resets it to empty
 
 ### Full yellow ready state
 

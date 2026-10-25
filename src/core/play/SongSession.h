@@ -201,6 +201,7 @@ namespace rhythmreplugged::core
 		bool any_other_lane_has_notes_in_measure(size_t excluded_lane_index, double measure_start_seconds, double measure_end_seconds) const;
 		bool any_other_lane_is_available_in_measure(size_t excluded_lane_index, int measure_index, double measure_start_seconds, double measure_end_seconds) const;
 		std::optional<double> lane_measure_last_note_time(size_t lane_index, double measure_start_seconds, double measure_end_seconds) const;
+		std::optional<double> lane_measure_first_note_time(size_t lane_index, double measure_start_seconds, double measure_end_seconds) const;
 		std::optional<std::pair<double, double>> replugged_lock_build_window(size_t lane_index) const;
 		double earliest_replugged_lock_start_after_required_measure(size_t lane_index, double measure_start_seconds, double measure_end_seconds) const;
 		double advance_measure_boundary(size_t lane_index, double measure_end_seconds, int measure_count) const;
