@@ -48,6 +48,10 @@ namespace rhythmreplugged::core
 		struct GameplayLaneRuntimeState
 		{
 			std::array<bool, 5> lane_held{};
+			// Frets pressed since the last note hit on this lane. A note can only be hit by a fret in
+			// this mask, so a button held over from an earlier note (e.g. a sustain on the same fret)
+			// cannot hit the next note without being released and pressed again.
+			std::uint8_t fresh_press_mask = 0;
 			std::array<double, 5> lane_sustain_end_times_{};
 			std::array<double, 5> lane_sustain_release_times_{};
 			std::uint64_t input_generation = 0;

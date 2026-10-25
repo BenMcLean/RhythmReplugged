@@ -28,7 +28,7 @@ namespace rhythmreplugged::core
 		};
 
 		constexpr std::uint32_t kSerializedPlayStateMagic = 0x52525053u; // RRPS
-		constexpr std::uint32_t kSerializedPlayStateVersion = 12u;
+		constexpr std::uint32_t kSerializedPlayStateVersion = 13u;
 
 		struct SerializedPlayStateHeader
 		{
@@ -50,6 +50,7 @@ namespace rhythmreplugged::core
 		struct SerializedLaneRuntimeState
 		{
 			std::uint8_t lane_held_mask = 0;
+			std::uint8_t fresh_press_mask = 0;
 			std::uint8_t lock_state = 0;
 			std::uint8_t is_actionable = 0;
 			std::uint8_t should_prompt = 0;
@@ -596,6 +597,7 @@ namespace rhythmreplugged::core
 		const std::uint8_t held_mask = lane_mask_from_state(lane.lane_held);
 
 		const std::uint8_t pressed_mask = lane_mask_from_state(lane_pressed);
+		lane.fresh_press_mask |= pressed_mask;
 		bool resolved_note_hit = false;
 		if (pressed_mask != 0 && lane.next_note_index < gameplay_lanes_[lane_index].midi_chart.notes().size())
 		{
@@ -607,14 +609,20 @@ namespace rhythmreplugged::core
 				const std::uint8_t expected_mask = note_group_lane_mask(lane_index, lane.next_note_index, group_end_index);
 				if (held_mask_satisfies_expected(held_mask, expected_mask))
 				{
-					start_sustains_for_note_group(lane_index, lane.next_note_index, group_end_index);
-					lane.next_note_index = group_end_index;
-					lane.consumed_input_generation = lane.input_generation;
-					resolved_note_hit = true;
-					if (play_state_.gameplay_mode == GameplayMode::Replugged)
+					// A press of some other fret doesn't hit a note that is only satisfied by buttons
+					// held over from before: the note needs a fresh press of its own.
+					if ((lane.fresh_press_mask & expected_mask) != 0)
 					{
-						try_commit_replugged_build_plan(lane_index, current_time_seconds);
-						set_lane_stem_target_gain(lane_index, 1.0f);
+						start_sustains_for_note_group(lane_index, lane.next_note_index, group_end_index);
+						lane.next_note_index = group_end_index;
+						lane.consumed_input_generation = lane.input_generation;
+						lane.fresh_press_mask &= static_cast<std::uint8_t>(~expected_mask);
+						resolved_note_hit = true;
+						if (play_state_.gameplay_mode == GameplayMode::Replugged)
+						{
+							try_commit_replugged_build_plan(lane_index, current_time_seconds);
+							set_lane_stem_target_gain(lane_index, 1.0f);
+						}
 					}
 				}
 				else
@@ -632,11 +640,13 @@ namespace rhythmreplugged::core
 			const std::uint8_t expected_mask = note_group_lane_mask(lane_index, lane.next_note_index, group_end_index);
 			if (lane.input_generation > lane.consumed_input_generation &&
 				std::fabs(note_time_seconds - current_time_seconds) <= kNoteHitWindowSeconds &&
+				(lane.fresh_press_mask & expected_mask) != 0 &&
 				held_mask_satisfies_expected(held_mask, expected_mask))
 			{
 				start_sustains_for_note_group(lane_index, lane.next_note_index, group_end_index);
 				lane.next_note_index = group_end_index;
 				lane.consumed_input_generation = lane.input_generation;
+				lane.fresh_press_mask &= static_cast<std::uint8_t>(~expected_mask);
 				resolved_note_hit = true;
 				if (play_state_.gameplay_mode == GameplayMode::Replugged)
 				{
@@ -646,6 +656,7 @@ namespace rhythmreplugged::core
 			}
 		}
 
+		lane.fresh_press_mask &= held_mask;
 		refresh_active_sustains(lane_index, current_time_seconds, held_mask);
 		const std::uint8_t sustain_mask = required_sustain_lane_mask(lane_index, current_time_seconds);
 		if (sustain_mask != 0)
@@ -694,6 +705,9 @@ namespace rhythmreplugged::core
 		play_state_.active_lane_index = next_index;
 		GameplayLaneRuntimeState &next_lane = play_state_.lanes[static_cast<size_t>(play_state_.active_lane_index)];
 		next_lane.lane_held.fill(false);
+		// Frets already down when the player switches count as pressed for the new lane; the trim in
+		// update_gameplay_input drops any of these that aren't actually held.
+		next_lane.fresh_press_mask = 0x1F;
 		if (play_state_.gameplay_mode == GameplayMode::Freeplay)
 			set_lane_stem_target_gain(static_cast<size_t>(play_state_.active_lane_index), 1.0f);
 		return true;
@@ -793,6 +807,7 @@ namespace rhythmreplugged::core
 		{
 			SerializedLaneRuntimeState serialized_lane;
 			serialized_lane.lane_held_mask = lane_mask_from_state(lane.lane_held);
+		serialized_lane.fresh_press_mask = lane.fresh_press_mask;
 			serialized_lane.lock_state = static_cast<std::uint8_t>(lane.lock_state);
 			serialized_lane.is_actionable = lane.is_actionable ? 1u : 0u;
 			serialized_lane.should_prompt = lane.should_prompt ? 1u : 0u;
@@ -914,6 +929,7 @@ namespace rhythmreplugged::core
 			}
 
 			GameplayLaneRuntimeState &lane = restored_play_state.lanes[lane_index];
+			lane.fresh_press_mask = serialized_lane.fresh_press_mask;
 			for (size_t fret = 0; fret < lane.lane_held.size(); ++fret)
 			{
 				lane.lane_held[fret] = (serialized_lane.lane_held_mask & static_cast<std::uint8_t>(1u << fret)) != 0;
@@ -1257,6 +1273,7 @@ namespace rhythmreplugged::core
 	void SongSession::reset_runtime_state(GameplayLaneRuntimeState &lane)
 	{
 		lane.lane_held.fill(false);
+		lane.fresh_press_mask = 0;
 		lane.lane_sustain_end_times_.fill(0.0);
 		lane.lane_sustain_release_times_.fill(-1.0);
 		lane.input_generation = 0;
