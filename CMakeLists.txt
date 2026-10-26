@@ -140,6 +140,9 @@ add_library(rr_core
 	${RR_SRC_DIR}/core/app/AppTypes.h
 	${RR_SRC_DIR}/core/audio/SongPlayer.cpp
 	${RR_SRC_DIR}/core/audio/SongPlayer.h
+	${RR_SRC_DIR}/core/bot/ClassicBot.cpp
+	${RR_SRC_DIR}/core/bot/ClassicBot.h
+	${RR_SRC_DIR}/core/bot/SkillProfile.h
 	${RR_SRC_DIR}/core/chart/MidiChart.cpp
 	${RR_SRC_DIR}/core/chart/MidiChart.h
 	${RR_SRC_DIR}/core/concurrency/BackgroundWorker.cpp

@@ -615,6 +615,7 @@ namespace rhythmreplugged::core
 					{
 						start_sustains_for_note_group(lane_index, lane.next_note_index, group_end_index);
 						lane.next_note_index = group_end_index;
+						++lane.groups_hit;
 						lane.consumed_input_generation = lane.input_generation;
 						lane.fresh_press_mask &= static_cast<std::uint8_t>(~expected_mask);
 						resolved_note_hit = true;
@@ -645,6 +646,7 @@ namespace rhythmreplugged::core
 			{
 				start_sustains_for_note_group(lane_index, lane.next_note_index, group_end_index);
 				lane.next_note_index = group_end_index;
+				++lane.groups_hit;
 				lane.consumed_input_generation = lane.input_generation;
 				lane.fresh_press_mask &= static_cast<std::uint8_t>(~expected_mask);
 				resolved_note_hit = true;
@@ -1279,6 +1281,8 @@ namespace rhythmreplugged::core
 		lane.input_generation = 0;
 		lane.consumed_input_generation = 0;
 		lane.next_note_index = 0;
+		lane.groups_hit = 0;
+		lane.groups_missed = 0;
 		lane.stem_target_gain = 1.0f;
 		lane.lock_state = LaneLockState::Unlocked;
 		lane.lock_start_measure_index = -1;
@@ -1537,6 +1541,7 @@ namespace rhythmreplugged::core
 
 			last_missed_note_time_seconds = note_time_seconds;
 			lane.next_note_index = note_group_end_index(lane_index, lane.next_note_index);
+			++lane.groups_missed;
 			missed_any_notes = true;
 		}
 
@@ -1582,6 +1587,7 @@ namespace rhythmreplugged::core
 				break;
 
 			lane.next_note_index = note_group_end_index(lane_index, lane.next_note_index);
+			++lane.groups_missed;
 		}
 	}
 
@@ -2517,6 +2523,17 @@ bool SongSession::other_lane_unlocks_too_close(size_t excluded_lane_index, doubl
 	int SongSession::active_gameplay_lane_index() const
 	{
 		return play_state_.active_lane_index;
+	}
+
+	SongSession::LaneStats SongSession::gameplay_lane_stats(size_t index) const
+	{
+		LaneStats stats;
+		if (index < play_state_.lanes.size())
+		{
+			stats.groups_hit = play_state_.lanes[index].groups_hit;
+			stats.groups_missed = play_state_.lanes[index].groups_missed;
+		}
+		return stats;
 	}
 
 	InstrumentLaneView SongSession::gameplay_lane_view(size_t index) const

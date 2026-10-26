@@ -57,6 +57,9 @@ namespace rhythmreplugged::core
 			std::uint64_t input_generation = 0;
 			std::uint64_t consumed_input_generation = 0;
 			size_t next_note_index = 0;
+			// Diagnostic tallies of note groups resolved on this lane. Not part of the saved play state.
+			size_t groups_hit = 0;
+			size_t groups_missed = 0;
 			float stem_target_gain = 1.0f;
 			LaneLockState lock_state = LaneLockState::Unlocked;
 			int lock_start_measure_index = -1;
@@ -123,6 +126,13 @@ namespace rhythmreplugged::core
 		size_t gameplay_lane_count() const;
 		int active_gameplay_lane_index() const;
 		InstrumentLaneView gameplay_lane_view(size_t index) const;
+
+		struct LaneStats
+		{
+			size_t groups_hit = 0;
+			size_t groups_missed = 0;
+		};
+		LaneStats gameplay_lane_stats(size_t index) const;
 
 	private:
 		struct LyricPhraseRange
